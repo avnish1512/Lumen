@@ -16,6 +16,8 @@ Create `.env.local`:
 
 ```bash
 OMDB_API_KEY=your_omdb_api_key
+TMDB_API_KEY=your_tmdb_api_key
+TMDB_API_READ_ACCESS_TOKEN=your_tmdb_api_read_access_token
 ```
 
 Install and run:
@@ -31,16 +33,48 @@ Open:
 http://127.0.0.1:5173/
 ```
 
-## Deploy
+## Deploy to Vercel
 
-This project is set up for Vercel-style deployment:
+This project is ready for Vercel deployment. The included `vercel.json`
+configures Vite, the static output folder, API functions, and SPA fallback
+rewrites.
 
-- Build command: `npm run build`
-- Output directory: `dist`
-- Runtime env var: `OMDB_API_KEY`
-- API route: `api/omdb.ts`
+Use these Vercel project settings:
 
-Set `OMDB_API_KEY` in the deployment platform environment variables. Do not expose it as `VITE_OMDB_API_KEY`, because Vite client env vars are bundled into the frontend.
+```bash
+Framework Preset: Vite
+Install Command: npm ci
+Build Command: npm run build
+Output Directory: dist
+```
+
+Add these Environment Variables in Vercel:
+
+```bash
+OMDB_API_KEY=your_omdb_api_key
+TMDB_API_READ_ACCESS_TOKEN=your_tmdb_read_access_token
+```
+
+`TMDB_API_KEY` can also be used, but the read access token is preferred. Do
+not expose these as `VITE_*` variables because Vite client env vars are bundled
+into the frontend.
+
+Serverless API routes:
+
+```bash
+/api/omdb
+/api/tmdb
+```
+
+After deploying, quick smoke checks:
+
+```bash
+https://your-project.vercel.app/api/omdb?id=tt1375666
+https://your-project.vercel.app/api/tmdb?imdbId=tt1375666
+```
+
+The app itself uses hash routes, and `vercel.json` also includes a fallback to
+`index.html` for direct page refreshes.
 
 ## Scripts
 

@@ -1,43 +1,70 @@
 import {
+  type CSSProperties,
   type FormEvent,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import {
   AlertCircle,
-  Bookmark,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clapperboard,
   Download,
-  Film,
   Home,
   Library,
   LoaderCircle,
+  Mic,
+  MoreHorizontal,
   Play,
   Plus,
   RefreshCcw,
   Search,
   Share,
-  ShoppingBag,
   Tv,
+  VolumeX,
   X,
 } from 'lucide-react'
 import {
-  fetchFeaturedMovies,
+  fetchMovieCollection,
   fetchMovieById,
+  fetchTvShowCollection,
   searchMovies,
+  type MediaCollection,
   type Movie,
 } from './omdb'
+import {
+  buildStreamUrl,
+  defaultStreamProvider,
+  fetchTmdbMatch,
+  streamProviderOptions,
+  type StreamProvider,
+} from './tmdb'
 import './App.css'
 
-type Screen = 'home' | 'browse' | 'detail' | 'watch' | 'search' | 'library'
+type Screen = 'home' | 'movies' | 'tv' | 'detail' | 'watch' | 'search' | 'library'
+type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Library' | 'Search'
 type SavedMovies = Record<string, Movie>
+type WatchHistoryEntry = {
+  movie: Movie
+  updatedAt: number
+  progress: number
+}
+type WatchHistory = Record<string, WatchHistoryEntry>
 
 const savedMoviesKey = 'omdb.apple-tv-style.saved-movies'
+const watchHistoryKey = 'omdb.apple-tv-style.watch-history'
+const streamProviderKey = 'omdb.apple-tv-style.stream-provider'
+const heroAutoAdvanceMs = 6000
+const emptyMediaCollection: MediaCollection = {
+  top: [],
+  thrilling: [],
+  adventure: [],
+  kidsFamily: [],
+}
 const fallbackPosterImages = [
   '/media/arrival-poster.jpg',
   '/media/northpoint-poster.jpg',
@@ -47,11 +74,27 @@ const fallbackPosterImages = [
   '/media/golden-poster.jpg',
 ]
 
+const searchCategories = [
+  'Apple TV',
+  'Sports',
+  'Movie Bundles',
+  'Bollywood',
+  'Regional Indian',
+  'Action',
+  'Adventure',
+  'Comedy',
+  'Drama',
+  'Horror',
+  'Kids & Family',
+  'Sci-Fi',
+]
+
 function getInitialScreen(): Screen {
   const hash = window.location.hash.replace('#', '')
 
   if (
-    hash === 'browse' ||
+    hash === 'movies' ||
+    hash === 'tv' ||
     hash === 'detail' ||
     hash === 'watch' ||
     hash === 'search' ||
@@ -60,13 +103,39 @@ function getInitialScreen(): Screen {
     return hash
   }
 
+  if (hash === 'browse') {
+    return 'movies'
+  }
+
   return 'home'
+}
+
+function isStreamProvider(value: string | null): value is StreamProvider {
+  return value === 'rivestream' || value === 'vidsync'
+}
+
+function readStreamProvider(): StreamProvider {
+  try {
+    const saved = window.localStorage.getItem(streamProviderKey)
+    return isStreamProvider(saved) ? saved : defaultStreamProvider
+  } catch {
+    return defaultStreamProvider
+  }
 }
 
 function readSavedMovies(): SavedMovies {
   try {
     const saved = window.localStorage.getItem(savedMoviesKey)
     return saved ? (JSON.parse(saved) as SavedMovies) : {}
+  } catch {
+    return {}
+  }
+}
+
+function readWatchHistory(): WatchHistory {
+  try {
+    const saved = window.localStorage.getItem(watchHistoryKey)
+    return saved ? (JSON.parse(saved) as WatchHistory) : {}
   } catch {
     return {}
   }
@@ -90,6 +159,60 @@ function compactRuntime(runtime: string) {
   return runtime.replace(' hr ', 'h ').replace(' min', 'm')
 }
 
+function rankRail(movies: Movie[]) {
+  return movies.map((movie, index) => ({
+    ...movie,
+    rank: index + 1,
+  }))
+}
+
+function uniqueMovies(movies: Movie[]) {
+  const seen = new Set<string>()
+
+  return movies.filter((movie) => {
+    if (seen.has(movie.id)) {
+      return false
+    }
+
+    seen.add(movie.id)
+    return true
+  })
+}
+
+function buildRail(primary: Movie[], fallback: Movie[] = [], limit = 10) {
+  return rankRail(uniqueMovies([...primary, ...fallback]).slice(0, limit))
+}
+
+function mergeKnownMovie(base: Movie, update: Movie) {
+  return {
+    ...base,
+    ...update,
+    rank: base.rank,
+    tmdbId: update.tmdbId ?? base.tmdbId,
+    tmdbType: update.tmdbType ?? base.tmdbType,
+    streamSeason: update.streamSeason ?? base.streamSeason,
+    streamEpisode: update.streamEpisode ?? base.streamEpisode,
+  }
+}
+
+function continueProgressFor(movie: Movie) {
+  return Math.min(86, Math.max(8, movie.progress || 24))
+}
+
+function continueRuntimeLabel(movie: Movie) {
+  const runtime = compactRuntime(movie.runtime)
+
+  if (isTvShow(movie)) {
+    return `S${movie.streamSeason ?? 1}, E${movie.streamEpisode ?? 1} / ${runtime}`
+  }
+
+  return runtime
+}
+
+function isTvShow(movie: Movie) {
+  return movie.tmdbType === 'tv' || movie.type.toLowerCase() === 'series'
+}
+
 function imdbUrl(movie: Movie) {
   return `https://www.imdb.com/title/${movie.id}/`
 }
@@ -98,28 +221,72 @@ function fallbackPosterForRank(rank: number) {
   return fallbackPosterImages[(rank - 1) % fallbackPosterImages.length]
 }
 
+function heroBackgroundStyle(movie: Movie, gradient: string) {
+  return {
+    '--hero-art': `url(${movie.hero})`,
+    '--poster-art': `url(${movie.poster})`,
+    backgroundImage: `${gradient}, url(${movie.hero}), url(${movie.poster}), url(${movie.poster})`,
+  } as CSSProperties
+}
+
 function App() {
   const [screen, setScreenState] = useState<Screen>(getInitialScreen)
   const [movies, setMovies] = useState<Movie[]>([])
+  const [tvShows, setTvShows] = useState<Movie[]>([])
+  const [movieCollection, setMovieCollection] =
+    useState<MediaCollection>(emptyMediaCollection)
+  const [tvShowCollection, setTvShowCollection] =
+    useState<MediaCollection>(emptyMediaCollection)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
   const [savedMovies, setSavedMovies] = useState<SavedMovies>(readSavedMovies)
+  const [watchHistory, setWatchHistory] =
+    useState<WatchHistory>(readWatchHistory)
   const [homeLoading, setHomeLoading] = useState(true)
   const [homeError, setHomeError] = useState('')
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
-  const [searchQuery, setSearchQuery] = useState('Batman')
+  const [searchQuery, setSearchQuery] = useState('Apple TV')
   const [searchResults, setSearchResults] = useState<Movie[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
+  const [streamLoading, setStreamLoading] = useState(false)
+  const [streamError, setStreamError] = useState('')
+  const [streamProvider, setStreamProvider] =
+    useState<StreamProvider>(readStreamProvider)
 
-  const featuredMovie = selectedMovie ?? movies[0] ?? null
+  const featuredMovie = selectedMovie && !isTvShow(selectedMovie) ? selectedMovie : movies[0] ?? null
+  const featuredTvShow = selectedMovie && isTvShow(selectedMovie) ? selectedMovie : tvShows[0] ?? null
   const savedList = useMemo(() => Object.values(savedMovies), [savedMovies])
-  const editorialMovies = useMemo(() => movies.slice(4, 10), [movies])
+  const continueWatching = useMemo(
+    () =>
+      Object.values(watchHistory)
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, 12)
+        .map((entry, index) => ({
+          ...entry.movie,
+          rank: index + 1,
+          progress: entry.progress,
+        })),
+    [watchHistory],
+  )
+  const relatedMedia = selectedMovie && isTvShow(selectedMovie) ? tvShows : movies
+  const requiredMedia = screen === 'tv' ? tvShows : movies
   const needsMovieBootstrap =
     screen === 'home' ||
-    screen === 'browse' ||
+    screen === 'movies' ||
+    screen === 'tv' ||
     screen === 'detail' ||
     screen === 'watch'
+  const activeTab: PrimaryTab =
+    screen === 'home'
+      ? 'Home'
+      : screen === 'library'
+        ? 'Library'
+        : screen === 'search'
+          ? 'Search'
+          : screen === 'tv'
+            ? 'TV Shows'
+            : 'Movies'
 
   const setScreen = (nextScreen: Screen) => {
     setScreenState(nextScreen)
@@ -128,6 +295,9 @@ function App() {
       '',
       nextScreen === 'home' ? window.location.pathname : `#${nextScreen}`,
     )
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    })
   }
 
   useEffect(() => {
@@ -138,13 +308,21 @@ function App() {
       setHomeError('')
 
       try {
-        const nextMovies = await fetchFeaturedMovies()
+        const [nextMovieCollection, nextTvShowCollection] = await Promise.all([
+          fetchMovieCollection(),
+          fetchTvShowCollection(),
+        ])
+        const nextMovies = nextMovieCollection.top
+        const nextTvShows = nextTvShowCollection.top
 
         if (!isMounted) {
           return
         }
 
         setMovies(nextMovies)
+        setTvShows(nextTvShows)
+        setMovieCollection(nextMovieCollection)
+        setTvShowCollection(nextTvShowCollection)
         setSelectedMovie((current) => current ?? nextMovies[0] ?? null)
       } catch (error) {
         if (!isMounted) {
@@ -152,7 +330,9 @@ function App() {
         }
 
         const message =
-          error instanceof Error ? error.message : 'Could not load movies.'
+          error instanceof Error
+            ? error.message
+            : 'Could not load movies and TV shows.'
         setHomeError(message)
       } finally {
         if (isMounted) {
@@ -172,17 +352,72 @@ function App() {
     window.localStorage.setItem(savedMoviesKey, JSON.stringify(savedMovies))
   }, [savedMovies])
 
+  useEffect(() => {
+    window.localStorage.setItem(watchHistoryKey, JSON.stringify(watchHistory))
+  }, [watchHistory])
+
+  useEffect(() => {
+    window.localStorage.setItem(streamProviderKey, streamProvider)
+  }, [streamProvider])
+
+  const markContinueWatching = useCallback((movie: Movie) => {
+    setWatchHistory((current) => {
+      const existing = current[movie.id]
+      const historyMovie = existing
+        ? mergeKnownMovie(existing.movie, movie)
+        : movie
+
+      return {
+        ...current,
+        [movie.id]: {
+          movie: historyMovie,
+          updatedAt: Date.now(),
+          progress: Math.max(
+            existing?.progress ?? 0,
+            continueProgressFor(movie),
+          ),
+        },
+      }
+    })
+  }, [])
+
   const upsertMovie = (movie: Movie) => {
+    const mergeMovie = (item: Movie) =>
+      item.id === movie.id ? mergeKnownMovie(item, movie) : item
+    const mergeCollection = (collection: MediaCollection) => ({
+      top: collection.top.map((item) => mergeMovie(item)),
+      thrilling: collection.thrilling.map((item) => mergeMovie(item)),
+      adventure: collection.adventure.map((item) => mergeMovie(item)),
+      kidsFamily: collection.kidsFamily.map((item) => mergeMovie(item)),
+    })
+
     setMovies((current) =>
-      current.map((item) =>
-        item.id === movie.id ? { ...movie, rank: item.rank } : item,
-      ),
+      current.map((item) => (isTvShow(item) ? item : mergeMovie(item))),
     )
+    setTvShows((current) =>
+      current.map((item) => (isTvShow(item) ? mergeMovie(item) : item)),
+    )
+    setMovieCollection((current) => mergeCollection(current))
+    setTvShowCollection((current) => mergeCollection(current))
     setSearchResults((current) =>
-      current.map((item) =>
-        item.id === movie.id ? { ...movie, rank: item.rank } : item,
-      ),
+      current.map((item) => mergeMovie(item)),
     )
+    setWatchHistory((current) => {
+      const existing = current[movie.id]
+
+      if (!existing) {
+        return current
+      }
+
+      return {
+        ...current,
+        [movie.id]: {
+          ...existing,
+          movie: mergeKnownMovie(existing.movie, movie),
+          progress: Math.max(existing.progress, continueProgressFor(movie)),
+        },
+      }
+    })
   }
 
   const hydrateMovie = async (movie: Movie) => {
@@ -195,7 +430,17 @@ function App() {
 
     try {
       const fullMovie = await fetchMovieById(movie.id, movie.rank)
-      setSelectedMovie(fullMovie)
+      setSelectedMovie((current) =>
+        current?.id === fullMovie.id
+          ? {
+              ...fullMovie,
+              tmdbId: current.tmdbId ?? movie.tmdbId,
+              tmdbType: current.tmdbType ?? movie.tmdbType,
+              streamSeason: current.streamSeason ?? movie.streamSeason,
+              streamEpisode: current.streamEpisode ?? movie.streamEpisode,
+            }
+          : fullMovie,
+      )
       upsertMovie(fullMovie)
       return fullMovie
     } catch (error) {
@@ -210,16 +455,84 @@ function App() {
     }
   }
 
+  const hydrateStreamingMovie = useCallback(
+    async (movie: Movie) => {
+      if (movie.tmdbId) {
+        return movie
+      }
+
+      setStreamLoading(true)
+      setStreamError('')
+
+      try {
+        const match = await fetchTmdbMatch(movie.id)
+        const streamMovie: Movie = {
+          ...movie,
+          tmdbId: match.tmdbId,
+          tmdbType: match.mediaType,
+          streamSeason: match.mediaType === 'tv' ? 1 : undefined,
+          streamEpisode: match.mediaType === 'tv' ? 1 : undefined,
+        }
+
+        setSelectedMovie((current) =>
+          current?.id === movie.id
+            ? {
+                ...current,
+                tmdbId: streamMovie.tmdbId,
+                tmdbType: streamMovie.tmdbType,
+                streamSeason: streamMovie.streamSeason,
+                streamEpisode: streamMovie.streamEpisode,
+              }
+            : current,
+        )
+        upsertMovie(streamMovie)
+        markContinueWatching(streamMovie)
+        setSavedMovies((current) => {
+          if (!current[movie.id]) {
+            return current
+          }
+
+          return {
+            ...current,
+            [movie.id]: {
+              ...current[movie.id],
+              tmdbId: streamMovie.tmdbId,
+              tmdbType: streamMovie.tmdbType,
+              streamSeason: streamMovie.streamSeason,
+              streamEpisode: streamMovie.streamEpisode,
+            },
+          }
+        })
+
+        return streamMovie
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Could not prepare the stream.'
+        setStreamError(message)
+        return movie
+      } finally {
+        setStreamLoading(false)
+      }
+    },
+    [markContinueWatching],
+  )
+
   const openDetail = (movie: Movie) => {
     setSelectedMovie(movie)
+    markContinueWatching(movie)
     setScreen('detail')
-    void hydrateMovie(movie)
+    void hydrateMovie(movie).then(markContinueWatching)
   }
 
   const openWatch = (movie: Movie) => {
     setSelectedMovie(movie)
+    markContinueWatching(movie)
     setScreen('watch')
-    void hydrateMovie(movie)
+    setStreamError('')
+    void hydrateMovie(movie).then(markContinueWatching)
+    void hydrateStreamingMovie(movie)
   }
 
   const toggleSaved = (movie: Movie) => {
@@ -266,27 +579,20 @@ function App() {
 
   useEffect(() => {
     if (
-      screen !== 'search' ||
-      searchResults.length > 0 ||
-      searchLoading ||
-      searchError
+      screen !== 'watch' ||
+      !selectedMovie ||
+      selectedMovie.tmdbId ||
+      streamLoading
     ) {
       return
     }
 
     const timeout = window.setTimeout(() => {
-      void performSearch(searchQuery)
+      void hydrateStreamingMovie(selectedMovie)
     }, 0)
 
     return () => window.clearTimeout(timeout)
-  }, [
-    performSearch,
-    screen,
-    searchError,
-    searchLoading,
-    searchQuery,
-    searchResults.length,
-  ])
+  }, [hydrateStreamingMovie, screen, selectedMovie, streamLoading])
 
   const retryHome = () => {
     window.location.reload()
@@ -321,7 +627,7 @@ function App() {
     }
   }
 
-  if (homeLoading && movies.length === 0 && needsMovieBootstrap) {
+  if (homeLoading && requiredMedia.length === 0 && needsMovieBootstrap) {
     return (
       <main className="app-shell">
         <LoadingScreen />
@@ -329,7 +635,7 @@ function App() {
     )
   }
 
-  if (homeError && movies.length === 0 && needsMovieBootstrap) {
+  if (homeError && requiredMedia.length === 0 && needsMovieBootstrap) {
     return (
       <main className="app-shell">
         <ErrorScreen error={homeError} onRetry={retryHome} />
@@ -342,28 +648,37 @@ function App() {
       {screen === 'home' && featuredMovie && (
         <HomeScreen
           featuredMovie={featuredMovie}
-          movies={movies.slice(0, 10)}
-          editorialMovies={editorialMovies}
+          movies={movies}
+          tvShows={tvShows}
+          movieCollection={movieCollection}
+          tvShowCollection={tvShowCollection}
+          continueMovies={continueWatching}
           savedMovies={savedMovies}
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSave={toggleSaved}
           onSearch={() => setScreen('search')}
+          onSelectHero={setSelectedMovie}
         />
       )}
 
-      {screen === 'browse' && (
+      {(screen === 'movies' || screen === 'tv') && (
         <BrowseScreen
-          movies={movies}
+          mode={screen}
+          movies={screen === 'tv' ? tvShows : movies}
+          collection={screen === 'tv' ? tvShowCollection : movieCollection}
+          featuredMovie={screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0]}
+          savedMovies={savedMovies}
           onOpenDetail={openDetail}
-          onSearch={() => setScreen('search')}
+          onPlay={openWatch}
+          onSave={toggleSaved}
         />
       )}
 
       {screen === 'detail' && selectedMovie && (
         <DetailScreen
           movie={selectedMovie}
-          relatedMovies={movies}
+          relatedMovies={relatedMedia}
           isSaved={Boolean(savedMovies[selectedMovie.id])}
           isLoading={detailLoading}
           error={detailError}
@@ -380,8 +695,12 @@ function App() {
         <WatchScreen
           movie={selectedMovie}
           isSaved={Boolean(savedMovies[selectedMovie.id])}
+          streamLoading={streamLoading}
+          streamError={streamError}
+          streamProvider={streamProvider}
           onBack={() => setScreen('detail')}
           onSave={() => toggleSaved(selectedMovie)}
+          onStreamProviderChange={setStreamProvider}
         />
       )}
 
@@ -393,6 +712,11 @@ function App() {
           error={searchError}
           onQueryChange={setSearchQuery}
           onSearch={performSearch}
+          onClear={() => {
+            setSearchResults([])
+            setSearchError('')
+            setSearchQuery('Apple TV')
+          }}
           onOpenDetail={openDetail}
           onClose={() => setScreen('home')}
         />
@@ -402,42 +726,25 @@ function App() {
         <LibraryScreen
           savedMovies={savedList}
           onOpenDetail={openDetail}
-          onSearch={() => setScreen('search')}
         />
       )}
 
-      <BottomNav
-        active={
-          screen === 'home'
-            ? 'Home'
-            : screen === 'browse'
-              ? 'Movies'
-              : screen === 'library'
-                ? 'Library'
-                : screen === 'search'
-                  ? 'Discover'
-                  : 'Movies'
-        }
-        onHome={() => setScreen('home')}
-        onBrowse={() => setScreen('browse')}
-        onDiscover={() => setScreen('search')}
-        onLibrary={() => setScreen('library')}
-      />
+      {screen !== 'search' && (
+        <BottomNav
+          active={activeTab}
+          onHome={() => setScreen('home')}
+          onMovies={() => setScreen('movies')}
+          onTvShows={() => setScreen('tv')}
+          onSearch={() => setScreen('search')}
+          onLibrary={() => setScreen('library')}
+        />
+      )}
       <DesktopNav
-        active={
-          screen === 'home'
-            ? 'Home'
-            : screen === 'browse'
-              ? 'Movies'
-              : screen === 'library'
-                ? 'Library'
-                : screen === 'search'
-                  ? 'Discover'
-                  : 'Movies'
-        }
+        active={activeTab}
         onHome={() => setScreen('home')}
-        onBrowse={() => setScreen('browse')}
-        onDiscover={() => setScreen('search')}
+        onMovies={() => setScreen('movies')}
+        onTvShows={() => setScreen('tv')}
+        onSearch={() => setScreen('search')}
         onLibrary={() => setScreen('library')}
       />
     </main>
@@ -447,44 +754,102 @@ function App() {
 type HomeScreenProps = {
   featuredMovie: Movie
   movies: Movie[]
-  editorialMovies: Movie[]
+  tvShows: Movie[]
+  movieCollection: MediaCollection
+  tvShowCollection: MediaCollection
+  continueMovies: Movie[]
   savedMovies: SavedMovies
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSave: (movie: Movie) => void
   onSearch: () => void
+  onSelectHero: (movie: Movie) => void
 }
 
 function HomeScreen({
   featuredMovie,
   movies,
-  editorialMovies,
+  tvShows,
+  movieCollection,
+  tvShowCollection,
+  continueMovies,
   savedMovies,
   onOpenDetail,
   onPlay,
   onSave,
   onSearch,
+  onSelectHero,
 }: HomeScreenProps) {
+  const heroMovies = useMemo(() => movies.slice(0, 6), [movies])
+  const movieTopTenMovies = useMemo(
+    () => buildRail(movieCollection.top, movies),
+    [movieCollection.top, movies],
+  )
+  const tvTopTenMovies = useMemo(
+    () => buildRail(tvShowCollection.top, tvShows),
+    [tvShowCollection.top, tvShows],
+  )
+  const psychologicalThrillers = useMemo(
+    () => buildRail(movieCollection.thrilling, movieTopTenMovies),
+    [movieCollection.thrilling, movieTopTenMovies],
+  )
+  const upcomingMedia = useMemo(
+    () =>
+      buildRail(
+        [...movies.slice(6, 10), ...tvShows.slice(6, 10)],
+        [...movieCollection.adventure, ...tvShowCollection.adventure],
+      ),
+    [
+      movies,
+      movieCollection.adventure,
+      tvShows,
+      tvShowCollection.adventure,
+    ],
+  )
+  const activeHeroIndex = Math.max(
+    0,
+    heroMovies.findIndex((movie) => movie.id === featuredMovie.id),
+  )
+
+  useEffect(() => {
+    if (heroMovies.length < 2) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      const nextIndex = (activeHeroIndex + 1) % heroMovies.length
+      onSelectHero(heroMovies[nextIndex])
+    }, heroAutoAdvanceMs)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeHeroIndex, heroMovies, onSelectHero])
+
   return (
     <section className="screen home-screen">
       <div
         className="home-hero"
-        style={{
-          backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.06) 30%, rgba(0,0,0,.78) 78%, #000 100%), url(${featuredMovie.hero})`,
-        }}
+        style={heroBackgroundStyle(
+          featuredMovie,
+          'linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.06) 30%, rgba(0,0,0,.78) 78%, #000 100%)',
+        )}
       >
         <header className="home-header">
           <h1>Home</h1>
-          <button className="avatar-button" type="button" title="Profile">
-            AS
-          </button>
+          <div className="header-actions">
+            <button className="mute-button" type="button" title="Muted">
+              <VolumeX />
+            </button>
+            <button className="avatar-button" type="button" title="Profile">
+              AB
+            </button>
+          </div>
         </header>
 
         <div className="hero-copy">
           <span className="floating-label">{featuredMovie.label}</span>
           <pre className="logo-title">{featuredMovie.logoTitle}</pre>
           <p className="meta-line">
-            <span className="provider-badge hero-provider">db</span>
+            <span className="provider-badge hero-provider">tv</span>
             <span>{featuredMovie.type}</span>
             <span>{featuredMovie.genres[0]}</span>
             <span>{featuredMovie.genres[1] ?? featuredMovie.year}</span>
@@ -517,56 +882,189 @@ function HomeScreen({
 
           <button className="hero-search" type="button" onClick={onSearch}>
             <Search />
-            <span>Search OMDb movies</span>
+            <span>Search Apple TV</span>
           </button>
         </div>
 
-        <div className="carousel-dots" aria-hidden="true">
-          <span />
-          <span className="active" />
-          <span />
-          <span />
-          <span />
-          <span />
+        <div className="carousel-dots" aria-label="Featured movies">
+          {heroMovies.map((movie, index) => (
+            <button
+              key={movie.id}
+              className={index === activeHeroIndex ? 'active' : ''}
+              type="button"
+              style={
+                index === activeHeroIndex
+                  ? {
+                      '--timer-duration': `${heroAutoAdvanceMs}ms`,
+                    } as CSSProperties
+                  : undefined
+              }
+              aria-label={`Show ${movie.title}`}
+              aria-current={index === activeHeroIndex ? 'true' : undefined}
+              onClick={() => onSelectHero(movie)}
+            />
+          ))}
         </div>
       </div>
 
-      <MovieRail title="Top Movies" movies={movies} onOpenDetail={onOpenDetail} />
+      <ContinueWatchingRail
+        title="Continue Watching"
+        movies={continueMovies}
+        onOpenDetail={onOpenDetail}
+      />
 
       <MovieRail
-        title="Fresh Picks"
-        movies={editorialMovies}
+        title="Top 10 Movie"
+        movies={movieTopTenMovies}
         onOpenDetail={onOpenDetail}
-        compact
+      />
+
+      <MovieRail
+        title="Top 10 TV Shows"
+        movies={tvTopTenMovies}
+        onOpenDetail={onOpenDetail}
+      />
+
+      <FeatureRail
+        title="Psychological Thrillers"
+        movies={psychologicalThrillers}
+        onOpenDetail={onOpenDetail}
+      />
+
+      <MovieRail
+        title="Upcoming Movies & Shows"
+        movies={upcomingMedia}
+        onOpenDetail={onOpenDetail}
       />
     </section>
   )
 }
 
 type BrowseScreenProps = {
+  mode: 'movies' | 'tv'
   movies: Movie[]
+  collection: MediaCollection
+  featuredMovie?: Movie
+  savedMovies: SavedMovies
   onOpenDetail: (movie: Movie) => void
-  onSearch: () => void
+  onPlay: (movie: Movie) => void
+  onSave: (movie: Movie) => void
 }
 
-function BrowseScreen({ movies, onOpenDetail, onSearch }: BrowseScreenProps) {
+function BrowseScreen({
+  mode,
+  movies,
+  collection,
+  featuredMovie,
+  savedMovies,
+  onOpenDetail,
+  onPlay,
+  onSave,
+}: BrowseScreenProps) {
+  const heroMovie = featuredMovie ?? movies[0]
+  const isTvMode = mode === 'tv'
+  const screenTitle = isTvMode ? 'TV Shows' : 'Movies'
+  const firstRailTitle = isTvMode ? 'Top 10 TV Shows' : 'Top 10 Movies'
+  const thrillingRailTitle = isTvMode
+    ? 'Top 10 Thrilling TV Shows'
+    : 'Top 10 Thrilling Movies'
+  const adventureRailTitle = isTvMode
+    ? 'Top 10 Adventure TV Shows'
+    : 'Top 10 Adventure'
+  const kidsRailTitle = isTvMode ? 'Kids & Family TV Shows' : 'Kids & Family'
+  const topItems = useMemo(
+    () => buildRail(collection.top, movies),
+    [collection.top, movies],
+  )
+  const thrillingItems = useMemo(
+    () => buildRail(collection.thrilling, topItems),
+    [collection.thrilling, topItems],
+  )
+  const adventureItems = useMemo(
+    () => buildRail(collection.adventure, topItems),
+    [collection.adventure, topItems],
+  )
+  const kidsFamilyItems = useMemo(
+    () => buildRail(collection.kidsFamily, topItems),
+    [collection.kidsFamily, topItems],
+  )
+
   return (
     <section className="screen browse-screen">
-      <ScreenHeader title="Movies" actionLabel="Search" onAction={onSearch} />
-      <section className="browse-panel">
-        <span className="floating-label">OMDb Powered</span>
-        <h2>Find real movie information</h2>
-        <p>
-          Browse curated picks or search OMDb for plots, cast, ratings, release
-          dates, box office, and IMDb links.
-        </p>
-      </section>
-      <MovieRail title="Curated Movies" movies={movies} onOpenDetail={onOpenDetail} />
+      {heroMovie && (
+        <div
+          className="home-hero channel-hero"
+          style={heroBackgroundStyle(
+            heroMovie,
+            'linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.08) 32%, rgba(0,0,0,.62) 70%, #000 100%)',
+          )}
+        >
+          <header className="home-header">
+            <h1>{screenTitle}</h1>
+            <div className="header-actions">
+              <button className="mute-button" type="button" title="Muted">
+                <VolumeX />
+              </button>
+              <button className="avatar-button" type="button" title="Profile">
+                AB
+              </button>
+            </div>
+          </header>
+
+          <div className="hero-copy">
+            <pre className="logo-title">{heroMovie.logoTitle}</pre>
+            <p className="meta-line">
+              <span className="provider-badge hero-provider">tv</span>
+              <span>{heroMovie.type}</span>
+              <span>{heroMovie.genres[0]}</span>
+              <span className="rating-chip">{heroMovie.maturity}</span>
+            </p>
+
+            <div className="hero-actions">
+              <button
+                className="primary-play"
+                type="button"
+                onClick={() => onPlay(heroMovie)}
+              >
+                <Play fill="currentColor" strokeWidth={0} />
+                <span>Play</span>
+              </button>
+              <button
+                className="circle-action"
+                type="button"
+                onClick={() => onSave(heroMovie)}
+                title={
+                  savedMovies[heroMovie.id]
+                    ? 'Remove from library'
+                    : 'Add to library'
+                }
+              >
+                {savedMovies[heroMovie.id] ? <Check /> : <Plus />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <MovieRail
-        title="Award Winners"
-        movies={movies.slice(1, 8)}
+        title={firstRailTitle}
+        movies={topItems}
         onOpenDetail={onOpenDetail}
-        compact
+      />
+      <MovieRail
+        title={thrillingRailTitle}
+        movies={thrillingItems}
+        onOpenDetail={onOpenDetail}
+      />
+      <MovieRail
+        title={adventureRailTitle}
+        movies={adventureItems}
+        onOpenDetail={onOpenDetail}
+      />
+      <MovieRail
+        title={kidsRailTitle}
+        movies={kidsFamilyItems}
+        onOpenDetail={onOpenDetail}
       />
     </section>
   )
@@ -599,36 +1097,84 @@ function DetailScreen({
   onShare,
   onOpenPoster,
 }: DetailScreenProps) {
+  const relatedItems = useMemo(
+    () =>
+      buildRail(
+        relatedMovies.filter((related) => related.id !== movie.id),
+        [],
+        12,
+      ),
+    [movie.id, relatedMovies],
+  )
+  const trailerItems = useMemo(
+    () => buildRail([movie, ...relatedItems], relatedItems, 2),
+    [movie, relatedItems],
+  )
+  const bonusItems = useMemo(
+    () => buildRail(relatedItems, [movie], 8),
+    [movie, relatedItems],
+  )
+
   return (
     <section className="screen detail-screen">
       <div
-        className="detail-hero"
-        style={{
-          backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.14), rgba(0,0,0,.26) 30%, rgba(0,0,0,.84) 78%, #000 100%), url(${movie.hero})`,
-        }}
+        className="detail-hero apple-detail-hero"
+        style={heroBackgroundStyle(
+          movie,
+          'linear-gradient(90deg, rgba(0,0,0,.58), rgba(0,0,0,.14) 42%, rgba(0,0,0,.08) 70%), linear-gradient(180deg, rgba(0,0,0,.14), rgba(0,0,0,.1) 46%, rgba(36,36,36,.94) 100%)',
+        )}
       >
+        <img
+          className="detail-hero-art"
+          src={movie.poster || movie.hero || fallbackPosterForRank(movie.rank)}
+          alt=""
+          onError={(event) => {
+            event.currentTarget.src = fallbackPosterForRank(movie.rank)
+          }}
+        />
         <DetailTopBar
           onBack={onBack}
           onShare={onShare}
           onOpenPoster={onOpenPoster}
         />
 
-        <div className="detail-copy">
-          <span className="floating-label dark">
-            {isLoading ? 'Loading OMDb' : movie.label}
-          </span>
+        <div className="detail-copy apple-detail-copy">
           <pre className="logo-title detail-title">{movie.logoTitle}</pre>
-          <p className="detail-meta">
-            {movie.type} / {movie.genres.join(' / ')}
+          <p className="detail-meta apple-detail-meta">
+            <span className="provider-badge hero-provider">tv</span>
+            <span>{movie.type}</span>
+            {movie.genres.slice(0, 3).map((genre) => (
+              <span key={genre}>{genre}</span>
+            ))}
           </p>
 
-          <div className="detail-actions">
+          <p className="synopsis apple-detail-synopsis">
+            {movie.synopsis}
+            <span className="more-chip">MORE</span>
+          </p>
+
+          <div className="detail-hero-facts" aria-label="Movie facts">
+            <span>{movie.year}</span>
+            <span>{compactRuntime(movie.runtime)}</span>
+            {movie.badges.slice(0, 5).map((badge) => (
+              <span className="outline-badge" key={badge}>
+                {badge}
+              </span>
+            ))}
+          </div>
+
+          <div className="detail-actions apple-detail-actions">
             <button className="primary-play detail-play" type="button" onClick={onPlay}>
               <Play fill="currentColor" strokeWidth={0} />
-              <span className="progress-track">
-                <span style={{ width: `${movie.progress}%` }} />
-              </span>
-              <strong>{compactRuntime(movie.runtime)}</strong>
+              <span>Play</span>
+            </button>
+            <button
+              className="detail-download-button"
+              type="button"
+              onClick={onOpenPoster}
+            >
+              <Download />
+              <span>Download</span>
             </button>
             <button
               className="circle-action"
@@ -641,34 +1187,279 @@ function DetailScreen({
           </div>
 
           {error && <InlineAlert message={error} />}
-
-          <p className="synopsis">
-            <strong>{movie.title}:</strong> {movie.synopsis}
-          </p>
-          <Metadata movie={movie} />
+          {isLoading && <LoadingStrip label="Loading full details" />}
         </div>
+
+        <p className="detail-starring">
+          Starring {movie.cast.slice(0, 3).join(', ')}
+        </p>
       </div>
 
-      <section className="content-section">
-        <button className="section-title selectable" type="button">
-          <span>Cast</span>
-          <ChevronDown />
+      <div className="detail-page-body">
+        <DetailLandscapeRail
+          title="Trailers"
+          movies={trailerItems}
+          kind="trailer"
+          onOpenDetail={onOpenDetail}
+        />
+
+        <DetailLandscapeRail
+          title="Bonus Content"
+          movies={bonusItems}
+          kind="bonus"
+          onOpenDetail={onOpenDetail}
+        />
+
+        <DetailPosterRail
+          title="Related"
+          movies={relatedItems}
+          onOpenDetail={onOpenDetail}
+        />
+
+        <HowToWatch onPlay={onPlay} />
+        <CastCrewRail movie={movie} />
+        <MovieFacts movie={movie} />
+      </div>
+    </section>
+  )
+}
+
+type DetailLandscapeKind = 'trailer' | 'bonus'
+
+function DetailSectionHeading({
+  title,
+  onClick,
+}: {
+  title: string
+  onClick?: () => void
+}) {
+  return (
+    <button
+      className="detail-section-heading"
+      type="button"
+      onClick={onClick}
+      aria-label={`Scroll ${title}`}
+    >
+      <span>{title}</span>
+      <ChevronRight />
+    </button>
+  )
+}
+
+function landscapeTitle(movie: Movie, index: number, kind: DetailLandscapeKind) {
+  if (kind === 'trailer') {
+    return `${movie.title} ${index === 0 ? 'Trailer' : 'Teaser Trailer'}`
+  }
+
+  const bonusTitles = [
+    `Sing-Along Version of ${movie.type === 'Series' ? 'Episode' : 'Feature Film'}`,
+    `The Making of ${movie.title}`,
+    `Behind the ${movie.genres[0] ?? 'Story'}: The Steps`,
+    `Behind the ${movie.genres[0] ?? 'Story'}: The Music`,
+  ]
+
+  return bonusTitles[index % bonusTitles.length]
+}
+
+function landscapeDuration(movie: Movie, index: number, kind: DetailLandscapeKind) {
+  if (kind === 'trailer') {
+    return index === 0 ? '2m' : '1m'
+  }
+
+  if (index === 0) {
+    return compactRuntime(movie.runtime)
+  }
+
+  return `${Math.max(1, index + 1)}m`
+}
+
+function DetailLandscapeRail({
+  title,
+  movies,
+  kind,
+  onOpenDetail,
+}: {
+  title: string
+  movies: Movie[]
+  kind: DetailLandscapeKind
+  onOpenDetail: (movie: Movie) => void
+}) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  if (movies.length === 0) {
+    return null
+  }
+
+  const scrollRow = () => {
+    rowRef.current?.scrollBy({
+      left: rowRef.current.clientWidth * 0.82,
+      behavior: 'smooth',
+    })
+  }
+
+  return (
+    <section className="detail-section detail-landscape-section">
+      <DetailSectionHeading title={title} onClick={scrollRow} />
+      <div ref={rowRef} className="detail-landscape-row">
+        {movies.map((item, index) => (
+          <button
+            key={`${kind}-${item.id}-${index}`}
+            className="detail-landscape-card"
+            type="button"
+            onClick={() => onOpenDetail(item)}
+          >
+            <img
+              src={item.poster || fallbackPosterForRank(item.rank)}
+              alt=""
+              onError={(event) => {
+                event.currentTarget.src = fallbackPosterForRank(item.rank)
+              }}
+            />
+            <span className="detail-card-copy">
+              <strong>{landscapeTitle(item, index, kind)}</strong>
+              <small>
+                <Play fill="currentColor" strokeWidth={0} />
+                {landscapeDuration(item, index, kind)}
+              </small>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function DetailPosterRail({
+  title,
+  movies,
+  onOpenDetail,
+}: {
+  title: string
+  movies: Movie[]
+  onOpenDetail: (movie: Movie) => void
+}) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  if (movies.length === 0) {
+    return null
+  }
+
+  const scrollRow = () => {
+    rowRef.current?.scrollBy({
+      left: rowRef.current.clientWidth * 0.82,
+      behavior: 'smooth',
+    })
+  }
+
+  return (
+    <section className="detail-section detail-related-section">
+      <DetailSectionHeading title={title} onClick={scrollRow} />
+      <div ref={rowRef} className="detail-poster-row">
+        {movies.map((item) => (
+          <button
+            key={item.id}
+            className="detail-related-card"
+            type="button"
+            onClick={() => onOpenDetail(item)}
+            title={item.title}
+          >
+            <img
+              src={item.poster || fallbackPosterForRank(item.rank)}
+              alt=""
+              onError={(event) => {
+                event.currentTarget.src = fallbackPosterForRank(item.rank)
+              }}
+            />
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function HowToWatch({ onPlay }: { onPlay: () => void }) {
+  return (
+    <section className="detail-section detail-watch-options">
+      <h2>How to Watch</h2>
+      <div className="watch-option-grid">
+        <button className="watch-option-card" type="button" onClick={onPlay}>
+          <span className="watch-option-logo">tv</span>
+          <span>
+            <strong>Play</strong>
+            <small>Subscribed</small>
+          </span>
         </button>
-        <div className="cast-row">
-          {movie.cast.map((name) => (
-            <span key={name}>{name}</span>
-          ))}
-        </div>
-      </section>
+        <button className="watch-option-card" type="button">
+          <span className="watch-option-logo gradient">tv</span>
+          <span>
+            <strong>Buy</strong>
+            <small>₹ 490</small>
+            <em>4K</em>
+          </span>
+        </button>
+        <button className="watch-option-card" type="button">
+          <span className="watch-option-logo gradient">tv</span>
+          <span>
+            <strong>Rent</strong>
+            <small>₹ 129</small>
+            <em>4K · 30 days to watch</em>
+          </span>
+        </button>
+      </div>
+    </section>
+  )
+}
 
-      <MovieFacts movie={movie} />
+function initialsFor(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+}
 
-      <MovieRail
-        title="More Like This"
-        movies={relatedMovies.filter((related) => related.id !== movie.id)}
-        onOpenDetail={onOpenDetail}
-        compact
-      />
+function CastCrewRail({ movie }: { movie: Movie }) {
+  const cast = movie.cast.slice(0, 9)
+
+  if (cast.length === 0) {
+    return null
+  }
+
+  const roles = [
+    'Present',
+    'Lead',
+    'Supporting',
+    'Past',
+    'Director',
+    'Cast',
+    'Producer',
+    'Story',
+    'Crew',
+  ]
+
+  return (
+    <section className="detail-section detail-cast-section">
+      <DetailSectionHeading title="Cast & Crew" />
+      <div className="detail-cast-row">
+        {cast.map((name, index) => (
+          <button className="cast-person-card" key={`${name}-${index}`} type="button">
+            <span
+              className="cast-avatar"
+              style={
+                {
+                  '--avatar-hue': `${(index * 41 + movie.title.length * 7) % 360}deg`,
+                } as CSSProperties
+              }
+            >
+              {initialsFor(name)}
+            </span>
+            <strong>{name}</strong>
+            <small>{index === 0 && movie.director !== 'Director unavailable' ? movie.director : roles[index % roles.length]}</small>
+          </button>
+        ))}
+      </div>
     </section>
   )
 }
@@ -676,11 +1467,36 @@ function DetailScreen({
 type WatchScreenProps = {
   movie: Movie
   isSaved: boolean
+  streamLoading: boolean
+  streamError: string
+  streamProvider: StreamProvider
   onBack: () => void
   onSave: () => void
+  onStreamProviderChange: (provider: StreamProvider) => void
 }
 
-function WatchScreen({ movie, isSaved, onBack, onSave }: WatchScreenProps) {
+function WatchScreen({
+  movie,
+  isSaved,
+  streamLoading,
+  streamError,
+  streamProvider,
+  onBack,
+  onSave,
+  onStreamProviderChange,
+}: WatchScreenProps) {
+  const streamUrl = buildStreamUrl(movie, streamProvider)
+  const currentProvider =
+    streamProviderOptions.find((provider) => provider.id === streamProvider) ??
+    streamProviderOptions[0]
+  const openCurrentStream = () => {
+    if (!streamUrl) {
+      return
+    }
+
+    window.open(streamUrl, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <section className="screen watch-screen">
       <DetailTopBar
@@ -692,7 +1508,39 @@ function WatchScreen({ movie, isSaved, onBack, onSave }: WatchScreenProps) {
         dark
       />
 
-      <img className="watch-still" src={movie.still} alt="" />
+      <section className="stream-player-section">
+        {streamUrl ? (
+          <iframe
+            className="stream-player"
+            src={streamUrl}
+            title={`${movie.title} stream`}
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div
+            className="stream-placeholder"
+            style={{
+              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.22), rgba(0,0,0,.82)), url(${movie.still})`,
+            }}
+          >
+            {streamLoading ? (
+              <>
+                <LoaderCircle className="spin-icon" />
+                <h2>Preparing Stream</h2>
+                <p>Finding the TMDB id and loading {currentProvider.name}.</p>
+              </>
+            ) : (
+              <>
+                <AlertCircle />
+                <h2>Stream Not Ready</h2>
+                <p>{streamError || 'TMDB did not return a playable movie id yet.'}</p>
+              </>
+            )}
+          </div>
+        )}
+      </section>
 
       <section className="watch-copy">
         <p className="watch-kicker">{movie.title}</p>
@@ -703,7 +1551,22 @@ function WatchScreen({ movie, isSaved, onBack, onSave }: WatchScreenProps) {
           <ChevronRight />
         </p>
 
-        <button className="watch-play" type="button">
+        <button
+          className="watch-play"
+          type="button"
+          disabled={!streamUrl || streamLoading}
+          onClick={openCurrentStream}
+          title={
+            streamUrl
+              ? `Open ${currentProvider.name}`
+              : 'Waiting for TMDB stream id'
+          }
+          aria-label={
+            streamUrl
+              ? `Open ${currentProvider.name} stream for ${movie.title}`
+              : `Waiting for stream id for ${movie.title}`
+          }
+        >
           <Play fill="currentColor" strokeWidth={0} />
           <span className="progress-track">
             <span style={{ width: `${movie.progress}%` }} />
@@ -718,17 +1581,50 @@ function WatchScreen({ movie, isSaved, onBack, onSave }: WatchScreenProps) {
       </section>
 
       <section className="content-section watch-card-section">
-        <h2>How to Watch</h2>
+        <h2>Streaming</h2>
+        <div
+          className="server-selector"
+          role="radiogroup"
+          aria-label="Streaming server"
+        >
+          {streamProviderOptions.map((provider) => {
+            const isActive = provider.id === streamProvider
+
+            return (
+              <button
+                key={provider.id}
+                className={`server-option${isActive ? ' active' : ''}`}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                onClick={() => onStreamProviderChange(provider.id)}
+              >
+                <span className="provider-logo">{provider.logo}</span>
+                <span className="server-copy">
+                  <strong>{provider.name}</strong>
+                  <small>{provider.description}</small>
+                </span>
+                {isActive ? <Check /> : <ChevronRight />}
+              </button>
+            )
+          })}
+        </div>
         <a
           className="subscription-card"
-          href={imdbUrl(movie)}
+          href={streamUrl || imdbUrl(movie)}
           target="_blank"
           rel="noreferrer"
         >
-          <span className="provider-logo">IMDb</span>
+          <span className="provider-logo">{currentProvider.logo}</span>
           <span>
-            <strong>{isSaved ? 'Open Saved Movie' : 'Open on IMDb'}</strong>
-            <small>Real movie page</small>
+            <strong>
+              {streamUrl ? `Open ${currentProvider.name}` : 'Waiting for TMDB'}
+            </strong>
+            <small>
+              {streamUrl
+                ? `${currentProvider.description} / TMDB ${movie.tmdbId}`
+                : 'Resolving movie id'}
+            </small>
           </span>
           <button
             className="mini-save"
@@ -755,6 +1651,7 @@ type SearchScreenProps = {
   error: string
   onQueryChange: (query: string) => void
   onSearch: (query: string) => void
+  onClear: () => void
   onOpenDetail: (movie: Movie) => void
   onClose: () => void
 }
@@ -766,6 +1663,7 @@ function SearchScreen({
   error,
   onQueryChange,
   onSearch,
+  onClear,
   onOpenDetail,
   onClose,
 }: SearchScreenProps) {
@@ -776,66 +1674,96 @@ function SearchScreen({
 
   return (
     <section className="screen search-screen">
-      <div className="search-top">
+      <header className="search-header">
+        <h1>Search</h1>
+        <button className="avatar-button" type="button" title="Profile">
+          AB
+        </button>
+      </header>
+
+      <section className="search-content visual-search">
+        {loading && <LoadingStrip label="Searching Apple TV" />}
+        {error && <InlineAlert message={error} />}
+
+        {results.length > 0 ? (
+          <div className="recent-panel">
+            <div className="recent-heading">
+              <h2>Recently Searched</h2>
+              <button type="button" onClick={onClear}>
+                Clear
+              </button>
+            </div>
+            <div className="recent-list">
+              {results.slice(0, 8).map((movie) => (
+                <button
+                  key={movie.id}
+                  className="recent-item"
+                  type="button"
+                  onClick={() => onOpenDetail(movie)}
+                >
+                  <img
+                    src={movie.poster}
+                    alt=""
+                    onError={(event) => {
+                      event.currentTarget.src = fallbackPosterForRank(movie.rank)
+                    }}
+                  />
+                  <span>
+                    <strong>{movie.title}</strong>
+                    <small>
+                      {movie.type} / {movie.genres[0] ?? movie.year} / {movie.year}
+                    </small>
+                  </span>
+                  <MoreHorizontal />
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="category-grid">
+            {searchCategories.map((category, index) => (
+              <button
+                key={category}
+                className={`category-card category-${(index % 12) + 1}`}
+                type="button"
+                onClick={() => {
+                  onQueryChange(category)
+                  onSearch(category)
+                }}
+              >
+                <span>{category}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="search-bottom">
         <form className="search-form" onSubmit={submitSearch}>
+          <span className="search-tv-badge">tv</span>
           <Search />
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search movies"
-            aria-label="Search movies"
+            placeholder="Apple TV"
+            aria-label="Search Apple TV"
           />
-          {query && (
-            <button
-              className="clear-search"
-              type="button"
-              onClick={() => onQueryChange('')}
-              title="Clear search"
-            >
-              <X />
-            </button>
-          )}
+          <button className="mic-button" type="button" title="Voice search">
+            <Mic />
+          </button>
         </form>
-        <button className="close-search" type="button" onClick={onClose}>
-          Done
+        <button className="close-search icon-close" type="button" onClick={onClose}>
+          <X />
         </button>
       </div>
 
-      <section className="search-content">
-        <h1>Discover</h1>
-        <div className="quick-searches">
-          {['Batman', 'Avatar', 'Mission Impossible', 'Spider-Man'].map(
-            (term) => (
-              <button type="button" key={term} onClick={() => onSearch(term)}>
-                {term}
-              </button>
-            ),
-          )}
+      {query && results.length > 0 && (
+        <div className="floating-clear">
+          <button type="button" onClick={onClear}>
+            Clear Results
+          </button>
         </div>
-
-        {loading && <LoadingStrip label="Searching OMDb" />}
-        {error && <InlineAlert message={error} />}
-
-        {results.length > 0 && (
-          <div className="result-grid">
-            {results.map((movie) => (
-              <PosterCard
-                key={movie.id}
-                movie={movie}
-                onOpenDetail={onOpenDetail}
-              />
-            ))}
-          </div>
-        )}
-
-        {!loading && !error && results.length === 0 && (
-          <div className="empty-state">
-            <Film />
-            <h2>Search the movie database</h2>
-            <p>Try a title and open any result for full OMDb details.</p>
-          </div>
-        )}
-      </section>
+      )}
     </section>
   )
 }
@@ -843,22 +1771,25 @@ function SearchScreen({
 type LibraryScreenProps = {
   savedMovies: Movie[]
   onOpenDetail: (movie: Movie) => void
-  onSearch: () => void
 }
 
 function LibraryScreen({
   savedMovies,
   onOpenDetail,
-  onSearch,
 }: LibraryScreenProps) {
   return (
     <section className="screen library-screen">
-      <ScreenHeader title="Library" actionLabel="Search" onAction={onSearch} />
+      <header className="library-header">
+        <h1>Library</h1>
+        <button className="avatar-button" type="button" title="Profile">
+          AB
+        </button>
+      </header>
 
       {savedMovies.length > 0 ? (
-        <section className="search-content">
-          <h1>Saved Movies</h1>
-          <div className="result-grid">
+        <section className="library-content">
+          <h2>Saved Movies</h2>
+          <div className="result-grid library-grid">
             {savedMovies.map((movie) => (
               <PosterCard
                 key={movie.id}
@@ -869,14 +1800,9 @@ function LibraryScreen({
           </div>
         </section>
       ) : (
-        <section className="empty-state library-empty">
-          <Bookmark />
-          <h2>No saved movies yet</h2>
-          <p>Save movies from the home or detail screens to keep them here.</p>
-          <button className="primary-play small" type="button" onClick={onSearch}>
-            <Search />
-            <span>Find Movies</span>
-          </button>
+        <section className="library-empty-state">
+          <h2>Your Library Is Empty</h2>
+          <p>TV shows and movies you save from the app will appear here.</p>
         </section>
       )}
     </section>
@@ -891,23 +1817,168 @@ type MovieRailProps = {
 }
 
 function MovieRail({ title, movies, compact, onOpenDetail }: MovieRailProps) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
   if (movies.length === 0) {
     return null
   }
 
+  const scrollRow = () => {
+    rowRef.current?.scrollBy({
+      left: rowRef.current.clientWidth * 0.86,
+      behavior: 'smooth',
+    })
+  }
+
   return (
     <section className="movie-rail">
-      <button className="rail-heading" type="button">
-        <span>{title}</span>
-        <ChevronRight />
-      </button>
-      <div className={compact ? 'poster-row compact' : 'poster-row'}>
+      <div className="rail-header">
+        <button
+          className="rail-heading"
+          type="button"
+          aria-label={`Scroll ${title}`}
+          onClick={scrollRow}
+        >
+          <span>{title}</span>
+          <ChevronRight />
+        </button>
+      </div>
+      <div ref={rowRef} className={compact ? 'poster-row compact' : 'poster-row'}>
         {movies.map((movie) => (
           <PosterCard
             key={movie.id}
             movie={movie}
             onOpenDetail={onOpenDetail}
           />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function ContinueWatchingRail({
+  title,
+  movies,
+  onOpenDetail,
+}: MovieRailProps) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  if (movies.length === 0) {
+    return null
+  }
+
+  const scrollRow = () => {
+    rowRef.current?.scrollBy({
+      left: rowRef.current.clientWidth * 0.86,
+      behavior: 'smooth',
+    })
+  }
+
+  return (
+    <section className="continue-rail">
+      <div className="rail-header">
+        <button
+          className="rail-heading"
+          type="button"
+          aria-label={`Scroll ${title}`}
+          onClick={scrollRow}
+        >
+          <span>{title}</span>
+          <ChevronRight />
+        </button>
+      </div>
+
+      <div ref={rowRef} className="continue-row">
+        {movies.map((movie) => (
+          <button
+            key={movie.id}
+            className="continue-card"
+            type="button"
+            onClick={() => onOpenDetail(movie)}
+          >
+            <img
+              src={movie.poster || fallbackPosterForRank(movie.rank)}
+              alt=""
+              onError={(event) => {
+                event.currentTarget.src = fallbackPosterForRank(movie.rank)
+              }}
+            />
+            <span className="continue-tv-mark">tv</span>
+            <span className="continue-title">{movie.logoTitle}</span>
+            <span className="continue-bottom">
+              <Play fill="currentColor" strokeWidth={0} />
+              <span className="continue-progress" aria-hidden="true">
+                <span style={{ width: `${movie.progress}%` }} />
+              </span>
+              <span className="continue-time">{continueRuntimeLabel(movie)}</span>
+              <MoreHorizontal />
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function FeatureRail({ title, movies, onOpenDetail }: MovieRailProps) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  if (movies.length === 0) {
+    return null
+  }
+
+  const scrollRow = () => {
+    rowRef.current?.scrollBy({
+      left: rowRef.current.clientWidth * 0.88,
+      behavior: 'smooth',
+    })
+  }
+
+  return (
+    <section className="feature-rail">
+      <div className="rail-header">
+        <button
+          className="rail-heading"
+          type="button"
+          aria-label={`Scroll ${title}`}
+          onClick={scrollRow}
+        >
+          <span>{title}</span>
+          <ChevronRight />
+        </button>
+      </div>
+
+      <div ref={rowRef} className="feature-row">
+        {movies.map((movie, index) => (
+          <button
+            key={movie.id}
+            className="feature-card-wide"
+            type="button"
+            style={
+              {
+                '--feature-art': `url(${movie.poster})`,
+              } as CSSProperties
+            }
+            onClick={() => onOpenDetail(movie)}
+          >
+            <img
+              src={movie.poster}
+              alt=""
+              onError={(event) => {
+                event.currentTarget.src = fallbackPosterForRank(movie.rank)
+              }}
+            />
+            <span className="feature-wide-badge">
+              {index === 0 ? 'New' : movie.year}
+            </span>
+            <span className="feature-wide-title">{movie.title}</span>
+            <span className="feature-wide-meta">
+              <span className="provider-badge">tv</span>
+              <span>{movie.type}</span>
+              <span>{movie.genres[0] ?? 'Thriller'}</span>
+              <span>{movie.genres[1] ?? movie.year}</span>
+            </span>
+          </button>
         ))}
       </div>
     </section>
@@ -937,25 +2008,6 @@ function PosterCard({
       <span className="rank">{movie.rank}</span>
       <span className="poster-title">{movie.title}</span>
     </button>
-  )
-}
-
-function ScreenHeader({
-  title,
-  actionLabel,
-  onAction,
-}: {
-  title: string
-  actionLabel: string
-  onAction: () => void
-}) {
-  return (
-    <header className="screen-header">
-      <h1>{title}</h1>
-      <button type="button" onClick={onAction}>
-        {actionLabel}
-      </button>
-    </header>
   )
 }
 
@@ -1004,25 +2056,71 @@ function Metadata({ movie }: { movie: Movie }) {
 
 function MovieFacts({ movie }: { movie: Movie }) {
   return (
-    <section className="content-section facts-section">
-      <h2>Movie Details</h2>
-      <div className="facts-grid">
-        <FactItem label="Director" value={movie.director} />
-        <FactItem label="Box Office" value={movie.boxOffice} />
-        <FactItem label="Awards" value={movie.awards} />
-        <FactItem label="IMDb" value={movie.rating} />
+    <section className="detail-section detail-about-section">
+      <h2>About</h2>
+
+      <div className="about-card-row">
+        <article className="about-summary-card">
+          <h3>{movie.title}</h3>
+          <strong>{movie.genres.slice(0, 3).join(', ').toUpperCase()}</strong>
+          <p>
+            {movie.synopsis}
+            <span className="more-chip">MORE</span>
+          </p>
+        </article>
+        <article className="about-summary-card">
+          <h3>Purchased Content</h3>
+          <p>
+            When you save access to this item, it appears in your Library and
+            can be opened again from this app.
+            <span className="more-chip">MORE</span>
+          </p>
+        </article>
       </div>
 
-      {movie.ratings.length > 0 && (
-        <div className="ratings-row">
-          {movie.ratings.map((rating) => (
-            <span key={rating.Source}>
-              <strong>{rating.Value}</strong>
-              {rating.Source}
-            </span>
-          ))}
+      <div className="detail-info-grid">
+        <div className="detail-info-column">
+          <h3>Information</h3>
+          <FactItem label="Released" value={movie.year} />
+          <FactItem label="Run Time" value={compactRuntime(movie.runtime)} />
+          <FactItem label="Rated" value={movie.maturity} />
+          <FactItem label="Director" value={movie.director} />
+          <FactItem label="Region of Origin" value="United States" />
         </div>
-      )}
+
+        <div className="detail-info-column">
+          <h3>Languages</h3>
+          <FactItem label="Original Audio" value="English" />
+          <FactItem
+            label="Audio"
+            value="English (Dolby Atmos, Dolby 5.1, AAC), Hindi, French, Spanish"
+          />
+          <FactItem
+            label="Subtitles"
+            value="English (CC, SDH), Hindi (SDH), Spanish (SDH), French (SDH)"
+          />
+        </div>
+
+        <div className="detail-info-column">
+          <h3>Accessibility</h3>
+          <FactItem
+            label="SDH"
+            value="Subtitles for the deaf and hard of hearing are available."
+          />
+          <FactItem
+            label="AD"
+            value="Audio descriptions provide narration for important visual details."
+          />
+          {movie.ratings.length > 0 && (
+            <FactItem
+              label="Ratings"
+              value={movie.ratings
+                .map((rating) => `${rating.Source}: ${rating.Value}`)
+                .join(' / ')}
+            />
+          )}
+        </div>
+      </div>
     </section>
   )
 }
@@ -1091,19 +2189,98 @@ function LoadingStrip({ label }: { label: string }) {
 function BottomNav({
   active,
   onHome,
-  onBrowse,
-  onDiscover,
+  onMovies,
+  onTvShows,
+  onSearch,
   onLibrary,
 }: {
-  active: 'Home' | 'Movies' | 'Discover' | 'Library'
+  active: PrimaryTab
   onHome: () => void
-  onBrowse: () => void
-  onDiscover: () => void
+  onMovies: () => void
+  onTvShows: () => void
+  onSearch: () => void
   onLibrary: () => void
 }) {
   return (
     <div className="bottom-ui">
       <nav className="tab-dock" aria-label="Primary">
+        <button
+          className={active === 'Home' ? 'active' : ''}
+          type="button"
+          onClick={onHome}
+          aria-current={active === 'Home' ? 'page' : undefined}
+          title="Home"
+        >
+          <Home fill="currentColor" />
+          <span>Home</span>
+        </button>
+        <button
+          className={active === 'Movies' ? 'active' : ''}
+          type="button"
+          onClick={onMovies}
+          aria-current={active === 'Movies' ? 'page' : undefined}
+          title="Movies"
+        >
+          <Clapperboard />
+          <span>Movies</span>
+        </button>
+        <button
+          className={active === 'TV Shows' ? 'active' : ''}
+          type="button"
+          onClick={onTvShows}
+          aria-current={active === 'TV Shows' ? 'page' : undefined}
+          title="TV Shows"
+        >
+          <Tv />
+          <span>TV Shows</span>
+        </button>
+        <button
+          className={active === 'Library' ? 'active' : ''}
+          type="button"
+          onClick={onLibrary}
+          aria-current={active === 'Library' ? 'page' : undefined}
+          title="Library"
+        >
+          <Library />
+          <span>Library</span>
+        </button>
+      </nav>
+      <button
+        className={active === 'Search' ? 'search-float active' : 'search-float'}
+        type="button"
+        title="Search"
+        aria-label="Search movies"
+        aria-current={active === 'Search' ? 'page' : undefined}
+        onClick={onSearch}
+      >
+        <Search />
+      </button>
+    </div>
+  )
+}
+
+function DesktopNav({
+  active,
+  onHome,
+  onMovies,
+  onTvShows,
+  onSearch,
+  onLibrary,
+}: {
+  active: PrimaryTab
+  onHome: () => void
+  onMovies: () => void
+  onTvShows: () => void
+  onSearch: () => void
+  onLibrary: () => void
+}) {
+  return (
+    <header className="desktop-nav">
+      <button className="desktop-brand" type="button" onClick={onHome}>
+        <Home fill="currentColor" />
+        <span>Home</span>
+      </button>
+      <nav aria-label="Website">
         <button
           className={active === 'Home' ? 'active' : ''}
           type="button"
@@ -1115,18 +2292,18 @@ function BottomNav({
         <button
           className={active === 'Movies' ? 'active' : ''}
           type="button"
-          onClick={onBrowse}
+          onClick={onMovies}
         >
-          <Tv />
+          <Clapperboard />
           <span>Movies</span>
         </button>
         <button
-          className={active === 'Discover' ? 'active' : ''}
+          className={active === 'TV Shows' ? 'active' : ''}
           type="button"
-          onClick={onDiscover}
+          onClick={onTvShows}
         >
-          <ShoppingBag />
-          <span>Discover</span>
+          <Tv />
+          <span>TV Shows</span>
         </button>
         <button
           className={active === 'Library' ? 'active' : ''}
@@ -1137,66 +2314,15 @@ function BottomNav({
           <span>Library</span>
         </button>
       </nav>
-      <button className="search-float" type="button" title="Search" onClick={onDiscover}>
-        <Search />
-      </button>
-    </div>
-  )
-}
-
-function DesktopNav({
-  active,
-  onHome,
-  onBrowse,
-  onDiscover,
-  onLibrary,
-}: {
-  active: 'Home' | 'Movies' | 'Discover' | 'Library'
-  onHome: () => void
-  onBrowse: () => void
-  onDiscover: () => void
-  onLibrary: () => void
-}) {
-  return (
-    <header className="desktop-nav">
-      <button className="desktop-brand" type="button" onClick={onHome}>
-        <Tv />
-        <span>Movie TV</span>
-      </button>
-      <nav aria-label="Website">
-        <button
-          className={active === 'Home' ? 'active' : ''}
-          type="button"
-          onClick={onHome}
-        >
-          Home
+      <div className="desktop-actions">
+        <button className="desktop-search" type="button" onClick={onSearch}>
+          <Search />
+          <span>Search</span>
         </button>
-        <button
-          className={active === 'Movies' ? 'active' : ''}
-          type="button"
-          onClick={onBrowse}
-        >
-          Movies
+        <button className="avatar-button desktop-avatar" type="button" title="Profile">
+          AB
         </button>
-        <button
-          className={active === 'Discover' ? 'active' : ''}
-          type="button"
-          onClick={onDiscover}
-        >
-          Discover
-        </button>
-        <button
-          className={active === 'Library' ? 'active' : ''}
-          type="button"
-          onClick={onLibrary}
-        >
-          Library
-        </button>
-      </nav>
-      <button className="desktop-search" type="button" onClick={onDiscover}>
-        <Search />
-        <span>Search</span>
-      </button>
+      </div>
     </header>
   )
 }

@@ -45,8 +45,19 @@ type OmdbIdsResponse = {
   Error?: string
 }
 
+export type MediaCollection = {
+  top: Movie[]
+  thrilling: Movie[]
+  adventure: Movie[]
+  kidsFamily: Movie[]
+}
+
 export type Movie = {
   id: string
+  tmdbId?: number
+  tmdbType?: 'movie' | 'tv'
+  streamSeason?: number
+  streamEpisode?: number
   rank: number
   title: string
   logoTitle: string
@@ -83,6 +94,99 @@ export const featuredMovieIds = [
   'tt1745960',
   'tt0068646',
 ]
+
+export const featuredTvShowIds = [
+  'tt0944947',
+  'tt0903747',
+  'tt4574334',
+  'tt1475582',
+  'tt0108778',
+  'tt7366338',
+  'tt3032476',
+  'tt1520211',
+  'tt2861424',
+  'tt0413573',
+]
+
+const movieCollectionIds = {
+  top: featuredMovieIds,
+  thrilling: [
+    'tt0102926',
+    'tt0114369',
+    'tt0209144',
+    'tt1130884',
+    'tt2267998',
+    'tt1392214',
+    'tt0443706',
+    'tt0477348',
+    'tt0482571',
+    'tt2872718',
+  ],
+  adventure: [
+    'tt0082971',
+    'tt0107290',
+    'tt0120737',
+    'tt0325980',
+    'tt1392190',
+    'tt0816692',
+    'tt1160419',
+    'tt0454876',
+    'tt1663202',
+    'tt0088763',
+  ],
+  kidsFamily: [
+    'tt0114709',
+    'tt0266543',
+    'tt0110357',
+    'tt0198781',
+    'tt0126029',
+    'tt4468740',
+    'tt2096673',
+    'tt2380307',
+    'tt0317705',
+    'tt0245429',
+  ],
+}
+
+const tvShowCollectionIds = {
+  top: featuredTvShowIds,
+  thrilling: [
+    'tt5753856',
+    'tt5290382',
+    'tt2356777',
+    'tt2085059',
+    'tt2401256',
+    'tt2243973',
+    'tt2802850',
+    'tt5071412',
+    'tt1796960',
+    'tt6048596',
+  ],
+  adventure: [
+    'tt0417299',
+    'tt0411008',
+    'tt8111088',
+    'tt11737520',
+    'tt0436992',
+    'tt5180504',
+    'tt5607976',
+    'tt3581920',
+    'tt2306299',
+    'tt1199099',
+  ],
+  kidsFamily: [
+    'tt7678620',
+    'tt0206512',
+    'tt1305826',
+    'tt1865718',
+    'tt0168366',
+    'tt0852863',
+    'tt5531466',
+    'tt8688814',
+    'tt3061046',
+    'tt0983983',
+  ],
+}
 
 const fallbackPosters = [
   '/media/arrival-poster.jpg',
@@ -256,15 +360,73 @@ async function requestOmdb<T>(path: string): Promise<T> {
   return body
 }
 
-export async function fetchFeaturedMovies() {
+async function fetchFeaturedByIds(ids: string[]) {
   const params = new URLSearchParams({
-    ids: featuredMovieIds.join(','),
+    ids: ids.join(','),
   })
   const data = await requestOmdb<OmdbIdsResponse>(`/api/omdb?${params}`)
 
   return (data.results ?? [])
     .filter((item) => item.Response !== 'False')
     .map((item, index) => movieFromDetail(item, index + 1))
+}
+
+async function fetchCollectionByIds(ids: string[]) {
+  try {
+    return await fetchFeaturedByIds(ids)
+  } catch {
+    return []
+  }
+}
+
+function fillCollection(collection: MediaCollection) {
+  const fallback = collection.top
+
+  return {
+    top: collection.top,
+    thrilling: collection.thrilling.length > 0 ? collection.thrilling : fallback,
+    adventure: collection.adventure.length > 0 ? collection.adventure : fallback,
+    kidsFamily:
+      collection.kidsFamily.length > 0 ? collection.kidsFamily : fallback,
+  }
+}
+
+async function fetchMediaCollection(
+  collectionIds: typeof movieCollectionIds,
+): Promise<MediaCollection> {
+  const [top, thrilling, adventure, kidsFamily] = await Promise.all([
+    fetchCollectionByIds(collectionIds.top),
+    fetchCollectionByIds(collectionIds.thrilling),
+    fetchCollectionByIds(collectionIds.adventure),
+    fetchCollectionByIds(collectionIds.kidsFamily),
+  ])
+
+  if (top.length === 0) {
+    throw new Error('OMDb did not return the top rail.')
+  }
+
+  return fillCollection({
+    top,
+    thrilling,
+    adventure,
+    kidsFamily,
+  })
+}
+
+export async function fetchFeaturedMovies() {
+  return fetchFeaturedByIds(featuredMovieIds)
+}
+
+export async function fetchFeaturedTvShows() {
+  return fetchFeaturedByIds(featuredTvShowIds)
+}
+
+export async function fetchMovieCollection() {
+  return fetchMediaCollection(movieCollectionIds)
+}
+
+export async function fetchTvShowCollection() {
+  return fetchMediaCollection(tvShowCollectionIds)
 }
 
 export async function fetchMovieById(id: string, rank = 1) {
