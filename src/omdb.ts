@@ -189,31 +189,203 @@ const tvShowCollectionIds = {
 }
 
 const fallbackPosters = [
-  '/media/arrival-poster.jpg',
-  '/media/northpoint-poster.jpg',
-  '/media/sundown-poster.jpg',
-  '/media/glass-poster.jpg',
-  '/media/afterimage-poster.jpg',
-  '/media/golden-poster.jpg',
+  'https://image.tmdb.org/t/p/w780/qmDpIHrmpJINaRKAfWQfftjCdyi.jpg',
+  'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
+  'https://image.tmdb.org/t/p/w780/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
+  'https://image.tmdb.org/t/p/w780/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
+  'https://image.tmdb.org/t/p/w780/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg',
+  'https://image.tmdb.org/t/p/w780/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
 ]
 
 const fallbackHeroImages = [
-  '/media/arrival-hero.jpg',
-  '/media/northpoint-hero.jpg',
-  '/media/sundown-hero.jpg',
-  '/media/glass-hero.jpg',
-  '/media/afterimage-hero.jpg',
-  '/media/golden-hero.jpg',
+  'https://image.tmdb.org/t/p/original/s3TBrRGB1iav7gFOCNx3H31MoES.jpg',
+  'https://image.tmdb.org/t/p/original/pbrkL804c8yAv3zBZR4QPEafpAR.jpg',
+  'https://image.tmdb.org/t/p/original/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg',
+  'https://image.tmdb.org/t/p/original/hkBaDkMWbLaf8B1lsWsKX7Ew3Xq.jpg',
+  'https://image.tmdb.org/t/p/original/fNG7i7RqMErkcqhohV2a6cV1Ehy.jpg',
+  'https://image.tmdb.org/t/p/original/3h1JZGDhZ8nzxdgvkxha0qBqi05.jpg',
 ]
 
 const fallbackStillImages = [
-  '/media/arrival-still.jpg',
-  '/media/northpoint-still.jpg',
-  '/media/sundown-still.jpg',
-  '/media/glass-still.jpg',
-  '/media/afterimage-still.jpg',
-  '/media/golden-still.jpg',
+  'https://image.tmdb.org/t/p/w1280/s3TBrRGB1iav7gFOCNx3H31MoES.jpg',
+  'https://image.tmdb.org/t/p/w1280/pbrkL804c8yAv3zBZR4QPEafpAR.jpg',
+  'https://image.tmdb.org/t/p/w1280/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg',
+  'https://image.tmdb.org/t/p/w1280/hkBaDkMWbLaf8B1lsWsKX7Ew3Xq.jpg',
+  'https://image.tmdb.org/t/p/w1280/fNG7i7RqMErkcqhohV2a6cV1Ehy.jpg',
+  'https://image.tmdb.org/t/p/w1280/3h1JZGDhZ8nzxdgvkxha0qBqi05.jpg',
 ]
+
+type FallbackMedia = {
+  title: string
+  type: 'movie' | 'series'
+  genres: string[]
+  year: string
+  runtime: string
+  maturity: string
+  synopsis: string
+  cast: string[]
+  director: string
+  poster?: string
+  hero?: string
+  still?: string
+}
+
+const fallbackMedia: Record<string, FallbackMedia> = {
+  tt1375666: {
+    title: 'Inception',
+    type: 'movie',
+    genres: ['Action', 'Adventure', 'Sci-Fi'],
+    year: '2010',
+    runtime: '148 min',
+    maturity: 'PG-13',
+    synopsis:
+      'A skilled thief enters dreams to steal secrets, then takes one last job that could change everything.',
+    cast: ['Leonardo DiCaprio', 'Joseph Gordon-Levitt', 'Elliot Page'],
+    director: 'Christopher Nolan',
+    poster: 'https://image.tmdb.org/t/p/w780/qmDpIHrmpJINaRKAfWQfftjCdyi.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/s3TBrRGB1iav7gFOCNx3H31MoES.jpg',
+  },
+  tt0816692: {
+    title: 'Interstellar',
+    type: 'movie',
+    genres: ['Adventure', 'Drama', 'Sci-Fi'],
+    year: '2014',
+    runtime: '169 min',
+    maturity: 'PG-13',
+    synopsis:
+      'Explorers travel through a wormhole to find humanity a new home beyond Earth.',
+    cast: ['Matthew McConaughey', 'Anne Hathaway', 'Jessica Chastain'],
+    director: 'Christopher Nolan',
+    poster: 'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/pbrkL804c8yAv3zBZR4QPEafpAR.jpg',
+  },
+  tt0111161: {
+    title: 'The Shawshank Redemption',
+    type: 'movie',
+    genres: ['Drama'],
+    year: '1994',
+    runtime: '142 min',
+    maturity: 'R',
+    synopsis:
+      'A banker sentenced to prison finds hope and friendship across decades behind bars.',
+    cast: ['Tim Robbins', 'Morgan Freeman', 'Bob Gunton'],
+    director: 'Frank Darabont',
+    poster: 'https://image.tmdb.org/t/p/w780/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg',
+  },
+  tt0468569: {
+    title: 'The Dark Knight',
+    type: 'movie',
+    genres: ['Action', 'Crime', 'Drama'],
+    year: '2008',
+    runtime: '152 min',
+    maturity: 'PG-13',
+    synopsis:
+      'Batman faces a criminal mastermind whose chaos pushes Gotham to the edge.',
+    cast: ['Christian Bale', 'Heath Ledger', 'Aaron Eckhart'],
+    director: 'Christopher Nolan',
+    poster: 'https://image.tmdb.org/t/p/w780/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/hkBaDkMWbLaf8B1lsWsKX7Ew3Xq.jpg',
+  },
+  tt0133093: {
+    title: 'The Matrix',
+    type: 'movie',
+    genres: ['Action', 'Sci-Fi'],
+    year: '1999',
+    runtime: '136 min',
+    maturity: 'R',
+    synopsis:
+      'A hacker discovers reality is a simulated prison and joins the fight to free humanity.',
+    cast: ['Keanu Reeves', 'Laurence Fishburne', 'Carrie-Anne Moss'],
+    director: 'The Wachowskis',
+    poster: 'https://image.tmdb.org/t/p/w780/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/fNG7i7RqMErkcqhohV2a6cV1Ehy.jpg',
+  },
+  tt0109830: {
+    title: 'Forrest Gump',
+    type: 'movie',
+    genres: ['Drama', 'Romance'],
+    year: '1994',
+    runtime: '142 min',
+    maturity: 'PG-13',
+    synopsis:
+      'A kind-hearted man moves through pivotal moments in American history with unforgettable optimism.',
+    cast: ['Tom Hanks', 'Robin Wright', 'Gary Sinise'],
+    director: 'Robert Zemeckis',
+    poster: 'https://image.tmdb.org/t/p/w780/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/3h1JZGDhZ8nzxdgvkxha0qBqi05.jpg',
+  },
+  tt0944947: {
+    title: 'Game of Thrones',
+    type: 'series',
+    genres: ['Adventure', 'Drama', 'Fantasy'],
+    year: '2011-2019',
+    runtime: '57 min',
+    maturity: 'TV-MA',
+    synopsis:
+      'Noble families battle for power while an ancient threat rises beyond the wall.',
+    cast: ['Emilia Clarke', 'Kit Harington', 'Peter Dinklage'],
+    director: 'David Benioff',
+    poster: 'https://image.tmdb.org/t/p/w780/1XS1oqL89opfnbLl8WnZY1O1uJx.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/2OMB0ynKlyIenMJWI2Dy9IWT4c.jpg',
+  },
+  tt0903747: {
+    title: 'Breaking Bad',
+    type: 'series',
+    genres: ['Crime', 'Drama', 'Thriller'],
+    year: '2008-2013',
+    runtime: '49 min',
+    maturity: 'TV-MA',
+    synopsis:
+      'A chemistry teacher turns to crime, building a dangerous empire from desperation.',
+    cast: ['Bryan Cranston', 'Aaron Paul', 'Anna Gunn'],
+    director: 'Vince Gilligan',
+    poster: 'https://image.tmdb.org/t/p/w780/ggFHVNu6YYI5L9pCfOacjizRGt.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg',
+  },
+  tt4574334: {
+    title: 'Stranger Things',
+    type: 'series',
+    genres: ['Drama', 'Fantasy', 'Horror'],
+    year: '2016-2025',
+    runtime: '51 min',
+    maturity: 'TV-14',
+    synopsis:
+      'Friends in a small town uncover secret experiments and a terrifying alternate world.',
+    cast: ['Millie Bobby Brown', 'Finn Wolfhard', 'David Harbour'],
+    director: 'The Duffer Brothers',
+    poster: 'https://image.tmdb.org/t/p/w780/49WJfeN0moxb9IPfGn8AIqMGskD.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/56v2KjBlU4XaOv9rVYEQypROD7P.jpg',
+  },
+  tt1475582: {
+    title: 'Sherlock',
+    type: 'series',
+    genres: ['Crime', 'Drama', 'Mystery'],
+    year: '2010-2017',
+    runtime: '88 min',
+    maturity: 'TV-14',
+    synopsis:
+      'A modern detective and his partner solve brilliant crimes across London.',
+    cast: ['Benedict Cumberbatch', 'Martin Freeman', 'Una Stubbs'],
+    director: 'Mark Gatiss',
+    poster: 'https://image.tmdb.org/t/p/w780/7WTsnHkbA0FaG6R9twfFde0I9hl.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/5vBmBTcU5JpH2RsqZuaZZLc4Owl.jpg',
+  },
+  tt0108778: {
+    title: 'Friends',
+    type: 'series',
+    genres: ['Comedy', 'Romance'],
+    year: '1994-2004',
+    runtime: '22 min',
+    maturity: 'TV-14',
+    synopsis:
+      'Six friends navigate love, careers, and daily life together in New York City.',
+    cast: ['Jennifer Aniston', 'Courteney Cox', 'Matthew Perry'],
+    director: 'David Crane',
+    poster: 'https://image.tmdb.org/t/p/w780/f496cm9enuEsZkSPzCwnTESEK5s.jpg',
+    hero: 'https://image.tmdb.org/t/p/original/l0qVZIpXtIo7km9u5Yqh0nKPOr5.jpg',
+  },
+}
 
 function safeText(value: string | undefined, fallback = 'N/A') {
   if (!value || value === 'N/A') {
@@ -233,6 +405,47 @@ function fallbackHero(rank: number) {
 
 function fallbackStill(rank: number) {
   return fallbackStillImages[(rank - 1) % fallbackStillImages.length]
+}
+
+function fallbackMovieFromId(id: string, rank = 1): Movie {
+  const fallback = fallbackMedia[id] ?? {
+    title: `Featured Pick ${rank}`,
+    type: 'movie' as const,
+    genres: ['Drama'],
+    year: '2024',
+    runtime: '110 min',
+    maturity: 'NR',
+    synopsis:
+      'A curated Apple TV-style fallback title is available while movie data loads.',
+    cast: ['Cast unavailable'],
+    director: 'Director unavailable',
+  }
+
+  return {
+    id,
+    rank,
+    title: fallback.title,
+    logoTitle: logoTitle(fallback.title),
+    label: rank === 1 ? 'Featured' : 'Fresh Pick',
+    type: fallback.type === 'series' ? 'Series' : 'Movie',
+    genres: fallback.genres,
+    year: fallback.year,
+    runtime: fallback.runtime,
+    rating: 'N/A',
+    maturity: fallback.maturity,
+    progress: progressFor(id),
+    hero: fallback.hero ?? fallbackHero(rank),
+    poster: fallback.poster ?? fallbackPoster(rank),
+    still: fallback.still ?? fallback.hero ?? fallbackStill(rank),
+    synopsis: fallback.synopsis,
+    cast: fallback.cast,
+    director: fallback.director,
+    awards: 'Awards unavailable',
+    boxOffice: 'Box office unavailable',
+    ratings: [],
+    badges: ['HD', 'CC', 'SDH'],
+    isFull: false,
+  }
 }
 
 function posterFor(movie: Pick<OmdbSearchItem, 'Poster'>, rank: number) {
@@ -281,7 +494,8 @@ function badgesFor(detail: Partial<OmdbDetail>) {
 }
 
 export function movieFromDetail(detail: OmdbDetail, rank = 1): Movie {
-  const poster = posterFor(detail, rank)
+  const fallback = fallbackMedia[detail.imdbID]
+  const poster = fallback?.poster ?? posterFor(detail, rank)
   const genres = splitList(detail.Genre, ['Movie'])
 
   return {
@@ -299,9 +513,9 @@ export function movieFromDetail(detail: OmdbDetail, rank = 1): Movie {
     rating: safeText(detail.imdbRating, 'N/A'),
     maturity: safeText(detail.Rated, 'NR'),
     progress: progressFor(detail.imdbID),
-    hero: fallbackHero(rank),
+    hero: fallback?.hero ?? fallbackHero(rank),
     poster,
-    still: fallbackStill(rank),
+    still: fallback?.still ?? fallback?.hero ?? fallbackStill(rank),
     synopsis: safeText(detail.Plot, 'No plot summary is available for this movie.'),
     cast: splitList(detail.Actors, ['Cast unavailable']).slice(0, 6),
     director: safeText(detail.Director, 'Director unavailable'),
@@ -314,7 +528,8 @@ export function movieFromDetail(detail: OmdbDetail, rank = 1): Movie {
 }
 
 export function movieFromSearch(item: OmdbSearchItem, rank = 1): Movie {
-  const poster = posterFor(item, rank)
+  const fallback = fallbackMedia[item.imdbID]
+  const poster = fallback?.poster ?? posterFor(item, rank)
 
   return {
     id: item.imdbID,
@@ -331,9 +546,9 @@ export function movieFromSearch(item: OmdbSearchItem, rank = 1): Movie {
     rating: 'N/A',
     maturity: 'NR',
     progress: progressFor(item.imdbID),
-    hero: fallbackHero(rank),
+    hero: fallback?.hero ?? fallbackHero(rank),
     poster,
-    still: fallbackStill(rank),
+    still: fallback?.still ?? fallback?.hero ?? fallbackStill(rank),
     synopsis: 'Open this movie to load its full OMDb plot, cast, ratings, and release details.',
     cast: ['Open for cast'],
     director: 'Open for director',
@@ -365,17 +580,25 @@ async function fetchFeaturedByIds(ids: string[]) {
     ids: ids.join(','),
   })
   const data = await requestOmdb<OmdbIdsResponse>(`/api/omdb?${params}`)
+  const resultsById = new Map(
+    (data.results ?? [])
+      .filter((item) => item.Response !== 'False')
+      .map((item) => [item.imdbID, item]),
+  )
 
-  return (data.results ?? [])
-    .filter((item) => item.Response !== 'False')
-    .map((item, index) => movieFromDetail(item, index + 1))
+  return ids.map((id, index) => {
+    const result = resultsById.get(id)
+    return result
+      ? movieFromDetail(result, index + 1)
+      : fallbackMovieFromId(id, index + 1)
+  })
 }
 
 async function fetchCollectionByIds(ids: string[]) {
   try {
     return await fetchFeaturedByIds(ids)
   } catch {
-    return []
+    return ids.map((id, index) => fallbackMovieFromId(id, index + 1))
   }
 }
 

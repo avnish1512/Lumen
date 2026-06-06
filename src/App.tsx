@@ -12,6 +12,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronsUpDown,
   Clapperboard,
   Download,
   Home,
@@ -26,7 +27,6 @@ import {
   Share,
   Tv,
   VolumeX,
-  X,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -66,12 +66,12 @@ const emptyMediaCollection: MediaCollection = {
   kidsFamily: [],
 }
 const fallbackPosterImages = [
-  '/media/arrival-poster.jpg',
-  '/media/northpoint-poster.jpg',
-  '/media/sundown-poster.jpg',
-  '/media/glass-poster.jpg',
-  '/media/afterimage-poster.jpg',
-  '/media/golden-poster.jpg',
+  'https://image.tmdb.org/t/p/w780/qmDpIHrmpJINaRKAfWQfftjCdyi.jpg',
+  'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
+  'https://image.tmdb.org/t/p/w780/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
+  'https://image.tmdb.org/t/p/w780/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
+  'https://image.tmdb.org/t/p/w780/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg',
+  'https://image.tmdb.org/t/p/w780/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
 ]
 
 const searchCategories = [
@@ -157,6 +157,71 @@ function compactRuntime(runtime: string) {
   }
 
   return runtime.replace(' hr ', 'h ').replace(' min', 'm')
+}
+
+const seasonEpisodeCounts: Record<string, number[]> = {
+  tt0944947: [10, 10, 10, 10, 10, 10, 7, 6],
+  tt0903747: [7, 13, 13, 13, 16],
+  tt4574334: [8, 9, 8, 9],
+  tt1475582: [3, 3, 3, 3],
+  tt0108778: [24, 24, 25, 24, 24, 25, 24, 24, 23, 17],
+  tt7366338: [5],
+  tt3032476: [10, 10, 10, 10, 10, 13],
+  tt1520211: [6, 13, 16, 16, 16, 16, 16, 16, 16, 22, 24],
+  tt2861424: [11, 10, 10, 10, 10, 10, 10],
+  tt0413573: [9, 27, 25, 17, 24, 24, 22, 24, 24, 24, 25, 24, 24, 24, 25, 21, 17, 20, 20],
+}
+
+const episodeTitlePool = [
+  'Aftermath',
+  'Departure',
+  'Signals',
+  'Crossing',
+  'The Search',
+  'Nightfall',
+  'Turning Point',
+  'Reckoning',
+  'The Return',
+  'Final Move',
+]
+
+function seasonsFor(movie: Movie) {
+  const knownCounts = seasonEpisodeCounts[movie.id]
+  const fallbackSeasonCount = movie.year.includes('-') ? 4 : 2
+  const counts =
+    knownCounts ??
+    Array.from({ length: fallbackSeasonCount }, (_, index) =>
+      index === 0 ? 8 : 10,
+    )
+
+  return counts.map((episodeCount, index) => ({
+    season: index + 1,
+    episodeCount,
+  }))
+}
+
+function episodeRuntime(movie: Movie, season: number, episode: number) {
+  const minutesMatch = movie.runtime.match(/(\d+)\s*min/i)
+
+  if (minutesMatch) {
+    return `${Number(minutesMatch[1])}m`
+  }
+
+  return `${42 + ((season * 7 + episode * 5 + movie.id.length) % 18)}m`
+}
+
+function episodeTitle(season: number, episode: number) {
+  return episodeTitlePool[(season * 3 + episode - 1) % episodeTitlePool.length]
+}
+
+function episodeSynopsis(movie: Movie, season: number, episode: number) {
+  const cleanSynopsis = movie.synopsis.replace(/\s+/g, ' ').trim()
+
+  if (cleanSynopsis && cleanSynopsis !== 'N/A') {
+    return cleanSynopsis
+  }
+
+  return `${movie.title} continues through season ${season}, episode ${episode}.`
 }
 
 function rankRail(movies: Movie[]) {
@@ -470,8 +535,10 @@ function App() {
           ...movie,
           tmdbId: match.tmdbId,
           tmdbType: match.mediaType,
-          streamSeason: match.mediaType === 'tv' ? 1 : undefined,
-          streamEpisode: match.mediaType === 'tv' ? 1 : undefined,
+          streamSeason:
+            match.mediaType === 'tv' ? movie.streamSeason ?? 1 : undefined,
+          streamEpisode:
+            match.mediaType === 'tv' ? movie.streamEpisode ?? 1 : undefined,
         }
 
         setSelectedMovie((current) =>
@@ -684,7 +751,20 @@ function App() {
           error={detailError}
           onBack={() => setScreen('home')}
           onOpenDetail={openDetail}
-          onPlay={() => openWatch(selectedMovie)}
+          onPlay={(provider) => {
+            if (provider) {
+              setStreamProvider(provider)
+            }
+            openWatch(selectedMovie)
+          }}
+          onPlayEpisode={(season, episode) => {
+            openWatch({
+              ...selectedMovie,
+              tmdbType: selectedMovie.tmdbType ?? 'tv',
+              streamSeason: season,
+              streamEpisode: episode,
+            })
+          }}
           onSave={() => toggleSaved(selectedMovie)}
           onShare={shareSelectedMovie}
           onOpenPoster={openSelectedPoster}
@@ -1078,7 +1158,8 @@ type DetailScreenProps = {
   error: string
   onBack: () => void
   onOpenDetail: (movie: Movie) => void
-  onPlay: () => void
+  onPlay: (provider?: StreamProvider) => void
+  onPlayEpisode: (season: number, episode: number) => void
   onSave: () => void
   onShare: () => void
   onOpenPoster: () => void
@@ -1093,6 +1174,7 @@ function DetailScreen({
   onBack,
   onOpenDetail,
   onPlay,
+  onPlayEpisode,
   onSave,
   onShare,
   onOpenPoster,
@@ -1110,10 +1192,6 @@ function DetailScreen({
     () => buildRail([movie, ...relatedItems], relatedItems, 2),
     [movie, relatedItems],
   )
-  const bonusItems = useMemo(
-    () => buildRail(relatedItems, [movie], 8),
-    [movie, relatedItems],
-  )
 
   return (
     <section className="screen detail-screen">
@@ -1126,7 +1204,7 @@ function DetailScreen({
       >
         <img
           className="detail-hero-art"
-          src={movie.poster || movie.hero || fallbackPosterForRank(movie.rank)}
+          src={movie.hero || movie.poster || fallbackPosterForRank(movie.rank)}
           alt=""
           onError={(event) => {
             event.currentTarget.src = fallbackPosterForRank(movie.rank)
@@ -1164,9 +1242,19 @@ function DetailScreen({
           </div>
 
           <div className="detail-actions apple-detail-actions">
-            <button className="primary-play detail-play" type="button" onClick={onPlay}>
+            <button
+              className="primary-play detail-play"
+              type="button"
+              onClick={() => onPlay()}
+            >
               <Play fill="currentColor" strokeWidth={0} />
-              <span>Play</span>
+              <span className="detail-play-label">Play</span>
+              <span className="detail-play-progress" aria-hidden="true">
+                <span style={{ width: `${continueProgressFor(movie)}%` }} />
+              </span>
+              <strong className="detail-play-runtime">
+                {compactRuntime(movie.runtime)}
+              </strong>
             </button>
             <button
               className="detail-download-button"
@@ -1196,17 +1284,17 @@ function DetailScreen({
       </div>
 
       <div className="detail-page-body">
+        {isTvShow(movie) && (
+          <SeasonEpisodeSection
+            key={movie.id}
+            movie={movie}
+            onPlayEpisode={onPlayEpisode}
+          />
+        )}
+
         <DetailLandscapeRail
           title="Trailers"
           movies={trailerItems}
-          kind="trailer"
-          onOpenDetail={onOpenDetail}
-        />
-
-        <DetailLandscapeRail
-          title="Bonus Content"
-          movies={bonusItems}
-          kind="bonus"
           onOpenDetail={onOpenDetail}
         />
 
@@ -1216,15 +1304,13 @@ function DetailScreen({
           onOpenDetail={onOpenDetail}
         />
 
-        <HowToWatch onPlay={onPlay} />
+        <WhereToWatch onPlay={onPlay} />
         <CastCrewRail movie={movie} />
         <MovieFacts movie={movie} />
       </div>
     </section>
   )
 }
-
-type DetailLandscapeKind = 'trailer' | 'bonus'
 
 function DetailSectionHeading({
   title,
@@ -1246,42 +1332,96 @@ function DetailSectionHeading({
   )
 }
 
-function landscapeTitle(movie: Movie, index: number, kind: DetailLandscapeKind) {
-  if (kind === 'trailer') {
-    return `${movie.title} ${index === 0 ? 'Trailer' : 'Teaser Trailer'}`
-  }
-
-  const bonusTitles = [
-    `Sing-Along Version of ${movie.type === 'Series' ? 'Episode' : 'Feature Film'}`,
-    `The Making of ${movie.title}`,
-    `Behind the ${movie.genres[0] ?? 'Story'}: The Steps`,
-    `Behind the ${movie.genres[0] ?? 'Story'}: The Music`,
-  ]
-
-  return bonusTitles[index % bonusTitles.length]
+function landscapeTitle(movie: Movie, index: number) {
+  return `${movie.title} ${index === 0 ? 'Trailer' : 'Teaser Trailer'}`
 }
 
-function landscapeDuration(movie: Movie, index: number, kind: DetailLandscapeKind) {
-  if (kind === 'trailer') {
-    return index === 0 ? '2m' : '1m'
+function landscapeDuration(index: number) {
+  return index === 0 ? '2m' : '1m'
+}
+
+function SeasonEpisodeSection({
+  movie,
+  onPlayEpisode,
+}: {
+  movie: Movie
+  onPlayEpisode: (season: number, episode: number) => void
+}) {
+  const seasons = useMemo(() => seasonsFor(movie), [movie])
+  const initialSeason = movie.streamSeason ?? seasons[0]?.season ?? 1
+  const [selectedSeason, setSelectedSeason] = useState(() => initialSeason)
+
+  const activeSeason =
+    seasons.find((season) => season.season === selectedSeason) ?? seasons[0]
+
+  if (!activeSeason) {
+    return null
   }
 
-  if (index === 0) {
-    return compactRuntime(movie.runtime)
-  }
+  const episodes = Array.from(
+    { length: activeSeason.episodeCount },
+    (_, index) => index + 1,
+  )
 
-  return `${Math.max(1, index + 1)}m`
+  return (
+    <section className="detail-section season-section">
+      <label className="season-dropdown">
+        <select
+          value={selectedSeason}
+          aria-label="Choose season"
+          onChange={(event) => setSelectedSeason(Number(event.target.value))}
+        >
+          {seasons.map((season) => (
+            <option key={season.season} value={season.season}>
+              Season {season.season}
+            </option>
+          ))}
+        </select>
+        <span>Season {selectedSeason}</span>
+        <ChevronsUpDown />
+      </label>
+
+      <div className="episode-row">
+        {episodes.map((episode) => (
+          <button
+            className="episode-card"
+            type="button"
+            key={`${selectedSeason}-${episode}`}
+            onClick={() => onPlayEpisode(selectedSeason, episode)}
+          >
+            <img
+              src={movie.still || movie.hero || movie.poster}
+              alt=""
+              onError={(event) => {
+                event.currentTarget.src = fallbackPosterForRank(movie.rank)
+              }}
+            />
+            <span className="episode-card-copy">
+              <small>EPISODE {episode}</small>
+              <strong>{episodeTitle(selectedSeason, episode)}</strong>
+              <em>{episodeSynopsis(movie, selectedSeason, episode)}</em>
+            </span>
+            <span className="episode-card-footer">
+              <span>
+                <RefreshCcw />
+                {episodeRuntime(movie, selectedSeason, episode)}
+              </span>
+              <MoreHorizontal />
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 function DetailLandscapeRail({
   title,
   movies,
-  kind,
   onOpenDetail,
 }: {
   title: string
   movies: Movie[]
-  kind: DetailLandscapeKind
   onOpenDetail: (movie: Movie) => void
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null)
@@ -1303,7 +1443,7 @@ function DetailLandscapeRail({
       <div ref={rowRef} className="detail-landscape-row">
         {movies.map((item, index) => (
           <button
-            key={`${kind}-${item.id}-${index}`}
+            key={`trailer-${item.id}-${index}`}
             className="detail-landscape-card"
             type="button"
             onClick={() => onOpenDetail(item)}
@@ -1316,10 +1456,10 @@ function DetailLandscapeRail({
               }}
             />
             <span className="detail-card-copy">
-              <strong>{landscapeTitle(item, index, kind)}</strong>
+              <strong>{landscapeTitle(item, index)}</strong>
               <small>
                 <Play fill="currentColor" strokeWidth={0} />
-                {landscapeDuration(item, index, kind)}
+                {landscapeDuration(index)}
               </small>
             </span>
           </button>
@@ -1377,34 +1517,30 @@ function DetailPosterRail({
   )
 }
 
-function HowToWatch({ onPlay }: { onPlay: () => void }) {
+function WhereToWatch({
+  onPlay,
+}: {
+  onPlay: (provider?: StreamProvider) => void
+}) {
   return (
     <section className="detail-section detail-watch-options">
-      <h2>How to Watch</h2>
+      <h2>Where to Watch</h2>
       <div className="watch-option-grid">
-        <button className="watch-option-card" type="button" onClick={onPlay}>
-          <span className="watch-option-logo">tv</span>
-          <span>
-            <strong>Play</strong>
-            <small>Subscribed</small>
-          </span>
-        </button>
-        <button className="watch-option-card" type="button">
-          <span className="watch-option-logo gradient">tv</span>
-          <span>
-            <strong>Buy</strong>
-            <small>₹ 490</small>
-            <em>4K</em>
-          </span>
-        </button>
-        <button className="watch-option-card" type="button">
-          <span className="watch-option-logo gradient">tv</span>
-          <span>
-            <strong>Rent</strong>
-            <small>₹ 129</small>
-            <em>4K · 30 days to watch</em>
-          </span>
-        </button>
+        {streamProviderOptions.map((provider) => (
+          <button
+            className="watch-option-card"
+            type="button"
+            key={provider.id}
+            onClick={() => onPlay(provider.id)}
+          >
+            <span className="watch-option-logo gradient">{provider.logo}</span>
+            <span>
+              <strong>{provider.name}</strong>
+              <small>{provider.description}</small>
+              <em>Available on {provider.name}</em>
+            </span>
+          </button>
+        ))}
       </div>
     </section>
   )
@@ -1739,8 +1875,15 @@ function SearchScreen({
       </section>
 
       <div className="search-bottom">
+        <button
+          className="close-search icon-close search-library-bubble"
+          type="button"
+          onClick={onClose}
+          aria-label="Close search"
+        >
+          <Library />
+        </button>
         <form className="search-form" onSubmit={submitSearch}>
-          <span className="search-tv-badge">tv</span>
           <Search />
           <input
             value={query}
@@ -1752,9 +1895,6 @@ function SearchScreen({
             <Mic />
           </button>
         </form>
-        <button className="close-search icon-close" type="button" onClick={onClose}>
-          <X />
-        </button>
       </div>
 
       {query && results.length > 0 && (
