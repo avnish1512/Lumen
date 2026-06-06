@@ -49,10 +49,14 @@ type TmdbFindResult = {
 type TmdbFindResponse = {
   movie_results?: TmdbFindResult[]
   tv_results?: TmdbFindResult[]
+  status_code?: number
+  status_message?: string
+  Error?: string
 }
 
 type TmdbAuth = {
   apiKey?: string
+  name: string
   readAccessToken?: string
 }
 
@@ -84,6 +88,12 @@ function hasTmdbAuth(auth: TmdbAuth) {
   return Boolean(auth.apiKey || auth.readAccessToken)
 }
 
+function buildTmdbFindUrl(imdbId: string) {
+  const url = new URL(`${TMDB_BASE_URL}/find/${encodeURIComponent(imdbId)}`)
+  url.searchParams.set('external_source', 'imdb_id')
+  return url
+}
+
 function applyTmdbAuth(url: URL, auth: TmdbAuth) {
   if (auth.readAccessToken) {
     return {
@@ -100,8 +110,30 @@ function applyTmdbAuth(url: URL, auth: TmdbAuth) {
   return undefined
 }
 
+function isTmdbRateLimited(status: number, body: TmdbFindResponse) {
+  const message = `${body.status_message ?? ''} ${body.Error ?? ''}`.toLowerCase()
+
+  return (
+    status === 429 ||
+    body.status_code === 25 ||
+    message.includes('request limit') ||
+    message.includes('rate limit')
+  )
+}
+
+async function requestTmdbFind(auth: TmdbAuth, imdbId: string) {
+  const url = buildTmdbFindUrl(imdbId)
+  const response = await fetch(url, applyTmdbAuth(url, auth))
+  const body = (await response.json()) as TmdbFindResponse
+
+  return {
+    body,
+    status: response.ok ? 200 : response.status,
+  }
+}
+
 async function fetchTmdbByImdbId(
-  auth: TmdbAuth,
+  authChain: TmdbAuth[],
   imdbId: string,
 ) {
   const fallbackMatch = fallbackTmdbMatches[imdbId]
@@ -116,7 +148,7 @@ async function fetchTmdbByImdbId(
     }
   }
 
-  if (!hasTmdbAuth(auth)) {
+  if (authChain.length === 0) {
     return {
       status: 500,
       body: {
@@ -127,18 +159,23 @@ async function fetchTmdbByImdbId(
     }
   }
 
-  const url = new URL(`${TMDB_BASE_URL}/find/${encodeURIComponent(imdbId)}`)
-  url.searchParams.set('external_source', 'imdb_id')
+  let result = await requestTmdbFind(authChain[0], imdbId)
 
-  const response = await fetch(url, applyTmdbAuth(url, auth))
-  const body = (await response.json()) as TmdbFindResponse
-  const movie = body.movie_results?.[0]
-  const tv = body.tv_results?.[0]
+  if (
+    authChain[1] &&
+    authChain[0].name === 'primary' &&
+    isTmdbRateLimited(result.status, result.body)
+  ) {
+    result = await requestTmdbFind(authChain[1], imdbId)
+  }
 
-  if (!response.ok) {
+  const movie = result.body.movie_results?.[0]
+  const tv = result.body.tv_results?.[0]
+
+  if (result.status !== 200) {
     return {
-      status: response.status,
-      body,
+      status: result.status,
+      body: result.body,
     }
   }
 
@@ -261,7 +298,7 @@ function omdbDevProxy(apiKey: string | undefined): Plugin {
   }
 }
 
-function tmdbDevProxy(auth: TmdbAuth): Plugin {
+function tmdbDevProxy(authChain: TmdbAuth[]): Plugin {
   return {
     name: 'tmdb-dev-proxy',
     configureServer(server) {
@@ -283,7 +320,7 @@ function tmdbDevProxy(auth: TmdbAuth): Plugin {
         }
 
         try {
-          const result = await fetchTmdbByImdbId(auth, imdbId)
+          const result = await fetchTmdbByImdbId(authChain, imdbId)
           sendJson(res, result.status, result.body)
         } catch (error) {
           const fallbackMatch = fallbackTmdbMatches[imdbId]
@@ -309,6 +346,37 @@ function tmdbDevProxy(auth: TmdbAuth): Plugin {
   }
 }
 
+function createTmdbAuthChain(env: Record<string, string>) {
+  const auths: TmdbAuth[] = [
+    {
+      name: 'primary',
+      apiKey: env.TMDB_API_KEY,
+      readAccessToken: env.TMDB_API_READ_ACCESS_TOKEN,
+    },
+    {
+      name: 'secondary',
+      apiKey: env.TMDB_SECONDARY_API_KEY,
+      readAccessToken: env.TMDB_SECONDARY_API_READ_ACCESS_TOKEN,
+    },
+  ]
+  const seen = new Set<string>()
+
+  return auths.filter((auth) => {
+    if (!hasTmdbAuth(auth)) {
+      return false
+    }
+
+    const key = `${auth.readAccessToken ?? ''}:${auth.apiKey ?? ''}`
+
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
@@ -316,10 +384,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       omdbDevProxy(env.OMDB_API_KEY),
-      tmdbDevProxy({
-        apiKey: env.TMDB_API_KEY,
-        readAccessToken: env.TMDB_API_READ_ACCESS_TOKEN,
-      }),
+      tmdbDevProxy(createTmdbAuthChain(env)),
     ],
   }
 })

@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type FormEvent,
+  type PointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -294,7 +295,23 @@ function heroBackgroundStyle(movie: Movie, gradient: string) {
   } as CSSProperties
 }
 
+function setMagneticNavOffset(event: PointerEvent<HTMLElement>) {
+  const target = event.currentTarget
+  const rect = target.getBoundingClientRect()
+  const x = ((event.clientX - rect.left) / rect.width - 0.5) * 12
+  const y = ((event.clientY - rect.top) / rect.height - 0.5) * 10
+
+  target.style.setProperty('--nav-magnetic-x', `${x.toFixed(2)}px`)
+  target.style.setProperty('--nav-magnetic-y', `${y.toFixed(2)}px`)
+}
+
+function resetMagneticNavOffset(event: PointerEvent<HTMLElement>) {
+  event.currentTarget.style.setProperty('--nav-magnetic-x', '0px')
+  event.currentTarget.style.setProperty('--nav-magnetic-y', '0px')
+}
+
 function App() {
+  const appShellRef = useRef<HTMLElement | null>(null)
   const [screen, setScreenState] = useState<Screen>(getInitialScreen)
   const [movies, setMovies] = useState<Movie[]>([])
   const [tvShows, setTvShows] = useState<Movie[]>([])
@@ -303,6 +320,7 @@ function App() {
   const [tvShowCollection, setTvShowCollection] =
     useState<MediaCollection>(emptyMediaCollection)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
+  const [detailBackScreen, setDetailBackScreen] = useState<Screen>('home')
   const [savedMovies, setSavedMovies] = useState<SavedMovies>(readSavedMovies)
   const [watchHistory, setWatchHistory] =
     useState<WatchHistory>(readWatchHistory)
@@ -318,6 +336,8 @@ function App() {
   const [streamError, setStreamError] = useState('')
   const [streamProvider, setStreamProvider] =
     useState<StreamProvider>(readStreamProvider)
+  const [navScrolled, setNavScrolled] = useState(false)
+  const [navScrollProgress, setNavScrollProgress] = useState(0)
 
   const featuredMovie = selectedMovie && !isTvShow(selectedMovie) ? selectedMovie : movies[0] ?? null
   const featuredTvShow = selectedMovie && isTvShow(selectedMovie) ? selectedMovie : tvShows[0] ?? null
@@ -361,6 +381,13 @@ function App() {
       nextScreen === 'home' ? window.location.pathname : `#${nextScreen}`,
     )
     window.requestAnimationFrame(() => {
+      const shell = appShellRef.current
+
+      if (shell) {
+        shell.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+
       window.scrollTo({ top: 0, behavior: 'smooth' })
     })
   }
@@ -424,6 +451,48 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(streamProviderKey, streamProvider)
   }, [streamProvider])
+
+  useEffect(() => {
+    let frameId = 0
+
+    const updateNavMotion = () => {
+      frameId = 0
+      const shell = appShellRef.current
+      const scrollTop =
+        shell?.scrollTop ?? window.scrollY ?? document.documentElement.scrollTop
+      const nextScrolled = scrollTop > 18
+      const nextProgress = Math.min(1, scrollTop / 180)
+
+      setNavScrolled((current) =>
+        current === nextScrolled ? current : nextScrolled,
+      )
+      setNavScrollProgress((current) =>
+        Math.abs(current - nextProgress) < 0.02 ? current : nextProgress,
+      )
+    }
+
+    const requestNavMotion = () => {
+      if (frameId) {
+        return
+      }
+
+      frameId = window.requestAnimationFrame(updateNavMotion)
+    }
+
+    const shell = appShellRef.current
+    shell?.addEventListener('scroll', requestNavMotion, { passive: true })
+    window.addEventListener('scroll', requestNavMotion, { passive: true })
+    requestNavMotion()
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      shell?.removeEventListener('scroll', requestNavMotion)
+      window.removeEventListener('scroll', requestNavMotion)
+    }
+  }, [])
 
   const markContinueWatching = useCallback((movie: Movie) => {
     setWatchHistory((current) => {
@@ -587,6 +656,10 @@ function App() {
   )
 
   const openDetail = (movie: Movie) => {
+    if (screen !== 'detail' && screen !== 'watch') {
+      setDetailBackScreen(screen)
+    }
+
     setSelectedMovie(movie)
     markContinueWatching(movie)
     setScreen('detail')
@@ -594,6 +667,10 @@ function App() {
   }
 
   const openWatch = (movie: Movie) => {
+    if (screen !== 'detail' && screen !== 'watch') {
+      setDetailBackScreen(screen)
+    }
+
     setSelectedMovie(movie)
     markContinueWatching(movie)
     setScreen('watch')
@@ -694,9 +771,19 @@ function App() {
     }
   }
 
+  const appShellStyle = {
+    '--nav-logo-scale': 1 - navScrollProgress * 0.025,
+    '--nav-logo-y': `${navScrollProgress * -7}px`,
+    '--nav-scroll-progress': navScrollProgress,
+  } as CSSProperties
+
   if (homeLoading && requiredMedia.length === 0 && needsMovieBootstrap) {
     return (
-      <main className="app-shell">
+      <main
+        ref={appShellRef}
+        className={navScrolled ? 'app-shell nav-scrolled' : 'app-shell'}
+        style={appShellStyle}
+      >
         <LoadingScreen />
       </main>
     )
@@ -704,14 +791,22 @@ function App() {
 
   if (homeError && requiredMedia.length === 0 && needsMovieBootstrap) {
     return (
-      <main className="app-shell">
+      <main
+        ref={appShellRef}
+        className={navScrolled ? 'app-shell nav-scrolled' : 'app-shell'}
+        style={appShellStyle}
+      >
         <ErrorScreen error={homeError} onRetry={retryHome} />
       </main>
     )
   }
 
   return (
-    <main className="app-shell">
+    <main
+      ref={appShellRef}
+      className={navScrolled ? 'app-shell nav-scrolled' : 'app-shell'}
+      style={appShellStyle}
+    >
       {screen === 'home' && featuredMovie && (
         <HomeScreen
           featuredMovie={featuredMovie}
@@ -731,6 +826,7 @@ function App() {
 
       {(screen === 'movies' || screen === 'tv') && (
         <BrowseScreen
+          key={screen}
           mode={screen}
           movies={screen === 'tv' ? tvShows : movies}
           collection={screen === 'tv' ? tvShowCollection : movieCollection}
@@ -749,7 +845,7 @@ function App() {
           isSaved={Boolean(savedMovies[selectedMovie.id])}
           isLoading={detailLoading}
           error={detailError}
-          onBack={() => setScreen('home')}
+          onBack={() => setScreen(detailBackScreen)}
           onOpenDetail={openDetail}
           onPlay={(provider) => {
             if (provider) {
@@ -819,14 +915,16 @@ function App() {
           onLibrary={() => setScreen('library')}
         />
       )}
-      <DesktopNav
-        active={activeTab}
-        onHome={() => setScreen('home')}
-        onMovies={() => setScreen('movies')}
-        onTvShows={() => setScreen('tv')}
-        onSearch={() => setScreen('search')}
-        onLibrary={() => setScreen('library')}
-      />
+      {screen !== 'detail' && screen !== 'watch' && (
+        <DesktopNav
+          active={activeTab}
+          onHome={() => setScreen('home')}
+          onMovies={() => setScreen('movies')}
+          onTvShows={() => setScreen('tv')}
+          onSearch={() => setScreen('search')}
+          onLibrary={() => setScreen('library')}
+        />
+      )}
     </main>
   )
 }
@@ -1041,7 +1139,7 @@ function BrowseScreen({
   onPlay,
   onSave,
 }: BrowseScreenProps) {
-  const heroMovie = featuredMovie ?? movies[0]
+  const [browseHeroIndex, setBrowseHeroIndex] = useState(0)
   const isTvMode = mode === 'tv'
   const screenTitle = isTvMode ? 'TV Shows' : 'Movies'
   const firstRailTitle = isTvMode ? 'Top 10 TV Shows' : 'Top 10 Movies'
@@ -1056,6 +1154,10 @@ function BrowseScreen({
     () => buildRail(collection.top, movies),
     [collection.top, movies],
   )
+  const heroMovies = useMemo(() => topItems.slice(0, 6), [topItems])
+  const activeHeroIndex =
+    heroMovies.length > 0 ? browseHeroIndex % heroMovies.length : 0
+  const heroMovie = heroMovies[activeHeroIndex] ?? featuredMovie ?? movies[0]
   const thrillingItems = useMemo(
     () => buildRail(collection.thrilling, topItems),
     [collection.thrilling, topItems],
@@ -1068,6 +1170,18 @@ function BrowseScreen({
     () => buildRail(collection.kidsFamily, topItems),
     [collection.kidsFamily, topItems],
   )
+
+  useEffect(() => {
+    if (heroMovies.length < 2) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      setBrowseHeroIndex((current) => (current + 1) % heroMovies.length)
+    }, heroAutoAdvanceMs)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeHeroIndex, heroMovies.length])
 
   return (
     <section className="screen browse-screen">
@@ -1122,6 +1236,26 @@ function BrowseScreen({
                 {savedMovies[heroMovie.id] ? <Check /> : <Plus />}
               </button>
             </div>
+          </div>
+
+          <div className="carousel-dots" aria-label={`${screenTitle} featured carousel`}>
+            {heroMovies.map((movie, index) => (
+              <button
+                key={movie.id}
+                className={index === activeHeroIndex ? 'active' : ''}
+                type="button"
+                style={
+                  index === activeHeroIndex
+                    ? {
+                        '--timer-duration': `${heroAutoAdvanceMs}ms`,
+                      } as CSSProperties
+                    : undefined
+                }
+                aria-label={`Show ${movie.title}`}
+                aria-current={index === activeHeroIndex ? 'true' : undefined}
+                onClick={() => setBrowseHeroIndex(index)}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -1707,7 +1841,6 @@ function WatchScreen({
           <span className="progress-track">
             <span style={{ width: `${movie.progress}%` }} />
           </span>
-          <strong>{compactRuntime(movie.runtime)}</strong>
         </button>
 
         <p className="watch-synopsis">
@@ -1717,7 +1850,7 @@ function WatchScreen({
       </section>
 
       <section className="content-section watch-card-section">
-        <h2>Streaming</h2>
+        <h2 className="visually-hidden">Streaming servers</h2>
         <div
           className="server-selector"
           role="radiogroup"
@@ -2341,10 +2474,17 @@ function BottomNav({
   onSearch: () => void
   onLibrary: () => void
 }) {
+  const magneticEvents = {
+    onPointerLeave: resetMagneticNavOffset,
+    onPointerMove: setMagneticNavOffset,
+    onPointerUp: resetMagneticNavOffset,
+  }
+
   return (
     <div className="bottom-ui">
       <nav className="tab-dock" aria-label="Primary">
         <button
+          {...magneticEvents}
           className={active === 'Home' ? 'active' : ''}
           type="button"
           onClick={onHome}
@@ -2355,6 +2495,7 @@ function BottomNav({
           <span>Home</span>
         </button>
         <button
+          {...magneticEvents}
           className={active === 'Movies' ? 'active' : ''}
           type="button"
           onClick={onMovies}
@@ -2365,6 +2506,7 @@ function BottomNav({
           <span>Movies</span>
         </button>
         <button
+          {...magneticEvents}
           className={active === 'TV Shows' ? 'active' : ''}
           type="button"
           onClick={onTvShows}
@@ -2375,6 +2517,7 @@ function BottomNav({
           <span>TV Shows</span>
         </button>
         <button
+          {...magneticEvents}
           className={active === 'Library' ? 'active' : ''}
           type="button"
           onClick={onLibrary}
@@ -2386,6 +2529,7 @@ function BottomNav({
         </button>
       </nav>
       <button
+        {...magneticEvents}
         className={active === 'Search' ? 'search-float active' : 'search-float'}
         type="button"
         title="Search"
@@ -2414,14 +2558,26 @@ function DesktopNav({
   onSearch: () => void
   onLibrary: () => void
 }) {
+  const magneticEvents = {
+    onPointerLeave: resetMagneticNavOffset,
+    onPointerMove: setMagneticNavOffset,
+    onPointerUp: resetMagneticNavOffset,
+  }
+
   return (
     <header className="desktop-nav">
-      <button className="desktop-brand" type="button" onClick={onHome}>
+      <button
+        {...magneticEvents}
+        className="desktop-brand"
+        type="button"
+        onClick={onHome}
+      >
         <Home fill="currentColor" />
         <span>Home</span>
       </button>
       <nav aria-label="Website">
         <button
+          {...magneticEvents}
           className={active === 'Home' ? 'active' : ''}
           type="button"
           onClick={onHome}
@@ -2430,6 +2586,7 @@ function DesktopNav({
           <span>Home</span>
         </button>
         <button
+          {...magneticEvents}
           className={active === 'Movies' ? 'active' : ''}
           type="button"
           onClick={onMovies}
@@ -2438,6 +2595,7 @@ function DesktopNav({
           <span>Movies</span>
         </button>
         <button
+          {...magneticEvents}
           className={active === 'TV Shows' ? 'active' : ''}
           type="button"
           onClick={onTvShows}
@@ -2446,6 +2604,7 @@ function DesktopNav({
           <span>TV Shows</span>
         </button>
         <button
+          {...magneticEvents}
           className={active === 'Library' ? 'active' : ''}
           type="button"
           onClick={onLibrary}
@@ -2455,11 +2614,23 @@ function DesktopNav({
         </button>
       </nav>
       <div className="desktop-actions">
-        <button className="desktop-search" type="button" onClick={onSearch}>
+        <button
+          {...magneticEvents}
+          className={
+            active === 'Search' ? 'desktop-search active' : 'desktop-search'
+          }
+          type="button"
+          onClick={onSearch}
+        >
           <Search />
           <span>Search</span>
         </button>
-        <button className="avatar-button desktop-avatar" type="button" title="Profile">
+        <button
+          {...magneticEvents}
+          className="avatar-button desktop-avatar"
+          type="button"
+          title="Profile"
+        >
           AB
         </button>
       </div>

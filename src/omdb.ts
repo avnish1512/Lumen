@@ -387,6 +387,80 @@ const fallbackMedia: Record<string, FallbackMedia> = {
   },
 }
 
+const fallbackTitlesById: Record<
+  string,
+  { title: string; type: 'movie' | 'series'; genres?: string[] }
+> = {
+  tt0110912: { title: 'Pulp Fiction', type: 'movie', genres: ['Crime', 'Drama'] },
+  tt4154796: { title: 'Avengers: Endgame', type: 'movie', genres: ['Action', 'Adventure'] },
+  tt1745960: { title: 'Top Gun: Maverick', type: 'movie', genres: ['Action', 'Drama'] },
+  tt0068646: { title: 'The Godfather', type: 'movie', genres: ['Crime', 'Drama'] },
+  tt0102926: { title: 'The Silence of the Lambs', type: 'movie', genres: ['Crime', 'Thriller'] },
+  tt0114369: { title: 'Se7en', type: 'movie', genres: ['Crime', 'Mystery'] },
+  tt0209144: { title: 'Memento', type: 'movie', genres: ['Mystery', 'Thriller'] },
+  tt1130884: { title: 'Shutter Island', type: 'movie', genres: ['Mystery', 'Thriller'] },
+  tt2267998: { title: 'Gone Girl', type: 'movie', genres: ['Drama', 'Thriller'] },
+  tt1392214: { title: 'Prisoners', type: 'movie', genres: ['Crime', 'Drama'] },
+  tt0443706: { title: 'Zodiac', type: 'movie', genres: ['Crime', 'Mystery'] },
+  tt0477348: { title: 'No Country for Old Men', type: 'movie', genres: ['Crime', 'Drama'] },
+  tt0482571: { title: 'The Prestige', type: 'movie', genres: ['Drama', 'Mystery'] },
+  tt2872718: { title: 'Nightcrawler', type: 'movie', genres: ['Crime', 'Thriller'] },
+  tt0082971: { title: 'Raiders of the Lost Ark', type: 'movie', genres: ['Action', 'Adventure'] },
+  tt0107290: { title: 'Jurassic Park', type: 'movie', genres: ['Adventure', 'Sci-Fi'] },
+  tt0120737: { title: 'The Lord of the Rings', type: 'movie', genres: ['Adventure', 'Fantasy'] },
+  tt0325980: { title: 'Pirates of the Caribbean', type: 'movie', genres: ['Action', 'Adventure'] },
+  tt1392190: { title: 'Mad Max: Fury Road', type: 'movie', genres: ['Action', 'Adventure'] },
+  tt1160419: { title: 'Dune', type: 'movie', genres: ['Adventure', 'Sci-Fi'] },
+  tt0454876: { title: 'Life of Pi', type: 'movie', genres: ['Adventure', 'Drama'] },
+  tt1663202: { title: 'The Revenant', type: 'movie', genres: ['Adventure', 'Drama'] },
+  tt0088763: { title: 'Back to the Future', type: 'movie', genres: ['Adventure', 'Comedy'] },
+  tt0114709: { title: 'Toy Story', type: 'movie', genres: ['Animation', 'Family'] },
+  tt0266543: { title: 'Finding Nemo', type: 'movie', genres: ['Animation', 'Family'] },
+  tt0110357: { title: 'The Lion King', type: 'movie', genres: ['Animation', 'Family'] },
+  tt0198781: { title: 'Monsters, Inc.', type: 'movie', genres: ['Animation', 'Family'] },
+  tt0126029: { title: 'Shrek', type: 'movie', genres: ['Animation', 'Comedy'] },
+  tt4468740: { title: 'Kubo and the Two Strings', type: 'movie', genres: ['Animation', 'Adventure'] },
+  tt2096673: { title: 'Inside Out', type: 'movie', genres: ['Animation', 'Family'] },
+  tt2380307: { title: 'Coco', type: 'movie', genres: ['Animation', 'Family'] },
+  tt0317705: { title: 'The Incredibles', type: 'movie', genres: ['Animation', 'Action'] },
+  tt0245429: { title: 'Spirited Away', type: 'movie', genres: ['Animation', 'Fantasy'] },
+  tt7366338: { title: 'Chernobyl', type: 'series', genres: ['Drama', 'History'] },
+  tt3032476: { title: 'Better Call Saul', type: 'series', genres: ['Crime', 'Drama'] },
+  tt1520211: { title: 'The Walking Dead', type: 'series', genres: ['Drama', 'Horror'] },
+  tt2861424: { title: 'Rick and Morty', type: 'series', genres: ['Animation', 'Comedy'] },
+  tt0413573: { title: 'Grey\'s Anatomy', type: 'series', genres: ['Drama', 'Romance'] },
+  tt5753856: { title: 'Dark', type: 'series', genres: ['Mystery', 'Sci-Fi'] },
+  tt5290382: { title: 'Mindhunter', type: 'series', genres: ['Crime', 'Thriller'] },
+  tt2356777: { title: 'True Detective', type: 'series', genres: ['Crime', 'Drama'] },
+  tt2085059: { title: 'Black Mirror', type: 'series', genres: ['Drama', 'Sci-Fi'] },
+  tt2401256: { title: 'The Night Manager', type: 'series', genres: ['Drama', 'Thriller'] },
+  tt2243973: { title: 'Hannibal', type: 'series', genres: ['Crime', 'Horror'] },
+  tt2802850: { title: 'Fargo', type: 'series', genres: ['Crime', 'Drama'] },
+  tt5071412: { title: 'Ozark', type: 'series', genres: ['Crime', 'Drama'] },
+  tt1796960: { title: 'Homeland', type: 'series', genres: ['Drama', 'Thriller'] },
+  tt6048596: { title: 'The Sinner', type: 'series', genres: ['Crime', 'Mystery'] },
+  tt0417299: { title: 'Avatar: The Last Airbender', type: 'series', genres: ['Animation', 'Adventure'] },
+  tt0411008: { title: 'Lost', type: 'series', genres: ['Adventure', 'Drama'] },
+  tt8111088: { title: 'The Mandalorian', type: 'series', genres: ['Action', 'Adventure'] },
+  tt11737520: { title: 'Sweet Tooth', type: 'series', genres: ['Adventure', 'Fantasy'] },
+  tt0436992: { title: 'Doctor Who', type: 'series', genres: ['Adventure', 'Sci-Fi'] },
+  tt5180504: { title: 'The Witcher', type: 'series', genres: ['Action', 'Adventure'] },
+  tt5607976: { title: 'The Orville', type: 'series', genres: ['Adventure', 'Comedy'] },
+  tt3581920: { title: 'The Last of Us', type: 'series', genres: ['Drama', 'Thriller'] },
+  tt2306299: { title: 'Vikings', type: 'series', genres: ['Action', 'Drama'] },
+  tt1199099: { title: 'Adventure Series', type: 'series', genres: ['Adventure', 'Drama'] },
+  tt7678620: { title: 'Bluey', type: 'series', genres: ['Animation', 'Family'] },
+  tt0206512: { title: 'SpongeBob SquarePants', type: 'series', genres: ['Animation', 'Comedy'] },
+  tt1305826: { title: 'Adventure Time', type: 'series', genres: ['Animation', 'Adventure'] },
+  tt1865718: { title: 'Gravity Falls', type: 'series', genres: ['Animation', 'Mystery'] },
+  tt0168366: { title: 'The Powerpuff Girls', type: 'series', genres: ['Animation', 'Action'] },
+  tt0852863: { title: 'Phineas and Ferb', type: 'series', genres: ['Animation', 'Comedy'] },
+  tt5531466: { title: 'DuckTales', type: 'series', genres: ['Animation', 'Adventure'] },
+  tt8688814: { title: 'Carmen Sandiego', type: 'series', genres: ['Animation', 'Adventure'] },
+  tt3061046: { title: 'Miraculous: Tales of Ladybug & Cat Noir', type: 'series', genres: ['Animation', 'Action'] },
+  tt0983983: { title: 'WordGirl', type: 'series', genres: ['Animation', 'Family'] },
+}
+
 function safeText(value: string | undefined, fallback = 'N/A') {
   if (!value || value === 'N/A') {
     return fallback
@@ -408,15 +482,20 @@ function fallbackStill(rank: number) {
 }
 
 function fallbackMovieFromId(id: string, rank = 1): Movie {
+  const knownFallback = fallbackTitlesById[id]
   const fallback = fallbackMedia[id] ?? {
-    title: `Featured Pick ${rank}`,
-    type: 'movie' as const,
-    genres: ['Drama'],
+    title:
+      knownFallback?.title ??
+      `Curated ${knownFallback?.type === 'series' ? 'Series' : 'Movie'} ${rank}`,
+    type: knownFallback?.type ?? ('movie' as const),
+    genres:
+      knownFallback?.genres ??
+      (knownFallback?.type === 'series' ? ['Drama', 'Series'] : ['Drama', 'Movie']),
     year: '2024',
-    runtime: '110 min',
+    runtime: knownFallback?.type === 'series' ? '45 min' : '110 min',
     maturity: 'NR',
     synopsis:
-      'A curated Apple TV-style fallback title is available while movie data loads.',
+      `${knownFallback?.title ?? 'This title'} is available while the movie data finishes loading.`,
     cast: ['Cast unavailable'],
     director: 'Director unavailable',
   }
