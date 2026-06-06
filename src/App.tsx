@@ -67,7 +67,7 @@ const emptyMediaCollection: MediaCollection = {
   kidsFamily: [],
 }
 const fallbackPosterImages = [
-  'https://image.tmdb.org/t/p/w780/qmDpIHrmpJINaRKAfWQfftjCdyi.jpg',
+  'https://image.tmdb.org/t/p/w780/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
   'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
   'https://image.tmdb.org/t/p/w780/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
   'https://image.tmdb.org/t/p/w780/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
@@ -554,38 +554,74 @@ function App() {
     })
   }
 
+  const inFlightRef = useRef<
+    Record<string, Promise<Movie>>
+  >({})
+  const selectedMovieIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    selectedMovieIdRef.current = selectedMovie?.id ?? null
+  }, [selectedMovie?.id])
+
   const hydrateMovie = async (movie: Movie) => {
     if (movie.isFull) {
       return movie
     }
 
-    setDetailLoading(true)
-    setDetailError('')
+    const key = `hydrateMovie:${movie.id}`
+
+    const existing = inFlightRef.current[key]
+    if (existing) {
+      return existing
+    }
+
+    const promise = (async () => {
+      setDetailLoading(true)
+      setDetailError('')
+
+      try {
+        const fullMovie = await fetchMovieById(movie.id, movie.rank)
+
+        // Prevent late/stale hydration from overwriting a newer selection.
+        if (selectedMovieIdRef.current !== movie.id) {
+          return fullMovie
+        }
+
+        setSelectedMovie((current) =>
+          current?.id === fullMovie.id
+            ? {
+                ...fullMovie,
+                tmdbId: current.tmdbId ?? movie.tmdbId,
+                tmdbType: current.tmdbType ?? movie.tmdbType,
+                streamSeason: current.streamSeason ?? movie.streamSeason,
+                streamEpisode: current.streamEpisode ?? movie.streamEpisode,
+              }
+            : fullMovie,
+        )
+        upsertMovie(fullMovie)
+        return fullMovie
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Could not load full movie details.'
+        if (selectedMovieIdRef.current === movie.id) {
+          setDetailError(message)
+        }
+        return movie
+      } finally {
+        if (selectedMovieIdRef.current === movie.id) {
+          setDetailLoading(false)
+        }
+      }
+    })()
+
+    inFlightRef.current[key] = promise
 
     try {
-      const fullMovie = await fetchMovieById(movie.id, movie.rank)
-      setSelectedMovie((current) =>
-        current?.id === fullMovie.id
-          ? {
-              ...fullMovie,
-              tmdbId: current.tmdbId ?? movie.tmdbId,
-              tmdbType: current.tmdbType ?? movie.tmdbType,
-              streamSeason: current.streamSeason ?? movie.streamSeason,
-              streamEpisode: current.streamEpisode ?? movie.streamEpisode,
-            }
-          : fullMovie,
-      )
-      upsertMovie(fullMovie)
-      return fullMovie
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Could not load full movie details.'
-      setDetailError(message)
-      return movie
+      return await promise
     } finally {
-      setDetailLoading(false)
+      delete inFlightRef.current[key]
     }
   }
 
@@ -595,61 +631,89 @@ function App() {
         return movie
       }
 
-      setStreamLoading(true)
-      setStreamError('')
+      const key = `hydrateStreamingMovie:${movie.id}`
 
-      try {
-        const match = await fetchTmdbMatch(movie.id)
-        const streamMovie: Movie = {
-          ...movie,
-          tmdbId: match.tmdbId,
-          tmdbType: match.mediaType,
-          streamSeason:
-            match.mediaType === 'tv' ? movie.streamSeason ?? 1 : undefined,
-          streamEpisode:
-            match.mediaType === 'tv' ? movie.streamEpisode ?? 1 : undefined,
-        }
+      const existing = inFlightRef.current[key]
+      if (existing) {
+        return existing
+      }
 
-        setSelectedMovie((current) =>
-          current?.id === movie.id
-            ? {
-                ...current,
+      const promise = (async () => {
+        setStreamLoading(true)
+        setStreamError('')
+
+        try {
+          const match = await fetchTmdbMatch(movie.id)
+          const streamMovie: Movie = {
+            ...movie,
+            tmdbId: match.tmdbId,
+            tmdbType: match.mediaType,
+            streamSeason:
+              match.mediaType === 'tv' ? movie.streamSeason ?? 1 : undefined,
+            streamEpisode:
+              match.mediaType === 'tv'
+                ? movie.streamEpisode ?? 1
+                : undefined,
+          }
+
+          // Prevent late/stale streaming hydration from overwriting newer selection.
+          if (selectedMovieIdRef.current === movie.id) {
+            setSelectedMovie((current) =>
+              current?.id === movie.id
+                ? {
+                    ...current,
+                    tmdbId: streamMovie.tmdbId,
+                    tmdbType: streamMovie.tmdbType,
+                    streamSeason: streamMovie.streamSeason,
+                    streamEpisode: streamMovie.streamEpisode,
+                  }
+                : current,
+            )
+          }
+
+          upsertMovie(streamMovie)
+          markContinueWatching(streamMovie)
+
+          setSavedMovies((current) => {
+            if (!current[movie.id]) {
+              return current
+            }
+
+            return {
+              ...current,
+              [movie.id]: {
+                ...current[movie.id],
                 tmdbId: streamMovie.tmdbId,
                 tmdbType: streamMovie.tmdbType,
                 streamSeason: streamMovie.streamSeason,
                 streamEpisode: streamMovie.streamEpisode,
-              }
-            : current,
-        )
-        upsertMovie(streamMovie)
-        markContinueWatching(streamMovie)
-        setSavedMovies((current) => {
-          if (!current[movie.id]) {
-            return current
-          }
+              },
+            }
+          })
 
-          return {
-            ...current,
-            [movie.id]: {
-              ...current[movie.id],
-              tmdbId: streamMovie.tmdbId,
-              tmdbType: streamMovie.tmdbType,
-              streamSeason: streamMovie.streamSeason,
-              streamEpisode: streamMovie.streamEpisode,
-            },
+          return streamMovie
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : 'Could not prepare the stream.'
+          if (selectedMovieIdRef.current === movie.id) {
+            setStreamError(message)
           }
-        })
+          return movie
+        } finally {
+          if (selectedMovieIdRef.current === movie.id) {
+            setStreamLoading(false)
+          }
+        }
+      })()
 
-        return streamMovie
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'Could not prepare the stream.'
-        setStreamError(message)
-        return movie
+      inFlightRef.current[key] = promise
+
+      try {
+        return await promise
       } finally {
-        setStreamLoading(false)
+        delete inFlightRef.current[key]
       }
     },
     [markContinueWatching],
@@ -1011,8 +1075,16 @@ function HomeScreen({
           'linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.06) 30%, rgba(0,0,0,.78) 78%, #000 100%)',
         )}
       >
+        <img
+          className="hero-art-image"
+          src={featuredMovie.hero || featuredMovie.poster}
+          alt=""
+          onError={(event) => {
+            event.currentTarget.src = featuredMovie.poster || featuredMovie.still
+          }}
+        />
         <header className="home-header">
-          <h1>Home</h1>
+          <h1>Apple TV</h1>
           <div className="header-actions">
             <button className="mute-button" type="button" title="Muted">
               <VolumeX />
@@ -1086,13 +1158,13 @@ function HomeScreen({
       </div>
 
       <ContinueWatchingRail
-        title="Continue Watching"
+        title="Continue Watching on Apple TV"
         movies={continueMovies}
         onOpenDetail={onOpenDetail}
       />
 
       <MovieRail
-        title="Top 10 Movie"
+        title="Top 10 Movies"
         movies={movieTopTenMovies}
         onOpenDetail={onOpenDetail}
       />
@@ -1193,6 +1265,14 @@ function BrowseScreen({
             'linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.08) 32%, rgba(0,0,0,.62) 70%, #000 100%)',
           )}
         >
+          <img
+            className="hero-art-image"
+            src={heroMovie.poster || heroMovie.hero}
+            alt=""
+            onError={(event) => {
+              event.currentTarget.src = heroMovie.hero || heroMovie.still
+            }}
+          />
           <header className="home-header">
             <h1>{screenTitle}</h1>
             <div className="header-actions">

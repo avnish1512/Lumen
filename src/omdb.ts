@@ -189,7 +189,7 @@ const tvShowCollectionIds = {
 }
 
 const fallbackPosters = [
-  'https://image.tmdb.org/t/p/w780/qmDpIHrmpJINaRKAfWQfftjCdyi.jpg',
+  'https://image.tmdb.org/t/p/w780/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
   'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
   'https://image.tmdb.org/t/p/w780/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
   'https://image.tmdb.org/t/p/w780/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
@@ -242,7 +242,7 @@ const fallbackMedia: Record<string, FallbackMedia> = {
       'A skilled thief enters dreams to steal secrets, then takes one last job that could change everything.',
     cast: ['Leonardo DiCaprio', 'Joseph Gordon-Levitt', 'Elliot Page'],
     director: 'Christopher Nolan',
-    poster: 'https://image.tmdb.org/t/p/w780/qmDpIHrmpJINaRKAfWQfftjCdyi.jpg',
+    poster: 'https://image.tmdb.org/t/p/w780/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
     hero: 'https://image.tmdb.org/t/p/original/s3TBrRGB1iav7gFOCNx3H31MoES.jpg',
   },
   tt0816692: {
