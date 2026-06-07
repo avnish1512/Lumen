@@ -85,8 +85,12 @@ const emptyMediaCollection: MediaCollection = {
   kidsFamily: [],
 }
 const emptyTmdbHomeRails: TmdbHomeRails = {
+  featuredMovies: [],
+  featuredTvShows: [],
+  movieCollection: emptyMediaCollection,
   newReleases: [],
   trendingNow: [],
+  tvShowCollection: emptyMediaCollection,
 }
 const fallbackPosterImages = [
   'https://image.tmdb.org/t/p/w780/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
@@ -342,6 +346,15 @@ function buildRail(primary: Movie[], fallback: Movie[] = [], limit = 10) {
   return rankRail(uniqueMovies([...primary, ...fallback]).slice(0, limit))
 }
 
+function hasHomeBootstrapRails(rails: TmdbHomeRails) {
+  return (
+    rails.featuredMovies.length > 0 &&
+    rails.featuredTvShows.length > 0 &&
+    rails.movieCollection.top.length > 0 &&
+    rails.tvShowCollection.top.length > 0
+  )
+}
+
 function mergeKnownMovie(base: Movie, update: Movie) {
   return {
     ...base,
@@ -531,6 +544,31 @@ function App() {
       setHomeError('')
 
       try {
+        const nextTmdbHomeRails = await fetchTmdbHomeRails()
+
+        if (hasHomeBootstrapRails(nextTmdbHomeRails)) {
+          const nextMovies = buildRail(
+            nextTmdbHomeRails.featuredMovies,
+            nextTmdbHomeRails.movieCollection.top,
+          )
+          const nextTvShows = buildRail(
+            nextTmdbHomeRails.featuredTvShows,
+            nextTmdbHomeRails.tvShowCollection.top,
+          )
+
+          if (!isMounted) {
+            return
+          }
+
+          setMovies(nextMovies)
+          setTvShows(nextTvShows)
+          setMovieCollection(nextTmdbHomeRails.movieCollection)
+          setTvShowCollection(nextTmdbHomeRails.tvShowCollection)
+          setTmdbHomeRails(nextTmdbHomeRails)
+          setSelectedMovie((current) => current ?? nextMovies[0] ?? null)
+          return
+        }
+
         const [nextMovieCollection, nextTvShowCollection] = await Promise.all([
           fetchMovieCollection(),
           fetchTvShowCollection(),
@@ -546,6 +584,7 @@ function App() {
         setTvShows(nextTvShows)
         setMovieCollection(nextMovieCollection)
         setTvShowCollection(nextTvShowCollection)
+        setTmdbHomeRails(nextTmdbHomeRails)
         setSelectedMovie((current) => current ?? nextMovies[0] ?? null)
       } catch (error) {
         if (!isMounted) {
@@ -565,20 +604,6 @@ function App() {
     }
 
     void loadMovies()
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  useEffect(() => {
-    let isMounted = true
-
-    void fetchTmdbHomeRails().then((rails) => {
-      if (isMounted) {
-        setTmdbHomeRails(rails)
-      }
-    })
 
     return () => {
       isMounted = false
@@ -1217,13 +1242,35 @@ function HomeScreen({
     () => buildRail(movieCollection.thrilling, movieTopTenMovies),
     [movieCollection.thrilling, movieTopTenMovies],
   )
+  const newReleaseFallback = useMemo(
+    () => [
+      ...movieCollection.adventure,
+      ...movieCollection.kidsFamily,
+      ...movies,
+    ],
+    [movieCollection.adventure, movieCollection.kidsFamily, movies],
+  )
+  const trendingNowFallback = useMemo(
+    () => [
+      ...movieCollection.thrilling,
+      ...movieCollection.adventure,
+      ...tvShowCollection.top,
+      ...movieTopTenMovies,
+    ],
+    [
+      movieCollection.adventure,
+      movieCollection.thrilling,
+      movieTopTenMovies,
+      tvShowCollection.top,
+    ],
+  )
   const newReleaseItems = useMemo(
-    () => buildRail(tmdbHomeRails.newReleases),
-    [tmdbHomeRails.newReleases],
+    () => buildRail(tmdbHomeRails.newReleases, newReleaseFallback),
+    [newReleaseFallback, tmdbHomeRails.newReleases],
   )
   const trendingNowItems = useMemo(
-    () => buildRail(tmdbHomeRails.trendingNow),
-    [tmdbHomeRails.trendingNow],
+    () => buildRail(tmdbHomeRails.trendingNow, trendingNowFallback),
+    [tmdbHomeRails.trendingNow, trendingNowFallback],
   )
   const activeHeroIndex = Math.max(
     0,

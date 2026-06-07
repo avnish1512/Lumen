@@ -6,7 +6,11 @@ import {
   movieGluConfigFromEnv,
   type MovieGluConfig,
 } from './api/movieglu-core'
-import { fetchTmdbHomeRails } from './api/tmdb-home-core'
+import {
+  fetchTmdbHomeRails,
+  streamingAvailabilityConfigFromEnv,
+  type StreamingAvailabilityConfig,
+} from './api/tmdb-home-core'
 import {
   createTmdbTrailerAuthChain,
   fallbackTrailerSearchClips,
@@ -561,6 +565,7 @@ function tmdbWatchProvidersDevProxy(
 function tmdbHomeRailsDevProxy(
   authChain: TmdbWatchAuth[],
   defaultRegion: string,
+  streamingAvailability: StreamingAvailabilityConfig | null,
 ): Plugin {
   return {
     name: 'tmdb-home-rails-dev-proxy',
@@ -584,6 +589,7 @@ function tmdbHomeRailsDevProxy(
           try {
             const rails = await fetchTmdbHomeRails(authChain, {
               region,
+              streamingAvailability,
             })
 
             sendJson(res, 200, {
@@ -687,6 +693,7 @@ export default defineConfig(({ mode }) => {
       tmdbHomeRailsDevProxy(
         createTmdbWatchAuthChain(env),
         env.TMDB_WATCH_REGION,
+        streamingAvailabilityConfigFromEnv(env),
       ),
       movieGluDevProxy(
         movieGluConfigFromEnv(env),

@@ -57,11 +57,20 @@ OMDB_API_KEY=your_omdb_api_key
 TMDB_API_READ_ACCESS_TOKEN=your_tmdb_read_access_token
 TMDB_SECONDARY_API_KEY=your_secondary_tmdb_api_key
 TMDB_SECONDARY_API_READ_ACCESS_TOKEN=your_secondary_tmdb_read_access_token
+STREAMING_AVAILABILITY_API_KEY=your_streaming_availability_api_key
+STREAMING_AVAILABILITY_API_KEYS=your_extra_streaming_availability_key,your_next_streaming_availability_key
+STREAMING_AVAILABILITY_COUNTRY=IN
+STREAMING_AVAILABILITY_CATALOGS=apple
 ```
 
 `TMDB_API_KEY` can also be used, but the read access token is preferred. Do
 not expose these as `VITE_*` variables because Vite client env vars are bundled
 into the frontend.
+
+`STREAMING_AVAILABILITY_API_KEY` powers the live home hero and home rails. If it
+is missing or unavailable, the app falls back to TMDB and then to curated local
+data. `STREAMING_AVAILABILITY_API_KEYS` can hold extra comma-separated keys; the
+server rotates to the next key when the active key is rate-limited.
 
 `TMDB_SECONDARY_API_READ_ACCESS_TOKEN` and `TMDB_SECONDARY_API_KEY` are optional
 fallback credentials. The server tries the primary TMDB credential first and
@@ -73,6 +82,7 @@ Serverless API routes:
 ```bash
 /api/omdb
 /api/tmdb
+/api/tmdb-home-rails
 ```
 
 After deploying, quick smoke checks:

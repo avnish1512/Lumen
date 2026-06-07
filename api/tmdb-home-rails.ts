@@ -1,4 +1,7 @@
-import { fetchTmdbHomeRails } from './tmdb-home-core'
+import {
+  fetchTmdbHomeRails,
+  streamingAvailabilityConfigFromEnv,
+} from './tmdb-home-core'
 import {
   createTmdbWatchAuthChain,
   normalizeWatchRegion,
@@ -39,6 +42,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const rails = await fetchTmdbHomeRails(createTmdbWatchAuthChain(process.env), {
       region,
+      streamingAvailability: streamingAvailabilityConfigFromEnv(process.env),
     })
 
     res.status(200).json({

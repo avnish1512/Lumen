@@ -1,4 +1,4 @@
-import type { Movie } from './omdb'
+import type { MediaCollection, Movie } from './omdb'
 
 export type TmdbMediaType = 'movie' | 'tv'
 
@@ -45,8 +45,12 @@ export type TmdbWatchAvailability = {
 }
 
 export type TmdbHomeRails = {
+  featuredMovies: Movie[]
+  featuredTvShows: Movie[]
+  movieCollection: MediaCollection
   newReleases: Movie[]
   trendingNow: Movie[]
+  tvShowCollection: MediaCollection
 }
 
 type TmdbWatchResponse = {
@@ -60,12 +64,23 @@ type TmdbWatchResponse = {
 type TmdbHomeRailsResponse = {
   Response?: string
   Error?: string
+  featuredMovies?: Movie[]
+  featuredTvShows?: Movie[]
+  movieCollection?: MediaCollection
   newReleases?: Movie[]
   trendingNow?: Movie[]
+  tvShowCollection?: MediaCollection
 }
 
 const streamTheme = '47A8FF'
 const defaultWatchRegion = 'IN'
+
+const emptyMediaCollection: MediaCollection = {
+  adventure: [],
+  kidsFamily: [],
+  thrilling: [],
+  top: [],
+}
 
 export const defaultStreamProvider: StreamProvider = 'rivestream'
 
@@ -233,13 +248,21 @@ export async function fetchTmdbHomeRails(
     }
 
     return {
+      featuredMovies: body.featuredMovies ?? [],
+      featuredTvShows: body.featuredTvShows ?? [],
+      movieCollection: body.movieCollection ?? emptyMediaCollection,
       newReleases: body.newReleases ?? [],
       trendingNow: body.trendingNow ?? [],
+      tvShowCollection: body.tvShowCollection ?? emptyMediaCollection,
     }
   } catch {
     return {
+      featuredMovies: [],
+      featuredTvShows: [],
+      movieCollection: emptyMediaCollection,
       newReleases: [],
       trendingNow: [],
+      tvShowCollection: emptyMediaCollection,
     }
   }
 }
