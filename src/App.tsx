@@ -48,7 +48,9 @@ import {
   fetchTmdbHomeRails,
   fetchTmdbMatch,
   fetchTmdbWatchAvailability,
+  fetchWatchmodeCastCrew,
   streamProviderOptions,
+  type CastCrewMember,
   type StreamProvider,
   type TmdbHomeRails,
   type TmdbWatchAvailability,
@@ -1724,6 +1726,10 @@ function DetailScreen({
     availability: TmdbWatchAvailability
     movieId: string
   } | null>(null)
+  const [castCrewState, setCastCrewState] = useState<{
+    members: CastCrewMember[]
+    movieId: string
+  } | null>(null)
 
   useEffect(() => {
     let shouldUpdate = true
@@ -1758,6 +1764,30 @@ function DetailScreen({
       shouldUpdate = false
     }
   }, [movie.id, movie.tmdbId, movie.tmdbType])
+
+  useEffect(() => {
+    let shouldUpdate = true
+
+    void fetchWatchmodeCastCrew({
+      imdbId: movie.id.startsWith('tt') ? movie.id : undefined,
+      mediaType: movie.tmdbType,
+      tmdbId: movie.tmdbId,
+    }).then((members) => {
+      if (shouldUpdate) {
+        setCastCrewState({
+          members,
+          movieId: movie.id,
+        })
+      }
+    })
+
+    return () => {
+      shouldUpdate = false
+    }
+  }, [movie.id, movie.tmdbId, movie.tmdbType])
+
+  const castCrewMembers =
+    castCrewState?.movieId === movie.id ? castCrewState.members : []
   const watchAvailability =
     watchAvailabilityState?.movieId === movie.id
       ? watchAvailabilityState.availability
@@ -1880,7 +1910,7 @@ function DetailScreen({
           availability={watchAvailability}
           isLoading={isWatchAvailabilityLoading}
         />
-        <CastCrewRail movie={movie} />
+        <CastCrewRail members={castCrewMembers} movie={movie} />
         <MovieFacts movie={movie} />
       </div>
     </section>
@@ -2134,6 +2164,7 @@ function WhereToWatch({
   const providers = availability?.providers ?? []
   const region = availability?.region ?? 'IN'
   const link = availability?.link ?? ''
+  const source = availability?.source ?? 'Watchmode'
 
   return (
     <section className="detail-section detail-watch-options">
@@ -2158,11 +2189,13 @@ function WhereToWatch({
               </>
             )
 
-            if (link) {
+            const providerLink = provider.link || link
+
+            if (providerLink) {
               return (
                 <a
                   className="watch-option-card"
-                  href={link}
+                  href={providerLink}
                   key={provider.id}
                   rel="noreferrer"
                   target="_blank"
@@ -2183,12 +2216,12 @@ function WhereToWatch({
             <span className="watch-option-logo platform-logo">tv</span>
             <span>
               <strong>
-                {isLoading ? 'Checking TMDB' : 'No platform listed'}
+                {isLoading ? 'Checking availability' : 'No platform listed'}
               </strong>
               <small>
                 {isLoading
-                  ? 'Loading availability'
-                  : `TMDB has no ${region} providers for this title`}
+                  ? `Loading ${source} data`
+                  : `No ${region} providers found for this title`}
               </small>
               <em>Where to Watch</em>
             </span>
@@ -2209,13 +2242,13 @@ function initialsFor(name: string) {
     .toUpperCase()
 }
 
-function CastCrewRail({ movie }: { movie: Movie }) {
-  const cast = movie.cast.slice(0, 9)
-
-  if (cast.length === 0) {
-    return null
-  }
-
+function CastCrewRail({
+  members,
+  movie,
+}: {
+  members: CastCrewMember[]
+  movie: Movie
+}) {
   const roles = [
     'Present',
     'Lead',
@@ -2227,25 +2260,55 @@ function CastCrewRail({ movie }: { movie: Movie }) {
     'Story',
     'Crew',
   ]
+  const fallbackMembers = movie.cast.slice(0, 9).map((name, index) => ({
+    id: `fallback-${name}-${index}`,
+    imageUrl: '',
+    name,
+    role:
+      index === 0 && movie.director !== 'Director unavailable'
+        ? movie.director
+        : roles[index % roles.length],
+    type: 'Cast' as const,
+  }))
+  const people = members.length > 0 ? members.slice(0, 14) : fallbackMembers
+
+  if (people.length === 0) {
+    return null
+  }
 
   return (
     <section className="detail-section detail-cast-section">
       <DetailSectionHeading title="Cast & Crew" />
       <div className="detail-cast-row">
-        {cast.map((name, index) => (
-          <button className="cast-person-card" key={`${name}-${index}`} type="button">
+        {people.map((person, index) => (
+          <button className="cast-person-card" key={person.id} type="button">
             <span
-              className="cast-avatar"
+              className={person.imageUrl ? 'cast-avatar has-image' : 'cast-avatar'}
               style={
                 {
                   '--avatar-hue': `${(index * 41 + movie.title.length * 7) % 360}deg`,
                 } as CSSProperties
               }
             >
-              {initialsFor(name)}
+              {person.imageUrl ? (
+                <img
+                  src={person.imageUrl}
+                  alt=""
+                  onError={(event) => {
+                    const avatar = event.currentTarget.parentElement
+
+                    if (avatar) {
+                      avatar.textContent = initialsFor(person.name)
+                      avatar.classList.remove('has-image')
+                    }
+                  }}
+                />
+              ) : (
+                initialsFor(person.name)
+              )}
             </span>
-            <strong>{name}</strong>
-            <small>{index === 0 && movie.director !== 'Director unavailable' ? movie.director : roles[index % roles.length]}</small>
+            <strong>{person.name}</strong>
+            <small>{person.role}</small>
           </button>
         ))}
       </div>

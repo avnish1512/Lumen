@@ -18,10 +18,16 @@ import {
   type TmdbAuth as TmdbTrailerAuth,
 } from './api/tmdb-trailer-core'
 import {
+  bestCastCrewMembers,
   createTmdbWatchAuthChain,
+  enrichCastCrewPortraits,
+  fetchTmdbCastCrew,
+  fetchWatchmodeCastCrew,
   fetchTmdbWatchProviders,
   normalizeWatchRegion,
   type TmdbAuth as TmdbWatchAuth,
+  type WatchmodeConfig,
+  watchmodeConfigFromEnv,
 } from './api/tmdb-watch-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
@@ -494,6 +500,7 @@ function movieGluDevProxy(
 function tmdbWatchProvidersDevProxy(
   authChain: TmdbWatchAuth[],
   defaultRegion: string,
+  watchmode: WatchmodeConfig | null,
 ): Plugin {
   return {
     name: 'tmdb-watch-providers-dev-proxy',
@@ -538,6 +545,7 @@ function tmdbWatchProvidersDevProxy(
                   : undefined,
               region,
               tmdbId: tmdbId || undefined,
+              watchmode,
             })
 
             sendJson(res, 200, {
@@ -554,6 +562,85 @@ function tmdbWatchProvidersDevProxy(
               link: '',
               providers: [],
               region,
+            })
+          }
+        },
+      )
+    },
+  }
+}
+
+function watchmodeCastCrewDevProxy(
+  watchmode: WatchmodeConfig | null,
+  authChain: TmdbWatchAuth[],
+): Plugin {
+  return {
+    name: 'watchmode-cast-crew-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(
+        '/api/watchmode-cast-crew',
+        async (req: IncomingMessage, res) => {
+          if (req.method !== 'GET') {
+            sendJson(res, 405, {
+              Response: 'False',
+              Error: 'Method not allowed.',
+              members: [],
+            })
+            return
+          }
+
+          const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+          const imdbId = requestUrl.searchParams.get('imdbId') ?? undefined
+          const tmdbId = Number(requestUrl.searchParams.get('tmdbId') ?? 0)
+          const mediaType =
+            requestUrl.searchParams.get('mediaType') ?? undefined
+
+          if (
+            !imdbId &&
+            (!tmdbId || (mediaType !== 'movie' && mediaType !== 'tv'))
+          ) {
+            sendJson(res, 400, {
+              Response: 'False',
+              Error: 'Provide imdbId or tmdbId with mediaType.',
+              members: [],
+            })
+            return
+          }
+
+          try {
+            const resolvedMediaType: 'movie' | 'tv' | undefined =
+              mediaType === 'movie' || mediaType === 'tv'
+                ? mediaType
+                : undefined
+            const options = {
+              imdbId,
+              mediaType: resolvedMediaType,
+              tmdbId: tmdbId || undefined,
+            }
+            const [watchmodeMembers, tmdbMembers] = await Promise.all([
+              watchmode
+                ? fetchWatchmodeCastCrew(watchmode, options).catch(() => [])
+                : Promise.resolve([]),
+              fetchTmdbCastCrew(authChain, options).catch(() => []),
+            ])
+            const members = await enrichCastCrewPortraits(
+              bestCastCrewMembers(watchmodeMembers, tmdbMembers),
+            )
+
+            sendJson(res, 200, {
+              Response: 'True',
+              members,
+            })
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : 'Could not load cast and crew.'
+
+            sendJson(res, 502, {
+              Response: 'False',
+              Error: message,
+              members: [],
             })
           }
         },
@@ -689,6 +776,11 @@ export default defineConfig(({ mode }) => {
       tmdbWatchProvidersDevProxy(
         createTmdbWatchAuthChain(env),
         env.TMDB_WATCH_REGION,
+        watchmodeConfigFromEnv(env),
+      ),
+      watchmodeCastCrewDevProxy(
+        watchmodeConfigFromEnv(env),
+        createTmdbWatchAuthChain(env),
       ),
       tmdbHomeRailsDevProxy(
         createTmdbWatchAuthChain(env),

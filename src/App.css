@@ -4064,6 +4064,7 @@ a.watch-option-card {
   width: clamp(96px, 25vw, 142px);
   height: clamp(96px, 25vw, 142px);
   place-items: center;
+  overflow: hidden;
   border-radius: 50%;
   background:
     radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.9), transparent 24%),
@@ -4072,6 +4073,16 @@ a.watch-option-card {
   font-size: clamp(30px, 8vw, 42px);
   font-weight: 950;
   box-shadow: inset 0 -18px 34px rgba(0, 0, 0, 0.24);
+}
+
+.cast-avatar.has-image {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cast-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cast-person-card strong,
@@ -7653,5 +7664,16 @@ a.watch-option-card {
   .home-screen .carousel-dots,
   .browse-screen .carousel-dots {
     z-index: 4;
+  }
+}
+
+/* Desktop detail controls: keep back/share close to the top of the artwork. */
+@media (min-width: 900px) {
+  .detail-screen .apple-detail-hero .top-actions {
+    position: absolute;
+    top: clamp(20px, 2.2vw, 36px);
+    right: 44px;
+    left: 44px;
+    padding: 0;
   }
 }

@@ -32,6 +32,7 @@ type TmdbResponse = {
 export type TmdbWatchProvider = {
   displayPriority: number
   id: string
+  link?: string
   logoPath: string
   logoUrl: string
   name: string
@@ -42,6 +43,15 @@ export type TmdbWatchAvailability = {
   link: string
   providers: TmdbWatchProvider[]
   region: string
+  source?: 'TMDB' | 'Watchmode'
+}
+
+export type CastCrewMember = {
+  id: string
+  imageUrl: string
+  name: string
+  role: string
+  type: 'Cast' | 'Crew'
 }
 
 export type TmdbHomeRails = {
@@ -59,6 +69,7 @@ type TmdbWatchResponse = {
   link?: string
   providers?: TmdbWatchProvider[]
   region?: string
+  source?: 'TMDB' | 'Watchmode'
 }
 
 type TmdbHomeRailsResponse = {
@@ -70,6 +81,12 @@ type TmdbHomeRailsResponse = {
   newReleases?: Movie[]
   trendingNow?: Movie[]
   tvShowCollection?: MediaCollection
+}
+
+type CastCrewResponse = {
+  Response?: string
+  Error?: string
+  members?: CastCrewMember[]
 }
 
 const streamTheme = '47A8FF'
@@ -221,6 +238,7 @@ export async function fetchTmdbWatchAvailability(
       link: body.link ?? '',
       providers: body.providers ?? [],
       region: body.region ?? region,
+      source: body.source,
     }
   } catch {
     return {
@@ -228,6 +246,42 @@ export async function fetchTmdbWatchAvailability(
       providers: [],
       region,
     }
+  }
+}
+
+export async function fetchWatchmodeCastCrew(
+  movie: {
+    imdbId?: string
+    mediaType?: TmdbMediaType
+    tmdbId?: number
+  },
+): Promise<CastCrewMember[]> {
+  const params = new URLSearchParams()
+
+  if (movie.imdbId) {
+    params.set('imdbId', movie.imdbId)
+  }
+
+  if (movie.tmdbId && movie.mediaType) {
+    params.set('tmdbId', String(movie.tmdbId))
+    params.set('mediaType', movie.mediaType)
+  }
+
+  if (!params.size) {
+    return []
+  }
+
+  try {
+    const response = await fetch(`/api/watchmode-cast-crew?${params}`)
+    const body = (await response.json()) as CastCrewResponse
+
+    if (!response.ok || body.Response === 'False') {
+      throw new Error(body.Error ?? 'Could not load cast and crew.')
+    }
+
+    return body.members ?? []
+  } catch {
+    return []
   }
 }
 

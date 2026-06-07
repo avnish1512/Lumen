@@ -1,7 +1,9 @@
 import {
+  bestCastCrewMembers,
   createTmdbWatchAuthChain,
-  fetchTmdbWatchProviders,
-  normalizeWatchRegion,
+  enrichCastCrewPortraits,
+  fetchTmdbCastCrew,
+  fetchWatchmodeCastCrew,
   watchmodeConfigFromEnv,
 } from './tmdb-watch-core'
 
@@ -36,45 +38,49 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const imdbId = getQueryValue(req.query.imdbId)
   const tmdbId = Number(getQueryValue(req.query.tmdbId) ?? 0)
   const mediaType = getQueryValue(req.query.mediaType)
-  const region = normalizeWatchRegion(
-    getQueryValue(req.query.region) ?? process.env.TMDB_WATCH_REGION,
-  )
 
   if (!imdbId && (!tmdbId || (mediaType !== 'movie' && mediaType !== 'tv'))) {
     res.status(400).json({
       Response: 'False',
       Error: 'Provide imdbId or tmdbId with mediaType.',
+      members: [],
     })
     return
   }
 
+  const resolvedMediaType: 'movie' | 'tv' | undefined =
+    mediaType === 'movie' || mediaType === 'tv' ? mediaType : undefined
+  const options = {
+    imdbId,
+    mediaType: resolvedMediaType,
+    tmdbId: tmdbId || undefined,
+  }
+  const watchmode = watchmodeConfigFromEnv(process.env)
+  const tmdbAuthChain = createTmdbWatchAuthChain(process.env)
+
   try {
-    const availability = await fetchTmdbWatchProviders(
-      createTmdbWatchAuthChain(process.env),
-      {
-        imdbId,
-        mediaType:
-          mediaType === 'movie' || mediaType === 'tv' ? mediaType : undefined,
-        region,
-        tmdbId: tmdbId || undefined,
-        watchmode: watchmodeConfigFromEnv(process.env),
-      },
+    const [watchmodeMembers, tmdbMembers] = await Promise.all([
+      watchmode
+        ? fetchWatchmodeCastCrew(watchmode, options).catch(() => [])
+        : Promise.resolve([]),
+      fetchTmdbCastCrew(tmdbAuthChain, options).catch(() => []),
+    ])
+    const members = await enrichCastCrewPortraits(
+      bestCastCrewMembers(watchmodeMembers, tmdbMembers),
     )
 
     res.status(200).json({
       Response: 'True',
-      ...availability,
+      members,
     })
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : 'Could not reach TMDB.'
+      error instanceof Error ? error.message : 'Could not load cast and crew.'
 
     res.status(502).json({
       Response: 'False',
       Error: message,
-      link: '',
-      providers: [],
-      region,
+      members: [],
     })
   }
 }
