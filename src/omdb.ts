@@ -522,7 +522,7 @@ function fallbackMovieFromId(id: string, rank = 1): Movie {
     awards: 'Awards unavailable',
     boxOffice: 'Box office unavailable',
     ratings: [],
-    badges: ['HD', 'CC', 'SDH'],
+    badges: ['HD'],
     isFull: false,
   }
 }
@@ -568,7 +568,6 @@ function badgesFor(detail: Partial<OmdbDetail>) {
     badges.push(`META ${detail.Metascore}`)
   }
 
-  badges.push('CC', 'SDH')
   return badges
 }
 
@@ -592,9 +591,9 @@ export function movieFromDetail(detail: OmdbDetail, rank = 1): Movie {
     rating: safeText(detail.imdbRating, 'N/A'),
     maturity: safeText(detail.Rated, 'NR'),
     progress: progressFor(detail.imdbID),
-    hero: fallback?.hero ?? fallbackHero(rank),
+    hero: fallback?.hero ?? poster,
     poster,
-    still: fallback?.still ?? fallback?.hero ?? fallbackStill(rank),
+    still: fallback?.still ?? fallback?.hero ?? poster,
     synopsis: safeText(detail.Plot, 'No plot summary is available for this movie.'),
     cast: splitList(detail.Actors, ['Cast unavailable']).slice(0, 6),
     director: safeText(detail.Director, 'Director unavailable'),
@@ -625,9 +624,9 @@ export function movieFromSearch(item: OmdbSearchItem, rank = 1): Movie {
     rating: 'N/A',
     maturity: 'NR',
     progress: progressFor(item.imdbID),
-    hero: fallback?.hero ?? fallbackHero(rank),
+    hero: fallback?.hero ?? poster,
     poster,
-    still: fallback?.still ?? fallback?.hero ?? fallbackStill(rank),
+    still: fallback?.still ?? fallback?.hero ?? poster,
     synopsis: 'Open this movie to load its full OMDb plot, cast, ratings, and release details.',
     cast: ['Open for cast'],
     director: 'Open for director',

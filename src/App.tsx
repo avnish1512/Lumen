@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type FormEvent,
+  type MouseEvent,
   type PointerEvent,
   useCallback,
   useEffect,
@@ -14,9 +15,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  CircleMinus,
   Clapperboard,
   Download,
   Home,
+  Info,
   Library,
   LoaderCircle,
   Mic,
@@ -26,6 +29,7 @@ import {
   RefreshCcw,
   Search,
   Share,
+  Trash2,
   Tv,
   VolumeX,
 } from 'lucide-react'
@@ -37,12 +41,18 @@ import {
   type MediaCollection,
   type Movie,
 } from './omdb'
+import { fetchMovieGluTrailers, type TrailerClip } from './movieglu'
 import {
   buildStreamUrl,
   defaultStreamProvider,
+  fetchTmdbHomeRails,
   fetchTmdbMatch,
+  fetchTmdbWatchAvailability,
   streamProviderOptions,
   type StreamProvider,
+  type TmdbHomeRails,
+  type TmdbWatchAvailability,
+  type TmdbWatchProvider,
 } from './tmdb'
 import './App.css'
 
@@ -55,6 +65,14 @@ type WatchHistoryEntry = {
   progress: number
 }
 type WatchHistory = Record<string, WatchHistoryEntry>
+type LandscapeCard = {
+  duration: string
+  id: string
+  image: string
+  movie?: Movie
+  title: string
+  trailerUrl?: string
+}
 
 const savedMoviesKey = 'omdb.apple-tv-style.saved-movies'
 const watchHistoryKey = 'omdb.apple-tv-style.watch-history'
@@ -65,6 +83,10 @@ const emptyMediaCollection: MediaCollection = {
   thrilling: [],
   adventure: [],
   kidsFamily: [],
+}
+const emptyTmdbHomeRails: TmdbHomeRails = {
+  newReleases: [],
+  trendingNow: [],
 }
 const fallbackPosterImages = [
   'https://image.tmdb.org/t/p/w780/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
@@ -112,7 +134,12 @@ function getInitialScreen(): Screen {
 }
 
 function isStreamProvider(value: string | null): value is StreamProvider {
-  return value === 'rivestream' || value === 'vidsync'
+  return (
+    value === 'rivestream' ||
+    value === 'vidsync' ||
+    value === 'multiembed' ||
+    value === 'multiembed-vip'
+  )
 }
 
 function readStreamProvider(): StreamProvider {
@@ -158,6 +185,72 @@ function compactRuntime(runtime: string) {
   }
 
   return runtime.replace(' hr ', 'h ').replace(' min', 'm')
+}
+
+const hiddenMediaBadges = new Set(['CC', 'SDH'])
+
+function visibleMediaBadges(badges: string[]) {
+  return badges.filter((badge) => !hiddenMediaBadges.has(badge.trim().toUpperCase()))
+}
+
+function useHeroSwipe(
+  itemCount: number,
+  activeIndex: number,
+  onIndexChange: (index: number) => void,
+) {
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
+
+  const onPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (itemCount < 2 || !event.isPrimary) {
+        return
+      }
+
+      swipeStartRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+      }
+
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {
+        // Some mobile WebViews skip pointer capture during native scrolling.
+      }
+    },
+    [itemCount],
+  )
+
+  const onPointerUp = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      const start = swipeStartRef.current
+      swipeStartRef.current = null
+
+      if (!start || itemCount < 2) {
+        return
+      }
+
+      const deltaX = event.clientX - start.x
+      const deltaY = event.clientY - start.y
+
+      if (Math.abs(deltaX) < 44 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
+        return
+      }
+
+      const direction = deltaX < 0 ? 1 : -1
+      onIndexChange((activeIndex + direction + itemCount) % itemCount)
+    },
+    [activeIndex, itemCount, onIndexChange],
+  )
+
+  const onPointerCancel = useCallback(() => {
+    swipeStartRef.current = null
+  }, [])
+
+  return {
+    onPointerDown,
+    onPointerUp,
+    onPointerCancel,
+  }
 }
 
 const seasonEpisodeCounts: Record<string, number[]> = {
@@ -280,6 +373,10 @@ function isTvShow(movie: Movie) {
 }
 
 function imdbUrl(movie: Movie) {
+  if (!movie.id.startsWith('tt') && movie.tmdbId) {
+    return `https://www.themoviedb.org/movie/${movie.tmdbId}`
+  }
+
   return `https://www.imdb.com/title/${movie.id}/`
 }
 
@@ -287,11 +384,44 @@ function fallbackPosterForRank(rank: number) {
   return fallbackPosterImages[(rank - 1) % fallbackPosterImages.length]
 }
 
+function cleanImageUrl(value?: string) {
+  return value && value !== 'N/A' ? value : ''
+}
+
+function posterImageFor(movie: Movie) {
+  return cleanImageUrl(movie.poster) || fallbackPosterForRank(movie.rank)
+}
+
+function heroImageFor(movie: Movie) {
+  return (
+    cleanImageUrl(movie.hero) ||
+    cleanImageUrl(movie.still) ||
+    posterImageFor(movie)
+  )
+}
+
+function isPosterShapedHero(movie: Movie) {
+  const heroImage = heroImageFor(movie)
+  const posterImage = posterImageFor(movie)
+
+  return (
+    heroImage === posterImage ||
+    (/\/p\/w(?:342|500|780)\//.test(heroImage) &&
+      !/\/p\/(?:original|w1280)\//.test(heroImage))
+  )
+}
+
 function heroBackgroundStyle(movie: Movie, gradient: string) {
+  const heroImage = heroImageFor(movie)
+  const posterImage = posterImageFor(movie)
+  const isPosterHero = isPosterShapedHero(movie)
+
   return {
-    '--hero-art': `url(${movie.hero})`,
-    '--poster-art': `url(${movie.poster})`,
-    backgroundImage: `${gradient}, url(${movie.hero}), url(${movie.poster}), url(${movie.poster})`,
+    '--hero-art': `url(${heroImage})`,
+    '--poster-art': `url(${posterImage})`,
+    '--hero-fit': isPosterHero ? 'contain' : 'cover',
+    '--hero-position': isPosterHero ? 'center center' : 'center top',
+    backgroundImage: `${gradient}, url(${heroImage})`,
   } as CSSProperties
 }
 
@@ -319,6 +449,8 @@ function App() {
     useState<MediaCollection>(emptyMediaCollection)
   const [tvShowCollection, setTvShowCollection] =
     useState<MediaCollection>(emptyMediaCollection)
+  const [tmdbHomeRails, setTmdbHomeRails] =
+    useState<TmdbHomeRails>(emptyTmdbHomeRails)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
   const [detailBackScreen, setDetailBackScreen] = useState<Screen>('home')
   const [savedMovies, setSavedMovies] = useState<SavedMovies>(readSavedMovies)
@@ -384,11 +516,10 @@ function App() {
       const shell = appShellRef.current
 
       if (shell) {
-        shell.scrollTo({ top: 0, behavior: 'smooth' })
-        return
+        shell.scrollTo({ top: 0, behavior: 'auto' })
       }
 
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: 'auto' })
     })
   }
 
@@ -441,6 +572,20 @@ function App() {
   }, [])
 
   useEffect(() => {
+    let isMounted = true
+
+    void fetchTmdbHomeRails().then((rails) => {
+      if (isMounted) {
+        setTmdbHomeRails(rails)
+      }
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
     window.localStorage.setItem(savedMoviesKey, JSON.stringify(savedMovies))
   }, [savedMovies])
 
@@ -458,8 +603,12 @@ function App() {
     const updateNavMotion = () => {
       frameId = 0
       const shell = appShellRef.current
+      const shellCanScroll =
+        Boolean(shell) && shell!.scrollHeight > shell!.clientHeight + 1
       const scrollTop =
-        shell?.scrollTop ?? window.scrollY ?? document.documentElement.scrollTop
+        shellCanScroll && shell
+          ? shell.scrollTop
+          : window.scrollY || document.documentElement.scrollTop
       const nextScrolled = scrollTop > 18
       const nextProgress = Math.min(1, scrollTop / 180)
 
@@ -757,6 +906,30 @@ function App() {
     })
   }
 
+  const removeSavedMovie = useCallback((movie: Movie) => {
+    setSavedMovies((current) => {
+      if (!current[movie.id]) {
+        return current
+      }
+
+      const next = { ...current }
+      delete next[movie.id]
+      return next
+    })
+  }, [])
+
+  const removeContinueMovie = useCallback((movie: Movie) => {
+    setWatchHistory((current) => {
+      if (!current[movie.id]) {
+        return current
+      }
+
+      const next = { ...current }
+      delete next[movie.id]
+      return next
+    })
+  }, [])
+
   const performSearch = useCallback(async (query: string) => {
     const trimmedQuery = query.trim()
 
@@ -878,6 +1051,7 @@ function App() {
           tvShows={tvShows}
           movieCollection={movieCollection}
           tvShowCollection={tvShowCollection}
+          tmdbHomeRails={tmdbHomeRails}
           continueMovies={continueWatching}
           savedMovies={savedMovies}
           onOpenDetail={openDetail}
@@ -885,6 +1059,8 @@ function App() {
           onSave={toggleSaved}
           onSearch={() => setScreen('search')}
           onSelectHero={setSelectedMovie}
+          onRemoveContinue={removeContinueMovie}
+          onRemoveSaved={removeSavedMovie}
         />
       )}
 
@@ -999,6 +1175,7 @@ type HomeScreenProps = {
   tvShows: Movie[]
   movieCollection: MediaCollection
   tvShowCollection: MediaCollection
+  tmdbHomeRails: TmdbHomeRails
   continueMovies: Movie[]
   savedMovies: SavedMovies
   onOpenDetail: (movie: Movie) => void
@@ -1006,6 +1183,8 @@ type HomeScreenProps = {
   onSave: (movie: Movie) => void
   onSearch: () => void
   onSelectHero: (movie: Movie) => void
+  onRemoveContinue: (movie: Movie) => void
+  onRemoveSaved: (movie: Movie) => void
 }
 
 function HomeScreen({
@@ -1014,6 +1193,7 @@ function HomeScreen({
   tvShows,
   movieCollection,
   tvShowCollection,
+  tmdbHomeRails,
   continueMovies,
   savedMovies,
   onOpenDetail,
@@ -1021,6 +1201,8 @@ function HomeScreen({
   onSave,
   onSearch,
   onSelectHero,
+  onRemoveContinue,
+  onRemoveSaved,
 }: HomeScreenProps) {
   const heroMovies = useMemo(() => movies.slice(0, 6), [movies])
   const movieTopTenMovies = useMemo(
@@ -1035,22 +1217,32 @@ function HomeScreen({
     () => buildRail(movieCollection.thrilling, movieTopTenMovies),
     [movieCollection.thrilling, movieTopTenMovies],
   )
-  const upcomingMedia = useMemo(
-    () =>
-      buildRail(
-        [...movies.slice(6, 10), ...tvShows.slice(6, 10)],
-        [...movieCollection.adventure, ...tvShowCollection.adventure],
-      ),
-    [
-      movies,
-      movieCollection.adventure,
-      tvShows,
-      tvShowCollection.adventure,
-    ],
+  const newReleaseItems = useMemo(
+    () => buildRail(tmdbHomeRails.newReleases),
+    [tmdbHomeRails.newReleases],
+  )
+  const trendingNowItems = useMemo(
+    () => buildRail(tmdbHomeRails.trendingNow),
+    [tmdbHomeRails.trendingNow],
   )
   const activeHeroIndex = Math.max(
     0,
     heroMovies.findIndex((movie) => movie.id === featuredMovie.id),
+  )
+  const selectHeroIndex = useCallback(
+    (index: number) => {
+      const movie = heroMovies[index]
+
+      if (movie) {
+        onSelectHero(movie)
+      }
+    },
+    [heroMovies, onSelectHero],
+  )
+  const heroSwipeHandlers = useHeroSwipe(
+    heroMovies.length,
+    activeHeroIndex,
+    selectHeroIndex,
   )
 
   useEffect(() => {
@@ -1069,22 +1261,23 @@ function HomeScreen({
   return (
     <section className="screen home-screen">
       <div
-        className="home-hero"
+        className="home-hero swipeable-hero"
         style={heroBackgroundStyle(
           featuredMovie,
           'linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.06) 30%, rgba(0,0,0,.78) 78%, #000 100%)',
         )}
+        {...heroSwipeHandlers}
       >
         <img
           className="hero-art-image"
-          src={featuredMovie.hero || featuredMovie.poster}
+          src={posterImageFor(featuredMovie)}
           alt=""
           onError={(event) => {
-            event.currentTarget.src = featuredMovie.poster || featuredMovie.still
+            event.currentTarget.src = heroImageFor(featuredMovie)
           }}
         />
         <header className="home-header">
-          <h1>Apple TV</h1>
+          <h1>Home</h1>
           <div className="header-actions">
             <button className="mute-button" type="button" title="Muted">
               <VolumeX />
@@ -1158,9 +1351,11 @@ function HomeScreen({
       </div>
 
       <ContinueWatchingRail
-        title="Continue Watching on Apple TV"
+        title="Continue Watching"
         movies={continueMovies}
         onOpenDetail={onOpenDetail}
+        onRemoveContinue={onRemoveContinue}
+        onRemoveSaved={onRemoveSaved}
       />
 
       <MovieRail
@@ -1182,8 +1377,14 @@ function HomeScreen({
       />
 
       <MovieRail
-        title="Upcoming Movies & Shows"
-        movies={upcomingMedia}
+        title="New Releases"
+        movies={newReleaseItems}
+        onOpenDetail={onOpenDetail}
+      />
+
+      <MovieRail
+        title="Trending Now"
+        movies={trendingNowItems}
         onOpenDetail={onOpenDetail}
       />
     </section>
@@ -1230,6 +1431,14 @@ function BrowseScreen({
   const activeHeroIndex =
     heroMovies.length > 0 ? browseHeroIndex % heroMovies.length : 0
   const heroMovie = heroMovies[activeHeroIndex] ?? featuredMovie ?? movies[0]
+  const selectBrowseHeroIndex = useCallback((index: number) => {
+    setBrowseHeroIndex(index)
+  }, [])
+  const heroSwipeHandlers = useHeroSwipe(
+    heroMovies.length,
+    activeHeroIndex,
+    selectBrowseHeroIndex,
+  )
   const thrillingItems = useMemo(
     () => buildRail(collection.thrilling, topItems),
     [collection.thrilling, topItems],
@@ -1259,18 +1468,19 @@ function BrowseScreen({
     <section className="screen browse-screen">
       {heroMovie && (
         <div
-          className="home-hero channel-hero"
+          className="home-hero channel-hero swipeable-hero"
           style={heroBackgroundStyle(
             heroMovie,
             'linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.08) 32%, rgba(0,0,0,.62) 70%, #000 100%)',
           )}
+          {...heroSwipeHandlers}
         >
           <img
             className="hero-art-image"
-            src={heroMovie.poster || heroMovie.hero}
+            src={posterImageFor(heroMovie)}
             alt=""
             onError={(event) => {
-              event.currentTarget.src = heroMovie.hero || heroMovie.still
+              event.currentTarget.src = heroImageFor(heroMovie)
             }}
           />
           <header className="home-header">
@@ -1286,6 +1496,7 @@ function BrowseScreen({
           </header>
 
           <div className="hero-copy">
+            <span className="floating-label">{heroMovie.label}</span>
             <pre className="logo-title">{heroMovie.logoTitle}</pre>
             <p className="meta-line">
               <span className="provider-badge hero-provider">tv</span>
@@ -1406,6 +1617,105 @@ function DetailScreen({
     () => buildRail([movie, ...relatedItems], relatedItems, 2),
     [movie, relatedItems],
   )
+  const [trailerClipState, setTrailerClipState] = useState<{
+    clips: TrailerClip[]
+    movieId: string
+  } | null>(null)
+
+  useEffect(() => {
+    let shouldUpdate = true
+
+    void fetchMovieGluTrailers({
+      id: movie.id,
+      title: movie.title,
+    })
+      .then((clips) => {
+        if (shouldUpdate) {
+          setTrailerClipState({
+            clips,
+            movieId: movie.id,
+          })
+        }
+      })
+      .catch(() => {
+        if (shouldUpdate) {
+          setTrailerClipState({
+            clips: [],
+            movieId: movie.id,
+          })
+        }
+      })
+
+    return () => {
+      shouldUpdate = false
+    }
+  }, [movie.id, movie.title])
+  const trailerCards = useMemo<LandscapeCard[]>(() => {
+    const clips =
+      trailerClipState?.movieId === movie.id ? trailerClipState.clips : []
+
+    if (clips.length > 0) {
+      return clips.map((clip, index) => ({
+        duration: clip.duration || 'Trailer',
+        id: `movieglu-${clip.id}-${index}`,
+        image: clip.image || movie.still || movie.hero || movie.poster,
+        title: clip.title || `${movie.title} Trailer`,
+        trailerUrl: clip.url,
+      }))
+    }
+
+    return trailerItems.map((item, index) => ({
+      duration: landscapeDuration(index),
+      id: `fallback-trailer-${item.id}-${index}`,
+      image: item.poster || item.still || item.hero,
+      movie: item,
+      title: landscapeTitle(item, index),
+      trailerUrl: trailerSearchUrl(item.title),
+    }))
+  }, [movie, trailerClipState, trailerItems])
+  const [watchAvailabilityState, setWatchAvailabilityState] = useState<{
+    availability: TmdbWatchAvailability
+    movieId: string
+  } | null>(null)
+
+  useEffect(() => {
+    let shouldUpdate = true
+
+    void fetchTmdbWatchAvailability({
+      imdbId: movie.id.startsWith('tt') ? movie.id : undefined,
+      mediaType: movie.tmdbType,
+      tmdbId: movie.tmdbId,
+    })
+      .then((availability) => {
+        if (shouldUpdate) {
+          setWatchAvailabilityState({
+            availability,
+            movieId: movie.id,
+          })
+        }
+      })
+      .catch(() => {
+        if (shouldUpdate) {
+          setWatchAvailabilityState({
+            availability: {
+              link: '',
+              providers: [],
+              region: 'IN',
+            },
+            movieId: movie.id,
+          })
+        }
+      })
+
+    return () => {
+      shouldUpdate = false
+    }
+  }, [movie.id, movie.tmdbId, movie.tmdbType])
+  const watchAvailability =
+    watchAvailabilityState?.movieId === movie.id
+      ? watchAvailabilityState.availability
+      : null
+  const isWatchAvailabilityLoading = watchAvailabilityState?.movieId !== movie.id
 
   return (
     <section className="screen detail-screen">
@@ -1418,16 +1728,15 @@ function DetailScreen({
       >
         <img
           className="detail-hero-art"
-          src={movie.hero || movie.poster || fallbackPosterForRank(movie.rank)}
+          src={heroImageFor(movie)}
           alt=""
           onError={(event) => {
-            event.currentTarget.src = fallbackPosterForRank(movie.rank)
+            event.currentTarget.src = posterImageFor(movie)
           }}
         />
         <DetailTopBar
           onBack={onBack}
           onShare={onShare}
-          onOpenPoster={onOpenPoster}
         />
 
         <div className="detail-copy apple-detail-copy">
@@ -1448,11 +1757,13 @@ function DetailScreen({
           <div className="detail-hero-facts" aria-label="Movie facts">
             <span>{movie.year}</span>
             <span>{compactRuntime(movie.runtime)}</span>
-            {movie.badges.slice(0, 5).map((badge) => (
-              <span className="outline-badge" key={badge}>
-                {badge}
-              </span>
-            ))}
+            {visibleMediaBadges(movie.badges)
+              .slice(0, 5)
+              .map((badge) => (
+                <span className="outline-badge" key={badge}>
+                  {badge}
+                </span>
+              ))}
           </div>
 
           <div className="detail-actions apple-detail-actions">
@@ -1508,7 +1819,7 @@ function DetailScreen({
 
         <DetailLandscapeRail
           title="Trailers"
-          movies={trailerItems}
+          items={trailerCards}
           onOpenDetail={onOpenDetail}
         />
 
@@ -1518,7 +1829,10 @@ function DetailScreen({
           onOpenDetail={onOpenDetail}
         />
 
-        <WhereToWatch onPlay={onPlay} />
+        <WhereToWatch
+          availability={watchAvailability}
+          isLoading={isWatchAvailabilityLoading}
+        />
         <CastCrewRail movie={movie} />
         <MovieFacts movie={movie} />
       </div>
@@ -1552,6 +1866,14 @@ function landscapeTitle(movie: Movie, index: number) {
 
 function landscapeDuration(index: number) {
   return index === 0 ? '2m' : '1m'
+}
+
+function trailerSearchUrl(title: string) {
+  const params = new URLSearchParams({
+    search_query: `${title} official trailer`,
+  })
+
+  return `https://www.youtube.com/results?${params}`
 }
 
 function SeasonEpisodeSection({
@@ -1631,16 +1953,16 @@ function SeasonEpisodeSection({
 
 function DetailLandscapeRail({
   title,
-  movies,
+  items,
   onOpenDetail,
 }: {
   title: string
-  movies: Movie[]
+  items: LandscapeCard[]
   onOpenDetail: (movie: Movie) => void
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null)
 
-  if (movies.length === 0) {
+  if (items.length === 0) {
     return null
   }
 
@@ -1655,25 +1977,37 @@ function DetailLandscapeRail({
     <section className="detail-section detail-landscape-section">
       <DetailSectionHeading title={title} onClick={scrollRow} />
       <div ref={rowRef} className="detail-landscape-row">
-        {movies.map((item, index) => (
+        {items.map((item) => (
           <button
-            key={`trailer-${item.id}-${index}`}
+            key={item.id}
             className="detail-landscape-card"
             type="button"
-            onClick={() => onOpenDetail(item)}
+            aria-label={`Open ${item.title}`}
+            onClick={() => {
+              if (item.trailerUrl) {
+                window.open(item.trailerUrl, '_blank', 'noopener,noreferrer')
+                return
+              }
+
+              if (item.movie) {
+                onOpenDetail(item.movie)
+              }
+            }}
           >
             <img
-              src={item.poster || fallbackPosterForRank(item.rank)}
+              src={item.image || fallbackPosterForRank(item.movie?.rank ?? 1)}
               alt=""
               onError={(event) => {
-                event.currentTarget.src = fallbackPosterForRank(item.rank)
+                event.currentTarget.src = fallbackPosterForRank(
+                  item.movie?.rank ?? 1,
+                )
               }}
             />
             <span className="detail-card-copy">
-              <strong>{landscapeTitle(item, index)}</strong>
+              <strong>{item.title}</strong>
               <small>
                 <Play fill="currentColor" strokeWidth={0} />
-                {landscapeDuration(index)}
+                {item.duration}
               </small>
             </span>
           </button>
@@ -1714,8 +2048,8 @@ function DetailPosterRail({
             key={item.id}
             className="detail-related-card"
             type="button"
+            aria-label={`Open ${item.title}`}
             onClick={() => onOpenDetail(item)}
-            title={item.title}
           >
             <img
               src={item.poster || fallbackPosterForRank(item.rank)}
@@ -1731,30 +2065,88 @@ function DetailPosterRail({
   )
 }
 
+function watchProviderTypeLabel(type: TmdbWatchProvider['type']) {
+  if (type === 'flatrate') {
+    return 'Subscription'
+  }
+
+  if (type === 'ads') {
+    return 'Free with ads'
+  }
+
+  return type[0].toUpperCase() + type.slice(1)
+}
+
 function WhereToWatch({
-  onPlay,
+  availability,
+  isLoading,
 }: {
-  onPlay: (provider?: StreamProvider) => void
+  availability: TmdbWatchAvailability | null
+  isLoading: boolean
 }) {
+  const providers = availability?.providers ?? []
+  const region = availability?.region ?? 'IN'
+  const link = availability?.link ?? ''
+
   return (
     <section className="detail-section detail-watch-options">
       <h2>Where to Watch</h2>
       <div className="watch-option-grid">
-        {streamProviderOptions.map((provider) => (
-          <button
-            className="watch-option-card"
-            type="button"
-            key={provider.id}
-            onClick={() => onPlay(provider.id)}
-          >
-            <span className="watch-option-logo gradient">{provider.logo}</span>
+        {providers.length > 0 ? (
+          providers.map((provider) => {
+            const cardContent = (
+              <>
+                <span className="watch-option-logo platform-logo">
+                  {provider.logoUrl ? (
+                    <img src={provider.logoUrl} alt="" />
+                  ) : (
+                    initialsFor(provider.name)
+                  )}
+                </span>
+                <span>
+                  <strong>{provider.name}</strong>
+                  <small>{watchProviderTypeLabel(provider.type)}</small>
+                  <em>Available in {region}</em>
+                </span>
+              </>
+            )
+
+            if (link) {
+              return (
+                <a
+                  className="watch-option-card"
+                  href={link}
+                  key={provider.id}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {cardContent}
+                </a>
+              )
+            }
+
+            return (
+              <div className="watch-option-card" key={provider.id}>
+                {cardContent}
+              </div>
+            )
+          })
+        ) : (
+          <div className="watch-option-card watch-option-card-muted">
+            <span className="watch-option-logo platform-logo">tv</span>
             <span>
-              <strong>{provider.name}</strong>
-              <small>{provider.description}</small>
-              <em>Available on {provider.name}</em>
+              <strong>
+                {isLoading ? 'Checking TMDB' : 'No platform listed'}
+              </strong>
+              <small>
+                {isLoading
+                  ? 'Loading availability'
+                  : `TMDB has no ${region} providers for this title`}
+              </small>
+              <em>Where to Watch</em>
             </span>
-          </button>
-        ))}
+          </div>
+        )}
       </div>
     </section>
   )
@@ -1852,9 +2244,6 @@ function WatchScreen({
       <DetailTopBar
         onBack={onBack}
         onShare={() => window.open(imdbUrl(movie), '_blank', 'noopener,noreferrer')}
-        onOpenPoster={() =>
-          window.open(movie.poster, '_blank', 'noopener,noreferrer')
-        }
         dark
       />
 
@@ -1918,9 +2307,7 @@ function WatchScreen({
           }
         >
           <Play fill="currentColor" strokeWidth={0} />
-          <span className="progress-track">
-            <span style={{ width: `${movie.progress}%` }} />
-          </span>
+          <span>Watch</span>
         </button>
 
         <p className="watch-synopsis">
@@ -2209,12 +2596,49 @@ function MovieRail({ title, movies, compact, onOpenDetail }: MovieRailProps) {
   )
 }
 
+type ContinueWatchingRailProps = MovieRailProps & {
+  onRemoveContinue: (movie: Movie) => void
+  onRemoveSaved: (movie: Movie) => void
+}
+
+type ContinueMenuState = {
+  movie: Movie
+  left: number
+  top: number
+  width: number
+}
+
 function ContinueWatchingRail({
   title,
   movies,
   onOpenDetail,
-}: MovieRailProps) {
+  onRemoveContinue,
+  onRemoveSaved,
+}: ContinueWatchingRailProps) {
   const rowRef = useRef<HTMLDivElement | null>(null)
+  const [menuState, setMenuState] = useState<ContinueMenuState | null>(null)
+
+  useEffect(() => {
+    if (!menuState) {
+      return
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuState(null)
+      }
+    }
+
+    const closeOnScroll = () => setMenuState(null)
+
+    window.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('scroll', closeOnScroll, true)
+
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('scroll', closeOnScroll, true)
+    }
+  }, [menuState])
 
   if (movies.length === 0) {
     return null
@@ -2226,6 +2650,60 @@ function ContinueWatchingRail({
       behavior: 'smooth',
     })
   }
+
+  const closeMenu = () => setMenuState(null)
+
+  const openMenu = (event: MouseEvent<HTMLButtonElement>, movie: Movie) => {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    const width = Math.min(270, window.innerWidth - 90)
+    const actionCount = isTvShow(movie) ? 8 : 6
+    const estimatedHeight = 18 + actionCount * 45
+    const left = Math.min(
+      Math.max(24, rect.right - width + 16),
+      window.innerWidth - width - 24,
+    )
+    const top = Math.min(
+      Math.max(92, rect.bottom - 16),
+      Math.max(92, window.innerHeight - estimatedHeight - 96),
+    )
+
+    setMenuState({
+      movie,
+      left,
+      top,
+      width,
+    })
+  }
+
+  const runMenuAction = (action: () => void | Promise<void>) => {
+    closeMenu()
+    void action()
+  }
+
+  const shareContinueItem = async (movie: Movie, label: string) => {
+    const url = imdbUrl(movie)
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: movie.title,
+          text: `${label}: ${movie.title}`,
+          url,
+        })
+        return
+      }
+
+      await navigator.clipboard.writeText(url)
+    } catch {
+      // Share sheets can be cancelled without needing app feedback.
+    }
+  }
+
+  const activeMenuMovie = menuState?.movie
+  const activeMenuIsTv = activeMenuMovie ? isTvShow(activeMenuMovie) : false
 
   return (
     <section className="continue-rail">
@@ -2243,32 +2721,156 @@ function ContinueWatchingRail({
 
       <div ref={rowRef} className="continue-row">
         {movies.map((movie) => (
-          <button
-            key={movie.id}
-            className="continue-card"
-            type="button"
-            onClick={() => onOpenDetail(movie)}
-          >
-            <img
-              src={movie.poster || fallbackPosterForRank(movie.rank)}
-              alt=""
-              onError={(event) => {
-                event.currentTarget.src = fallbackPosterForRank(movie.rank)
-              }}
-            />
-            <span className="continue-tv-mark">tv</span>
-            <span className="continue-title">{movie.logoTitle}</span>
-            <span className="continue-bottom">
-              <Play fill="currentColor" strokeWidth={0} />
-              <span className="continue-progress" aria-hidden="true">
-                <span style={{ width: `${movie.progress}%` }} />
+          <article className="continue-card-shell" key={movie.id}>
+            <button
+              className="continue-card"
+              type="button"
+              aria-label={`Open ${movie.title}`}
+              onClick={() => onOpenDetail(movie)}
+            >
+              <img
+                src={movie.poster || fallbackPosterForRank(movie.rank)}
+                alt=""
+                onError={(event) => {
+                  event.currentTarget.src = fallbackPosterForRank(movie.rank)
+                }}
+              />
+              <span className="continue-tv-mark">tv</span>
+              <span className="continue-bottom">
+                <Play fill="currentColor" strokeWidth={0} />
+                <span className="continue-progress" aria-hidden="true">
+                  <span style={{ width: `${movie.progress}%` }} />
+                </span>
+                <span className="continue-time">
+                  {continueRuntimeLabel(movie)}
+                </span>
               </span>
-              <span className="continue-time">{continueRuntimeLabel(movie)}</span>
+            </button>
+            <button
+              className="continue-more-button"
+              type="button"
+              aria-label={`More actions for ${movie.title}`}
+              aria-expanded={menuState?.movie.id === movie.id}
+              onClick={(event) => openMenu(event, movie)}
+            >
               <MoreHorizontal />
-            </span>
-          </button>
+            </button>
+          </article>
         ))}
       </div>
+
+      {activeMenuMovie && menuState && (
+        <>
+          <button
+            className="continue-menu-backdrop"
+            type="button"
+            aria-label="Close continue watching menu"
+            onClick={closeMenu}
+          />
+          <div
+            className="continue-action-menu"
+            role="menu"
+            aria-label={`${activeMenuMovie.title} actions`}
+            style={{
+              left: `${menuState.left}px`,
+              top: `${menuState.top}px`,
+              width: `${menuState.width}px`,
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() =>
+                runMenuAction(() => {
+                  window.open(
+                    activeMenuMovie.poster || activeMenuMovie.hero,
+                    '_blank',
+                    'noopener,noreferrer',
+                  )
+                })
+              }
+            >
+              <Download />
+              <span>Download</span>
+            </button>
+            {activeMenuIsTv && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => runMenuAction(() => onOpenDetail(activeMenuMovie))}
+              >
+                <Info />
+                <span>Go to Episode</span>
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => runMenuAction(() => onOpenDetail(activeMenuMovie))}
+            >
+              <Info />
+              <span>{activeMenuIsTv ? 'Go to Show' : 'Go to Movie'}</span>
+            </button>
+            {activeMenuIsTv && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() =>
+                  runMenuAction(() =>
+                    shareContinueItem(activeMenuMovie, 'Share Episode'),
+                  )
+                }
+              >
+                <Share />
+                <span>Share Episode</span>
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() =>
+                runMenuAction(() =>
+                  shareContinueItem(
+                    activeMenuMovie,
+                    activeMenuIsTv ? 'Share Show' : 'Share Movie',
+                  ),
+                )
+              }
+            >
+              <Share />
+              <span>{activeMenuIsTv ? 'Share Show' : 'Share Movie'}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => runMenuAction(() => onRemoveSaved(activeMenuMovie))}
+            >
+              <CircleMinus />
+              <span>Remove from Watchlist</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() =>
+                runMenuAction(() => onRemoveContinue(activeMenuMovie))
+              }
+            >
+              <Check />
+              <span>Mark as Watched</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() =>
+                runMenuAction(() => onRemoveContinue(activeMenuMovie))
+              }
+            >
+              <Trash2 />
+              <span>Remove from Recently Watched</span>
+            </button>
+          </div>
+        </>
+      )}
     </section>
   )
 }
@@ -2302,37 +2904,51 @@ function FeatureRail({ title, movies, onOpenDetail }: MovieRailProps) {
       </div>
 
       <div ref={rowRef} className="feature-row">
-        {movies.map((movie, index) => (
-          <button
-            key={movie.id}
-            className="feature-card-wide"
-            type="button"
-            style={
-              {
-                '--feature-art': `url(${movie.poster})`,
-              } as CSSProperties
-            }
-            onClick={() => onOpenDetail(movie)}
-          >
-            <img
-              src={movie.poster}
-              alt=""
-              onError={(event) => {
-                event.currentTarget.src = fallbackPosterForRank(movie.rank)
-              }}
-            />
-            <span className="feature-wide-badge">
-              {index === 0 ? 'New' : movie.year}
-            </span>
-            <span className="feature-wide-title">{movie.title}</span>
-            <span className="feature-wide-meta">
-              <span className="provider-badge">tv</span>
-              <span>{movie.type}</span>
-              <span>{movie.genres[0] ?? 'Thriller'}</span>
-              <span>{movie.genres[1] ?? movie.year}</span>
-            </span>
-          </button>
-        ))}
+        {movies.map((movie, index) => {
+          const rankedGenre =
+            movie.genres.find((genre) => /thriller/i.test(genre)) ??
+            movie.genres[0] ??
+            'Thriller'
+          const featureGenres = Array.from(new Set(movie.genres)).filter(
+            (genre) => genre !== rankedGenre,
+          )
+
+          return (
+            <button
+              key={movie.id}
+              className="feature-card-wide"
+              type="button"
+              aria-label={`Open ${movie.title}`}
+              style={
+                {
+                  '--feature-art': `url(${movie.poster})`,
+                } as CSSProperties
+              }
+              onClick={() => onOpenDetail(movie)}
+            >
+              <img
+                src={movie.poster}
+                alt=""
+                onError={(event) => {
+                  event.currentTarget.src = fallbackPosterForRank(movie.rank)
+                }}
+              />
+              <span className="feature-wide-badge">
+                {index === 0 ? 'New' : movie.year}
+              </span>
+              <span className="feature-logo-title">{movie.logoTitle}</span>
+              <span className="feature-wide-meta">
+                <span className="provider-badge">tv</span>
+                <span>{movie.type}</span>
+                <span>{rankedGenre}</span>
+                <span>{featureGenres[0] ?? movie.year}</span>
+              </span>
+              <span className="feature-wide-rankline">
+                #{index + 1} in {rankedGenre} on Apple TV
+              </span>
+            </button>
+          )
+        })}
       </div>
     </section>
   )
@@ -2349,6 +2965,7 @@ function PosterCard({
     <button
       className="poster-card"
       type="button"
+      aria-label={`Open ${movie.title}`}
       onClick={() => onOpenDetail(movie)}
     >
       <img
@@ -2359,7 +2976,6 @@ function PosterCard({
         }}
       />
       <span className="rank">{movie.rank}</span>
-      <span className="poster-title">{movie.title}</span>
     </button>
   )
 }
@@ -2367,12 +2983,10 @@ function PosterCard({
 function DetailTopBar({
   onBack,
   onShare,
-  onOpenPoster,
   dark,
 }: {
   onBack: () => void
   onShare: () => void
-  onOpenPoster: () => void
   dark?: boolean
 }) {
   return (
@@ -2381,9 +2995,6 @@ function DetailTopBar({
         <ChevronLeft />
       </button>
       <div className="action-pill">
-        <button type="button" title="Open poster" onClick={onOpenPoster}>
-          <Download />
-        </button>
         <button type="button" title="Share IMDb link" onClick={onShare}>
           <Share />
         </button>
@@ -2398,7 +3009,7 @@ function Metadata({ movie }: { movie: Movie }) {
       <span>{movie.year}</span>
       <span>{movie.runtime}</span>
       <span className="outline-badge">{movie.maturity}</span>
-      {movie.badges.map((badge) => (
+      {visibleMediaBadges(movie.badges).map((badge) => (
         <span className="outline-badge" key={badge}>
           {badge}
         </span>
@@ -2450,29 +3061,21 @@ function MovieFacts({ movie }: { movie: Movie }) {
           />
           <FactItem
             label="Subtitles"
-            value="English (CC, SDH), Hindi (SDH), Spanish (SDH), French (SDH)"
+            value="English, Hindi, Spanish, French"
           />
         </div>
 
-        <div className="detail-info-column">
-          <h3>Accessibility</h3>
-          <FactItem
-            label="SDH"
-            value="Subtitles for the deaf and hard of hearing are available."
-          />
-          <FactItem
-            label="AD"
-            value="Audio descriptions provide narration for important visual details."
-          />
-          {movie.ratings.length > 0 && (
+        {movie.ratings.length > 0 && (
+          <div className="detail-info-column">
+            <h3>Ratings</h3>
             <FactItem
               label="Ratings"
               value={movie.ratings
                 .map((rating) => `${rating.Source}: ${rating.Value}`)
                 .join(' / ')}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </section>
   )

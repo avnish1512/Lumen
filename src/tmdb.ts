@@ -8,7 +8,11 @@ export type TmdbMatch = {
   title?: string
 }
 
-export type StreamProvider = 'rivestream' | 'vidsync'
+export type StreamProvider =
+  | 'rivestream'
+  | 'vidsync'
+  | 'multiembed'
+  | 'multiembed-vip'
 
 export type StreamProviderOption = {
   id: StreamProvider
@@ -25,7 +29,43 @@ type TmdbResponse = {
   title?: string
 }
 
+export type TmdbWatchProvider = {
+  displayPriority: number
+  id: string
+  logoPath: string
+  logoUrl: string
+  name: string
+  type: 'flatrate' | 'free' | 'ads' | 'rent' | 'buy'
+}
+
+export type TmdbWatchAvailability = {
+  link: string
+  providers: TmdbWatchProvider[]
+  region: string
+}
+
+export type TmdbHomeRails = {
+  newReleases: Movie[]
+  trendingNow: Movie[]
+}
+
+type TmdbWatchResponse = {
+  Response?: string
+  Error?: string
+  link?: string
+  providers?: TmdbWatchProvider[]
+  region?: string
+}
+
+type TmdbHomeRailsResponse = {
+  Response?: string
+  Error?: string
+  newReleases?: Movie[]
+  trendingNow?: Movie[]
+}
+
 const streamTheme = '47A8FF'
+const defaultWatchRegion = 'IN'
 
 export const defaultStreamProvider: StreamProvider = 'rivestream'
 
@@ -41,6 +81,18 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'Old Server',
     logo: 'VS',
     description: 'With ads',
+  },
+  {
+    id: 'multiembed',
+    name: 'MultiEmbed',
+    logo: 'ME',
+    description: 'TMDB server',
+  },
+  {
+    id: 'multiembed-vip',
+    name: 'VIP Server',
+    logo: 'VIP',
+    description: 'Direct stream',
   },
 ]
 
@@ -117,6 +169,81 @@ export async function fetchTmdbMatch(imdbId: string): Promise<TmdbMatch> {
   }
 }
 
+export async function fetchTmdbWatchAvailability(
+  movie:
+    | string
+    | {
+        imdbId?: string
+        mediaType?: TmdbMediaType
+        tmdbId?: number
+      },
+  region = defaultWatchRegion,
+): Promise<TmdbWatchAvailability> {
+  const params = new URLSearchParams({ region })
+
+  if (typeof movie === 'string') {
+    params.set('imdbId', movie)
+  } else {
+    if (movie.imdbId) {
+      params.set('imdbId', movie.imdbId)
+    }
+
+    if (movie.tmdbId && movie.mediaType) {
+      params.set('tmdbId', String(movie.tmdbId))
+      params.set('mediaType', movie.mediaType)
+    }
+  }
+
+  try {
+    const response = await fetch(`/api/tmdb-watch-providers?${params}`)
+    const body = (await response.json()) as TmdbWatchResponse
+
+    if (!response.ok || body.Response === 'False') {
+      throw new Error(body.Error ?? 'Could not load TMDB watch providers.')
+    }
+
+    return {
+      link: body.link ?? '',
+      providers: body.providers ?? [],
+      region: body.region ?? region,
+    }
+  } catch {
+    return {
+      link: '',
+      providers: [],
+      region,
+    }
+  }
+}
+
+export async function fetchTmdbHomeRails(
+  region = defaultWatchRegion,
+): Promise<TmdbHomeRails> {
+  const params = new URLSearchParams({
+    day: new Date().toISOString().slice(0, 10),
+    region,
+  })
+
+  try {
+    const response = await fetch(`/api/tmdb-home-rails?${params}`)
+    const body = (await response.json()) as TmdbHomeRailsResponse
+
+    if (!response.ok || body.Response === 'False') {
+      throw new Error(body.Error ?? 'Could not load TMDB home rails.')
+    }
+
+    return {
+      newReleases: body.newReleases ?? [],
+      trendingNow: body.trendingNow ?? [],
+    }
+  } catch {
+    return {
+      newReleases: [],
+      trendingNow: [],
+    }
+  }
+}
+
 function buildVidsyncUrl(movie: Movie) {
   if (movie.tmdbType === 'tv') {
     const season = movie.streamSeason ?? 1
@@ -153,6 +280,21 @@ function buildRivestreamUrl(movie: Movie) {
   return `https://www.rivestream.app/embed?${params}`
 }
 
+function buildMultiEmbedUrl(movie: Movie, direct = false) {
+  const params = new URLSearchParams({
+    video_id: String(movie.tmdbId),
+    tmdb: '1',
+  })
+
+  if (movie.tmdbType === 'tv') {
+    params.set('s', String(movie.streamSeason ?? 1))
+    params.set('e', String(movie.streamEpisode ?? 1))
+  }
+
+  const path = direct ? 'directstream.php' : ''
+  return `https://multiembed.mov/${path}?${params}`
+}
+
 export function buildStreamUrl(
   movie: Movie,
   provider: StreamProvider = defaultStreamProvider,
@@ -163,6 +305,14 @@ export function buildStreamUrl(
 
   if (provider === 'vidsync') {
     return buildVidsyncUrl(movie)
+  }
+
+  if (provider === 'multiembed') {
+    return buildMultiEmbedUrl(movie)
+  }
+
+  if (provider === 'multiembed-vip') {
+    return buildMultiEmbedUrl(movie, true)
   }
 
   return buildRivestreamUrl(movie)

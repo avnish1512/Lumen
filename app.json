@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Apple Clone",
+    "slug": "apple-clone",
+    "scheme": "appleclone",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "usesCleartextTraffic": true
+    }
+  }
+}

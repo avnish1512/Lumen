@@ -1,9 +1,29 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import {
+  fetchMovieGluTrailerClips,
+  movieGluConfigFromEnv,
+  type MovieGluConfig,
+} from './api/movieglu-core'
+import { fetchTmdbHomeRails } from './api/tmdb-home-core'
+import {
+  createTmdbTrailerAuthChain,
+  fallbackTrailerSearchClips,
+  fetchTmdbTrailerClips,
+  type TmdbAuth as TmdbTrailerAuth,
+} from './api/tmdb-trailer-core'
+import {
+  createTmdbWatchAuthChain,
+  fetchTmdbWatchProviders,
+  normalizeWatchRegion,
+  type TmdbAuth as TmdbWatchAuth,
+} from './api/tmdb-watch-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
+
+let preferredOmdbKeyIndex = 0
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown) {
   res.statusCode = statusCode
@@ -11,19 +31,36 @@ function sendJson(res: ServerResponse, statusCode: number, body: unknown) {
   res.end(JSON.stringify(body))
 }
 
-async function fetchOmdb(apiKey: string | undefined, params: Record<string, string>) {
-  if (!apiKey) {
-    return {
-      status: 500,
-      body: {
-        Response: 'False',
-        Error: 'OMDB_API_KEY is missing in .env.local.',
-      },
-    }
-  }
+type OmdbApiKey = {
+  name: string
+  value: string
+}
 
+type OmdbApiBody = {
+  Response?: string
+  Error?: string
+  [key: string]: unknown
+}
+
+function isOmdbLimitError(status: number, body: OmdbApiBody) {
+  const message = body.Error?.toLowerCase() ?? ''
+
+  return (
+    status === 429 ||
+    message.includes('limit') ||
+    message.includes('quota') ||
+    message.includes('too many')
+  )
+}
+
+function orderedOmdbApiKeys(keys: OmdbApiKey[]) {
+  const startIndex = Math.min(preferredOmdbKeyIndex, keys.length - 1)
+  return keys.slice(startIndex).concat(keys.slice(0, startIndex))
+}
+
+async function requestOmdb(apiKey: OmdbApiKey, params: Record<string, string>) {
   const url = new URL(OMDB_BASE_URL)
-  url.searchParams.set('apikey', apiKey)
+  url.searchParams.set('apikey', apiKey.value)
 
   Object.entries(params).forEach(([key, value]) => {
     if (value) {
@@ -32,12 +69,40 @@ async function fetchOmdb(apiKey: string | undefined, params: Record<string, stri
   })
 
   const response = await fetch(url)
-  const body = await response.json()
+  const body = (await response.json()) as OmdbApiBody
 
   return {
     status: response.ok ? 200 : response.status,
     body,
   }
+}
+
+async function fetchOmdb(apiKeys: OmdbApiKey[], params: Record<string, string>) {
+  if (apiKeys.length === 0) {
+    return {
+      status: 500,
+      body: {
+        Response: 'False',
+        Error:
+          'OMDB_API_KEY, OMDB_SECONDARY_API_KEY, or OMDB_API_KEYS is missing in .env.local.',
+      },
+    }
+  }
+
+  for (const apiKey of orderedOmdbApiKeys(apiKeys)) {
+    const result = await requestOmdb(apiKey, params)
+
+    if (isOmdbLimitError(result.status, result.body) && apiKeys.length > 1) {
+      const currentIndex = apiKeys.findIndex((key) => key.name === apiKey.name)
+      preferredOmdbKeyIndex = (currentIndex + 1) % apiKeys.length
+
+      continue
+    }
+
+    return result
+  }
+
+  return requestOmdb(apiKeys[apiKeys.length - 1], params)
 }
 
 type TmdbFindResult = {
@@ -212,7 +277,7 @@ async function fetchTmdbByImdbId(
   }
 }
 
-function omdbDevProxy(apiKey: string | undefined): Plugin {
+function omdbDevProxy(apiKeys: OmdbApiKey[]): Plugin {
   return {
     name: 'omdb-dev-proxy',
     configureServer(server) {
@@ -239,7 +304,7 @@ function omdbDevProxy(apiKey: string | undefined): Plugin {
 
             const results = await Promise.all(
               requestedIds.map(async (movieId) => {
-                const result = await fetchOmdb(apiKey, {
+                const result = await fetchOmdb(apiKeys, {
                   i: movieId,
                   plot: 'full',
                 })
@@ -262,7 +327,7 @@ function omdbDevProxy(apiKey: string | undefined): Plugin {
           }
 
           if (id) {
-            const result = await fetchOmdb(apiKey, {
+            const result = await fetchOmdb(apiKeys, {
               i: id,
               plot: 'full',
             })
@@ -271,7 +336,7 @@ function omdbDevProxy(apiKey: string | undefined): Plugin {
           }
 
           if (query) {
-            const result = await fetchOmdb(apiKey, {
+            const result = await fetchOmdb(apiKeys, {
               s: query,
               type: 'movie',
               page,
@@ -346,6 +411,204 @@ function tmdbDevProxy(authChain: TmdbAuth[]): Plugin {
   }
 }
 
+function movieGluDevProxy(
+  config: MovieGluConfig,
+  tmdbAuthChain: TmdbTrailerAuth[],
+): Plugin {
+  return {
+    name: 'movieglu-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(
+        '/api/movieglu-trailers',
+        async (req: IncomingMessage, res) => {
+          if (req.method !== 'GET') {
+            sendJson(res, 405, {
+              Response: 'False',
+              Error: 'Method not allowed.',
+            })
+            return
+          }
+
+          const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+          const imdbId = requestUrl.searchParams.get('imdbId')
+          const title = requestUrl.searchParams.get('title')
+
+          if (!imdbId || !title) {
+            sendJson(res, 400, {
+              Response: 'False',
+              Error: 'Provide imdbId and title.',
+            })
+            return
+          }
+
+          try {
+            const movie = {
+              imdbId,
+              title,
+            }
+            let trailers = []
+
+            try {
+              trailers = await fetchMovieGluTrailerClips(config, movie)
+            } catch {
+              trailers = []
+            }
+
+            if (trailers.length === 0) {
+              try {
+                trailers = await fetchTmdbTrailerClips(tmdbAuthChain, movie)
+              } catch {
+                trailers = fallbackTrailerSearchClips(movie)
+              }
+            }
+
+            if (trailers.length === 0) {
+              trailers = fallbackTrailerSearchClips(movie)
+            }
+
+            sendJson(res, 200, {
+              Response: 'True',
+              trailers,
+            })
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : 'Could not reach MovieGlu.'
+
+            sendJson(res, 502, {
+              Response: 'False',
+              Error: message,
+            })
+          }
+        },
+      )
+    },
+  }
+}
+
+function tmdbWatchProvidersDevProxy(
+  authChain: TmdbWatchAuth[],
+  defaultRegion: string,
+): Plugin {
+  return {
+    name: 'tmdb-watch-providers-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(
+        '/api/tmdb-watch-providers',
+        async (req: IncomingMessage, res) => {
+          if (req.method !== 'GET') {
+            sendJson(res, 405, {
+              Response: 'False',
+              Error: 'Method not allowed.',
+            })
+            return
+          }
+
+          const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+          const imdbId = requestUrl.searchParams.get('imdbId') ?? undefined
+          const tmdbId = Number(requestUrl.searchParams.get('tmdbId') ?? 0)
+          const mediaType =
+            requestUrl.searchParams.get('mediaType') ?? undefined
+          const region = normalizeWatchRegion(
+            requestUrl.searchParams.get('region') ?? defaultRegion,
+          )
+
+          if (
+            !imdbId &&
+            (!tmdbId || (mediaType !== 'movie' && mediaType !== 'tv'))
+          ) {
+            sendJson(res, 400, {
+              Response: 'False',
+              Error: 'Provide imdbId or tmdbId with mediaType.',
+            })
+            return
+          }
+
+          try {
+            const availability = await fetchTmdbWatchProviders(authChain, {
+              imdbId,
+              mediaType:
+                mediaType === 'movie' || mediaType === 'tv'
+                  ? mediaType
+                  : undefined,
+              region,
+              tmdbId: tmdbId || undefined,
+            })
+
+            sendJson(res, 200, {
+              Response: 'True',
+              ...availability,
+            })
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : 'Could not reach TMDB.'
+
+            sendJson(res, 502, {
+              Response: 'False',
+              Error: message,
+              link: '',
+              providers: [],
+              region,
+            })
+          }
+        },
+      )
+    },
+  }
+}
+
+function tmdbHomeRailsDevProxy(
+  authChain: TmdbWatchAuth[],
+  defaultRegion: string,
+): Plugin {
+  return {
+    name: 'tmdb-home-rails-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(
+        '/api/tmdb-home-rails',
+        async (req: IncomingMessage, res) => {
+          if (req.method !== 'GET') {
+            sendJson(res, 405, {
+              Response: 'False',
+              Error: 'Method not allowed.',
+            })
+            return
+          }
+
+          const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+          const region = normalizeWatchRegion(
+            requestUrl.searchParams.get('region') ?? defaultRegion,
+          )
+
+          try {
+            const rails = await fetchTmdbHomeRails(authChain, {
+              region,
+            })
+
+            sendJson(res, 200, {
+              Response: 'True',
+              region,
+              ...rails,
+            })
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : 'Could not reach TMDB.'
+
+            sendJson(res, 502, {
+              Response: 'False',
+              Error: message,
+              newReleases: [],
+              region,
+              trendingNow: [],
+            })
+          }
+        },
+      )
+    },
+  }
+}
+
 function createTmdbAuthChain(env: Record<string, string>) {
   const auths: TmdbAuth[] = [
     {
@@ -377,14 +640,58 @@ function createTmdbAuthChain(env: Record<string, string>) {
   })
 }
 
+function parseOmdbApiKeyList(value: string | undefined) {
+  return (value ?? '')
+    .split(',')
+    .map((key) => key.trim())
+    .filter(Boolean)
+}
+
+function createOmdbApiKeys(env: Record<string, string>) {
+  const apiKeys: OmdbApiKey[] = [
+    { name: 'primary', value: env.OMDB_API_KEY },
+    { name: 'secondary', value: env.OMDB_SECONDARY_API_KEY },
+    ...parseOmdbApiKeyList(env.OMDB_API_KEYS).map((value, index) => ({
+      name: `list-${index + 1}`,
+      value,
+    })),
+  ]
+  const seen = new Set<string>()
+
+  return apiKeys.filter((apiKey) => {
+    if (!apiKey.value) {
+      return false
+    }
+
+    if (seen.has(apiKey.value)) {
+      return false
+    }
+
+    seen.add(apiKey.value)
+    return true
+  })
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
     plugins: [
       react(),
-      omdbDevProxy(env.OMDB_API_KEY),
+      omdbDevProxy(createOmdbApiKeys(env)),
       tmdbDevProxy(createTmdbAuthChain(env)),
+      tmdbWatchProvidersDevProxy(
+        createTmdbWatchAuthChain(env),
+        env.TMDB_WATCH_REGION,
+      ),
+      tmdbHomeRailsDevProxy(
+        createTmdbWatchAuthChain(env),
+        env.TMDB_WATCH_REGION,
+      ),
+      movieGluDevProxy(
+        movieGluConfigFromEnv(env),
+        createTmdbTrailerAuthChain(env),
+      ),
     ],
   }
 })

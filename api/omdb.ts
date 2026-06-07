@@ -1,5 +1,7 @@
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 
+let preferredOmdbKeyIndex = 0
+
 type QueryValue = string | string[] | undefined
 
 type ApiRequest = {
@@ -13,6 +15,17 @@ type ApiResponse = {
   json: (body: unknown) => void
 }
 
+type OmdbApiKey = {
+  name: string
+  value: string
+}
+
+type OmdbApiBody = {
+  Response?: string
+  Error?: string
+  [key: string]: unknown
+}
+
 function getQueryValue(value: QueryValue) {
   if (Array.isArray(value)) {
     return value[0]
@@ -20,21 +33,55 @@ function getQueryValue(value: QueryValue) {
   return value
 }
 
-async function fetchOmdb(params: Record<string, string>) {
-  const apiKey = process.env.OMDB_API_KEY
+function parseOmdbApiKeyList(value: string | undefined) {
+  return (value ?? '')
+    .split(',')
+    .map((key) => key.trim())
+    .filter(Boolean)
+}
 
-  if (!apiKey) {
-    return {
-      status: 500,
-      body: {
-        Response: 'False',
-        Error: 'OMDB_API_KEY is not configured on the server.',
-      },
+function getOmdbApiKeys(): OmdbApiKey[] {
+  const apiKeys = [
+    { name: 'OMDB_API_KEY', value: process.env.OMDB_API_KEY ?? '' },
+    {
+      name: 'OMDB_SECONDARY_API_KEY',
+      value: process.env.OMDB_SECONDARY_API_KEY ?? '',
+    },
+    ...parseOmdbApiKeyList(process.env.OMDB_API_KEYS).map((value, index) => ({
+      name: `OMDB_API_KEYS_${index + 1}`,
+      value,
+    })),
+  ]
+  const seen = new Set<string>()
+
+  return apiKeys.filter((apiKey) => {
+    if (!apiKey.value.trim() || seen.has(apiKey.value)) {
+      return false
     }
-  }
 
+    seen.add(apiKey.value)
+    return true
+  })
+}
+
+function isOmdbLimitError(status: number, body: OmdbApiBody) {
+  const message = body.Error?.toLowerCase() ?? ''
+  return (
+    status === 429 ||
+    message.includes('limit') ||
+    message.includes('quota') ||
+    message.includes('too many')
+  )
+}
+
+function orderedApiKeys(keys: OmdbApiKey[]) {
+  const startIndex = Math.min(preferredOmdbKeyIndex, keys.length - 1)
+  return keys.slice(startIndex).concat(keys.slice(0, startIndex))
+}
+
+async function fetchOmdbWithKey(params: Record<string, string>, apiKey: OmdbApiKey) {
   const url = new URL(OMDB_BASE_URL)
-  url.searchParams.set('apikey', apiKey)
+  url.searchParams.set('apikey', apiKey.value)
 
   Object.entries(params).forEach(([key, value]) => {
     if (value) {
@@ -43,12 +90,42 @@ async function fetchOmdb(params: Record<string, string>) {
   })
 
   const response = await fetch(url)
-  const body = await response.json()
+  const body = (await response.json()) as OmdbApiBody
 
   return {
     status: response.ok ? 200 : response.status,
     body,
   }
+}
+
+async function fetchOmdb(params: Record<string, string>) {
+  const apiKeys = getOmdbApiKeys()
+
+  if (apiKeys.length === 0) {
+    return {
+      status: 500,
+      body: {
+        Response: 'False',
+        Error:
+          'OMDB_API_KEY, OMDB_SECONDARY_API_KEY, or OMDB_API_KEYS is not configured on the server.',
+      },
+    }
+  }
+
+  for (const apiKey of orderedApiKeys(apiKeys)) {
+    const result = await fetchOmdbWithKey(params, apiKey)
+
+    if (isOmdbLimitError(result.status, result.body) && apiKeys.length > 1) {
+      const currentIndex = apiKeys.findIndex((key) => key.name === apiKey.name)
+      preferredOmdbKeyIndex = (currentIndex + 1) % apiKeys.length
+
+      continue
+    }
+
+    return result
+  }
+
+  return fetchOmdbWithKey(params, apiKeys[apiKeys.length - 1])
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {

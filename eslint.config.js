@@ -26,4 +26,16 @@ export default defineConfig([
       globals: globals.node,
     },
   },
+  {
+    files: ['ExpoWebShell.jsx', 'index.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: globals.browser,
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+    },
+  },
 ])
