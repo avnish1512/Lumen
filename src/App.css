@@ -1261,15 +1261,27 @@ button {
 .category-card::before {
   position: absolute;
   inset: 0;
+  z-index: 0;
   content: '';
   opacity: 0.9;
 }
 
+.category-card::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.22) 52%, rgba(0, 0, 0, 0.66)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.2), transparent 46%);
+  content: '';
+}
+
 .category-card span {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   max-width: 100%;
-  font-size: clamp(18px, 4vw, 25px);
+  font-size: clamp(16px, 3.2vw, 22px);
   font-weight: 900;
   line-height: 1;
   overflow-wrap: anywhere;
@@ -1321,6 +1333,21 @@ button {
 
 .category-12::before {
   background: linear-gradient(145deg, #ffd58d, #c86c70 50%, #1b0a14);
+}
+
+.category-card.has-art::before {
+  background-image: var(--category-art);
+  background-position: center;
+  background-size: cover;
+  opacity: 1;
+  transform: scale(1.01);
+  transition: transform 260ms ease, filter 260ms ease;
+}
+
+.category-card.has-art:hover::before,
+.category-card.has-art:focus-visible::before {
+  filter: saturate(1.08) brightness(1.04);
+  transform: scale(1.06);
 }
 
 .recent-panel {
@@ -3407,12 +3434,22 @@ button:focus-visible {
   border: 0;
   border-radius: 50%;
   background: transparent;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
 }
 
 .continue-more-button svg {
   width: 22px;
   height: 22px;
   stroke-width: 3;
+}
+
+.continue-more-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
 }
 
 .continue-more-button:focus-visible {
@@ -3462,12 +3499,26 @@ button:focus-visible {
   font-weight: 460;
   line-height: 1.05;
   text-align: left;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    padding-left 150ms ease;
 }
 
+.continue-action-menu button:hover,
 .continue-action-menu button:active,
 .continue-action-menu button:focus-visible {
-  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  background:
+    linear-gradient(90deg, rgba(92, 195, 255, 0.24), rgba(255, 255, 255, 0.1)),
+    rgba(255, 255, 255, 0.08);
   outline: 0;
+  padding-left: 27px;
+}
+
+.continue-action-menu button:hover svg,
+.continue-action-menu button:focus-visible svg {
+  color: #8ed9ff;
 }
 
 .continue-action-menu svg {
@@ -3661,6 +3712,10 @@ button:focus-visible {
   object-fit: cover;
   object-position: center 10%;
   filter: saturate(1.08) brightness(0.92);
+}
+
+.detail-hero-picture {
+  display: contents;
 }
 
 .detail-screen .apple-detail-hero::after {
@@ -5013,6 +5068,8 @@ a.watch-option-card {
 .tab-dock,
 .desktop-nav nav {
   --nav-bubble-x: 0%;
+  --nav-magnetic-x: 0px;
+  --nav-magnetic-y: 0px;
   isolation: isolate;
 }
 
@@ -5065,6 +5122,16 @@ a.watch-option-card {
     opacity 180ms ease;
 }
 
+.desktop-nav nav::after {
+  transform:
+    translate3d(
+      calc(var(--nav-bubble-x) + var(--nav-magnetic-x)),
+      var(--nav-magnetic-y),
+      0
+    )
+    scale(1);
+}
+
 .tab-dock button,
 .desktop-brand,
 .desktop-search,
@@ -5107,6 +5174,13 @@ a.watch-option-card {
   --nav-hover-y: -4px;
   --nav-hover-scale: 1.035;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.desktop-nav nav button:hover,
+.desktop-nav nav button:focus-visible {
+  --nav-hover-y: 0px;
+  --nav-hover-scale: 1;
+  background: transparent;
 }
 
 .desktop-brand:hover,
@@ -5160,6 +5234,12 @@ a.watch-option-card {
 .search-float:hover svg {
   transform: translateY(-2px) scale(1.08);
   filter: drop-shadow(0 6px 10px rgba(74, 167, 255, 0.2));
+}
+
+.desktop-nav nav button:hover svg,
+.desktop-nav nav button:focus-visible svg {
+  transform: none;
+  filter: none;
 }
 
 .tab-dock button.active svg,
@@ -6282,7 +6362,7 @@ a.watch-option-card {
 
   .search-header h1,
   .library-header h1 {
-    font-size: clamp(34px, 9vw, 45px);
+    font-size: clamp(32px, 8.2vw, 42px);
     line-height: 0.98;
   }
 
@@ -6295,7 +6375,7 @@ a.watch-option-card {
 
   .visual-search,
   .search-content {
-    padding: 16px 22px 112px;
+    padding: 14px 22px 76px;
   }
 
   .category-grid {
@@ -6304,13 +6384,13 @@ a.watch-option-card {
   }
 
   .category-card {
-    min-height: clamp(108px, 29vw, 142px);
+    min-height: clamp(116px, 34vw, 150px);
     padding: 10px;
     border-radius: 10px;
   }
 
   .category-card span {
-    font-size: clamp(12px, 3.2vw, 16px);
+    font-size: clamp(12px, 3.1vw, 15px);
     line-height: 1.05;
   }
 
@@ -6344,6 +6424,7 @@ a.watch-option-card {
   }
 
   .search-bottom {
+    bottom: max(10px, env(safe-area-inset-bottom));
     grid-template-columns: 58px minmax(0, 1fr);
     gap: 8px;
     width: min(390px, calc(100vw - 24px));
@@ -7039,8 +7120,9 @@ a.watch-option-card {
 .home-screen .home-hero,
 .browse-screen .home-hero,
 .detail-screen .apple-detail-hero {
-  background-position: center center !important;
-  background-size: cover !important;
+  background-position: center center, var(--hero-position, center top) !important;
+  background-repeat: no-repeat !important;
+  background-size: cover, var(--hero-fit, cover) !important;
 }
 
 /* Final clicked-movie mobile scale: compact like the reference detail page. */
@@ -7620,8 +7702,8 @@ a.watch-option-card {
     background-image:
       linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.02) 42%, rgba(0, 0, 0, 0.5) 76%, #000 100%),
       var(--hero-art) !important;
-    background-position: center center !important;
-    background-size: cover !important;
+    background-position: center center, center center !important;
+    background-size: cover, cover !important;
   }
 
   .home-screen .home-hero::before,
@@ -7641,7 +7723,9 @@ a.watch-option-card {
   .home-screen .hero-art-image,
   .browse-screen .hero-art-image {
     z-index: 1;
-    object-fit: contain !important;
+    width: 100%;
+    height: 100%;
+    object-fit: cover !important;
     object-position: center center !important;
     filter: saturate(1.04) brightness(0.94);
   }
@@ -7675,5 +7759,71 @@ a.watch-option-card {
     right: 44px;
     left: 44px;
     padding: 0;
+  }
+}
+
+/* Home hero spacing: extend the artwork and soften the handoff into the first rail. */
+@media (min-width: 900px) {
+  .home-screen .home-hero,
+  .browse-screen .home-hero {
+    height: 81vh;
+    min-height: 660px;
+  }
+
+  .home-screen .home-hero::after,
+  .browse-screen .home-hero::after {
+    background:
+      linear-gradient(90deg, rgba(0, 0, 0, 0.54), rgba(0, 0, 0, 0.16) 30%, rgba(0, 0, 0, 0.02) 68%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.1), transparent 44%, rgba(0, 0, 0, 0.26) 84%, rgba(0, 0, 0, 0.58));
+  }
+
+  .home-screen .continue-rail,
+  .browse-screen .movie-rail:first-of-type {
+    margin-top: 0;
+    padding-top: 8px;
+  }
+}
+
+/* Mobile detail rails use the same side rhythm as the Home screen. */
+@media (max-width: 899px) {
+  .detail-screen .apple-detail-hero {
+    background-position: center center, center center !important;
+    background-size: cover, cover !important;
+  }
+
+  .detail-screen .detail-hero-art {
+    inset: max(22px, env(safe-area-inset-top)) 0 auto;
+    width: 100%;
+    height: min(70svh, 640px);
+    object-fit: contain !important;
+    object-position: center center !important;
+    filter: saturate(1.05) brightness(0.94);
+  }
+
+  .detail-section {
+    padding-left: 20px;
+  }
+
+  .detail-section-heading,
+  .detail-watch-options h2,
+  .detail-about-section h2 {
+    max-width: calc(100% - 20px);
+  }
+
+  .detail-landscape-row,
+  .detail-poster-row,
+  .detail-cast-row {
+    margin-right: -20px;
+    padding-right: 20px;
+    scroll-padding-inline: 0 20px;
+  }
+
+  .detail-landscape-row {
+    grid-auto-columns: min(300px, calc(100vw - 40px));
+  }
+
+  .watch-option-grid,
+  .detail-about-section {
+    margin-right: 20px;
   }
 }

@@ -67,6 +67,10 @@ type WatchHistoryEntry = {
   progress: number
 }
 type WatchHistory = Record<string, WatchHistoryEntry>
+type SearchCategoryTile = {
+  image: string
+  label: string
+}
 type LandscapeCard = {
   duration: string
   id: string
@@ -348,6 +352,68 @@ function buildRail(primary: Movie[], fallback: Movie[] = [], limit = 10) {
   return rankRail(uniqueMovies([...primary, ...fallback]).slice(0, limit))
 }
 
+function collectionMovies(collection: MediaCollection) {
+  return [
+    ...collection.top,
+    ...collection.thrilling,
+    ...collection.adventure,
+    ...collection.kidsFamily,
+  ]
+}
+
+const searchCategoryAliases: Record<string, string[]> = {
+  'Apple TV': ['movie', 'series', 'drama', 'adventure'],
+  Action: ['action', 'thriller', 'crime'],
+  Adventure: ['adventure', 'fantasy', 'sci fi'],
+  Bollywood: ['drama', 'music', 'romance'],
+  Comedy: ['comedy', 'family'],
+  Drama: ['drama'],
+  Horror: ['horror', 'thriller'],
+  'Kids & Family': ['family', 'animation', 'kids'],
+  'Movie Bundles': ['movie', 'collection', 'top'],
+  'Regional Indian': ['drama', 'romance', 'music'],
+  'Sci-Fi': ['sci fi', 'science fiction', 'fantasy'],
+  Sports: ['sport', 'sports', 'documentary'],
+}
+
+function movieSearchText(movie: Movie) {
+  return normalizeMovieIdentity(
+    [movie.title, movie.type, movie.year, ...movie.genres].join(' '),
+  )
+}
+
+function categoryTileImage(movie: Movie) {
+  return (
+    cleanImageUrl(movie.poster) ||
+    cleanImageUrl(movie.hero) ||
+    cleanImageUrl(movie.still)
+  )
+}
+
+function buildSearchCategoryTiles(categories: string[], apiMovies: Movie[]) {
+  const pool = uniqueMovies(apiMovies).filter((movie) => categoryTileImage(movie))
+
+  return categories.map((label, index) => {
+    const aliases = searchCategoryAliases[label] ?? [label]
+    const normalizedAliases = aliases.map(normalizeMovieIdentity)
+    const matchingMovies = pool.filter((movie) => {
+      const text = movieSearchText(movie)
+
+      return normalizedAliases.some((alias) => text.includes(alias))
+    })
+    const candidates = matchingMovies.length > 0 ? matchingMovies : pool
+    const movie =
+      candidates.length > 0
+        ? candidates[(index * 5 + label.length) % candidates.length]
+        : null
+
+    return {
+      image: movie ? categoryTileImage(movie) : '',
+      label,
+    }
+  })
+}
+
 function hasHomeBootstrapRails(rails: TmdbHomeRails) {
   return (
     rails.featuredMovies.length > 0 &&
@@ -385,6 +451,77 @@ function continueRuntimeLabel(movie: Movie) {
 
 function isTvShow(movie: Movie) {
   return movie.tmdbType === 'tv' || movie.type.toLowerCase() === 'series'
+}
+
+function normalizeMovieIdentity(value: string) {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function movieMatches(left: Movie, right: Movie) {
+  if (left.id === right.id) {
+    return true
+  }
+
+  if (
+    left.tmdbId &&
+    right.tmdbId &&
+    left.tmdbId === right.tmdbId &&
+    left.tmdbType === right.tmdbType
+  ) {
+    return true
+  }
+
+  const leftTitle = normalizeMovieIdentity(left.title)
+  const rightTitle = normalizeMovieIdentity(right.title)
+
+  return Boolean(
+    leftTitle &&
+      rightTitle &&
+      leftTitle === rightTitle &&
+      left.year === right.year &&
+      isTvShow(left) === isTvShow(right),
+  )
+}
+
+function findMatchingMovieKey<T>(
+  records: Record<string, T>,
+  movie: Movie,
+  movieForRecord: (record: T) => Movie,
+) {
+  return Object.entries(records).find(
+    ([key, record]) => key === movie.id || movieMatches(movieForRecord(record), movie),
+  )?.[0]
+}
+
+function hasMatchingMovie<T>(
+  records: Record<string, T>,
+  movie: Movie,
+  movieForRecord: (record: T) => Movie,
+) {
+  return Boolean(findMatchingMovieKey(records, movie, movieForRecord))
+}
+
+function removeMatchingMovieRecords<T>(
+  records: Record<string, T>,
+  movie: Movie,
+  movieForRecord: (record: T) => Movie,
+) {
+  let changed = false
+  const next = { ...records }
+
+  Object.entries(records).forEach(([key, record]) => {
+    if (key === movie.id || movieMatches(movieForRecord(record), movie)) {
+      delete next[key]
+      changed = true
+    }
+  })
+
+  return changed ? next : records
 }
 
 function imdbUrl(movie: Movie) {
@@ -492,6 +629,7 @@ function App() {
   const continueWatching = useMemo(
     () =>
       Object.values(watchHistory)
+        .filter((entry) => entry.progress < 100)
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
         .map((entry, index) => ({
@@ -500,6 +638,22 @@ function App() {
           progress: entry.progress,
         })),
     [watchHistory],
+  )
+  const searchCategoryTiles = useMemo(
+    () =>
+      buildSearchCategoryTiles(searchCategories, [
+        ...tmdbHomeRails.featuredMovies,
+        ...tmdbHomeRails.featuredTvShows,
+        ...tmdbHomeRails.newReleases,
+        ...tmdbHomeRails.trendingNow,
+        ...collectionMovies(tmdbHomeRails.movieCollection),
+        ...collectionMovies(tmdbHomeRails.tvShowCollection),
+        ...collectionMovies(movieCollection),
+        ...collectionMovies(tvShowCollection),
+        ...movies,
+        ...tvShows,
+      ]),
+    [movieCollection, movies, tmdbHomeRails, tvShowCollection, tvShows],
   )
   const relatedMedia = selectedMovie && isTvShow(selectedMovie) ? tvShows : movies
   const requiredMedia = screen === 'tv' ? tvShows : movies
@@ -672,20 +826,23 @@ function App() {
 
   const markContinueWatching = useCallback((movie: Movie) => {
     setWatchHistory((current) => {
-      const existing = current[movie.id]
+      const matchingKey =
+        findMatchingMovieKey(current, movie, (entry) => entry.movie) ?? movie.id
+      const existing = current[matchingKey]
       const historyMovie = existing
         ? mergeKnownMovie(existing.movie, movie)
         : movie
+      const nextProgress =
+        existing && existing.progress >= 100
+          ? continueProgressFor(movie)
+          : Math.max(existing?.progress ?? 0, continueProgressFor(movie))
 
       return {
         ...current,
-        [movie.id]: {
+        [matchingKey]: {
           movie: historyMovie,
           updatedAt: Date.now(),
-          progress: Math.max(
-            existing?.progress ?? 0,
-            continueProgressFor(movie),
-          ),
+          progress: nextProgress,
         },
       }
     })
@@ -713,18 +870,26 @@ function App() {
       current.map((item) => mergeMovie(item)),
     )
     setWatchHistory((current) => {
-      const existing = current[movie.id]
+      const matchingKey = findMatchingMovieKey(
+        current,
+        movie,
+        (entry) => entry.movie,
+      )
+      const existing = matchingKey ? current[matchingKey] : null
 
-      if (!existing) {
+      if (!matchingKey || !existing) {
         return current
       }
 
       return {
         ...current,
-        [movie.id]: {
+        [matchingKey]: {
           ...existing,
           movie: mergeKnownMovie(existing.movie, movie),
-          progress: Math.max(existing.progress, continueProgressFor(movie)),
+          progress:
+            existing.progress >= 100
+              ? continueProgressFor(movie)
+              : Math.max(existing.progress, continueProgressFor(movie)),
         },
       }
     })
@@ -851,14 +1016,20 @@ function App() {
           markContinueWatching(streamMovie)
 
           setSavedMovies((current) => {
-            if (!current[movie.id]) {
+            const matchingKey = findMatchingMovieKey(
+              current,
+              movie,
+              (savedMovie) => savedMovie,
+            )
+
+            if (!matchingKey) {
               return current
             }
 
             return {
               ...current,
-              [movie.id]: {
-                ...current[movie.id],
+              [matchingKey]: {
+                ...current[matchingKey],
                 tmdbId: streamMovie.tmdbId,
                 tmdbType: streamMovie.tmdbType,
                 streamSeason: streamMovie.streamSeason,
@@ -921,10 +1092,15 @@ function App() {
 
   const toggleSaved = (movie: Movie) => {
     setSavedMovies((current) => {
+      const matchingKey = findMatchingMovieKey(
+        current,
+        movie,
+        (savedMovie) => savedMovie,
+      )
       const next = { ...current }
 
-      if (next[movie.id]) {
-        delete next[movie.id]
+      if (matchingKey) {
+        delete next[matchingKey]
       } else {
         next[movie.id] = movie
       }
@@ -934,28 +1110,57 @@ function App() {
   }
 
   const removeSavedMovie = useCallback((movie: Movie) => {
-    setSavedMovies((current) => {
-      if (!current[movie.id]) {
-        return current
-      }
-
-      const next = { ...current }
-      delete next[movie.id]
-      return next
-    })
+    setSavedMovies((current) =>
+      removeMatchingMovieRecords(current, movie, (savedMovie) => savedMovie),
+    )
   }, [])
 
   const removeContinueMovie = useCallback((movie: Movie) => {
+    setWatchHistory((current) =>
+      removeMatchingMovieRecords(current, movie, (entry) => entry.movie),
+    )
+  }, [])
+
+  const markWatchedMovie = useCallback((movie: Movie) => {
     setWatchHistory((current) => {
-      if (!current[movie.id]) {
-        return current
+      let changed = false
+      const next = { ...current }
+      const updatedAt = Date.now()
+
+      Object.entries(current).forEach(([key, entry]) => {
+        if (key === movie.id || movieMatches(entry.movie, movie)) {
+          next[key] = {
+            ...entry,
+            movie: mergeKnownMovie(entry.movie, movie),
+            progress: 100,
+            updatedAt,
+          }
+          changed = true
+        }
+      })
+
+      if (changed) {
+        return next
       }
 
-      const next = { ...current }
-      delete next[movie.id]
-      return next
+      return {
+        ...current,
+        [movie.id]: {
+          movie,
+          progress: 100,
+          updatedAt,
+        },
+      }
     })
   }, [])
+
+  const removeWatchlistMovie = useCallback(
+    (movie: Movie) => {
+      removeSavedMovie(movie)
+      removeContinueMovie(movie)
+    },
+    [removeContinueMovie, removeSavedMovie],
+  )
 
   const performSearch = useCallback(async (query: string) => {
     const trimmedQuery = query.trim()
@@ -1086,8 +1291,9 @@ function App() {
           onSave={toggleSaved}
           onSearch={() => setScreen('search')}
           onSelectHero={setSelectedMovie}
+          onMarkWatched={markWatchedMovie}
           onRemoveContinue={removeContinueMovie}
-          onRemoveSaved={removeSavedMovie}
+          onRemoveWatchlist={removeWatchlistMovie}
         />
       )}
 
@@ -1109,7 +1315,11 @@ function App() {
         <DetailScreen
           movie={selectedMovie}
           relatedMovies={relatedMedia}
-          isSaved={Boolean(savedMovies[selectedMovie.id])}
+          isSaved={hasMatchingMovie(
+            savedMovies,
+            selectedMovie,
+            (savedMovie) => savedMovie,
+          )}
           isLoading={detailLoading}
           error={detailError}
           onBack={() => setScreen(detailBackScreen)}
@@ -1137,7 +1347,11 @@ function App() {
       {screen === 'watch' && selectedMovie && (
         <WatchScreen
           movie={selectedMovie}
-          isSaved={Boolean(savedMovies[selectedMovie.id])}
+          isSaved={hasMatchingMovie(
+            savedMovies,
+            selectedMovie,
+            (savedMovie) => savedMovie,
+          )}
           streamLoading={streamLoading}
           streamError={streamError}
           streamProvider={streamProvider}
@@ -1151,6 +1365,7 @@ function App() {
         <SearchScreen
           query={searchQuery}
           results={searchResults}
+          categoryTiles={searchCategoryTiles}
           loading={searchLoading}
           error={searchError}
           onQueryChange={setSearchQuery}
@@ -1210,8 +1425,9 @@ type HomeScreenProps = {
   onSave: (movie: Movie) => void
   onSearch: () => void
   onSelectHero: (movie: Movie) => void
+  onMarkWatched: (movie: Movie) => void
   onRemoveContinue: (movie: Movie) => void
-  onRemoveSaved: (movie: Movie) => void
+  onRemoveWatchlist: (movie: Movie) => void
 }
 
 function HomeScreen({
@@ -1228,8 +1444,9 @@ function HomeScreen({
   onSave,
   onSearch,
   onSelectHero,
+  onMarkWatched,
   onRemoveContinue,
-  onRemoveSaved,
+  onRemoveWatchlist,
 }: HomeScreenProps) {
   const heroMovies = useMemo(() => movies.slice(0, 6), [movies])
   const movieTopTenMovies = useMemo(
@@ -1363,12 +1580,20 @@ function HomeScreen({
               type="button"
               onClick={() => onSave(featuredMovie)}
               title={
-                savedMovies[featuredMovie.id]
+                hasMatchingMovie(
+                  savedMovies,
+                  featuredMovie,
+                  (savedMovie) => savedMovie,
+                )
                   ? 'Remove from library'
                   : 'Add to library'
               }
             >
-              {savedMovies[featuredMovie.id] ? <Check /> : <Plus />}
+              {hasMatchingMovie(
+                savedMovies,
+                featuredMovie,
+                (savedMovie) => savedMovie,
+              ) ? <Check /> : <Plus />}
             </button>
           </div>
 
@@ -1403,8 +1628,9 @@ function HomeScreen({
         title="Continue Watching"
         movies={continueMovies}
         onOpenDetail={onOpenDetail}
+        onMarkWatched={onMarkWatched}
         onRemoveContinue={onRemoveContinue}
-        onRemoveSaved={onRemoveSaved}
+        onRemoveWatchlist={onRemoveWatchlist}
       />
 
       <MovieRail
@@ -1568,12 +1794,20 @@ function BrowseScreen({
                 type="button"
                 onClick={() => onSave(heroMovie)}
                 title={
-                  savedMovies[heroMovie.id]
+                  hasMatchingMovie(
+                    savedMovies,
+                    heroMovie,
+                    (savedMovie) => savedMovie,
+                  )
                     ? 'Remove from library'
                     : 'Add to library'
                 }
               >
-                {savedMovies[heroMovie.id] ? <Check /> : <Plus />}
+                {hasMatchingMovie(
+                  savedMovies,
+                  heroMovie,
+                  (savedMovie) => savedMovie,
+                ) ? <Check /> : <Plus />}
               </button>
             </div>
           </div>
@@ -1803,14 +2037,17 @@ function DetailScreen({
           'linear-gradient(90deg, rgba(0,0,0,.58), rgba(0,0,0,.14) 42%, rgba(0,0,0,.08) 70%), linear-gradient(180deg, rgba(0,0,0,.14), rgba(0,0,0,.1) 46%, rgba(36,36,36,.94) 100%)',
         )}
       >
-        <img
-          className="detail-hero-art"
-          src={heroImageFor(movie)}
-          alt=""
-          onError={(event) => {
-            event.currentTarget.src = posterImageFor(movie)
-          }}
-        />
+        <picture className="detail-hero-picture">
+          <source media="(max-width: 899px)" srcSet={posterImageFor(movie)} />
+          <img
+            className="detail-hero-art"
+            src={heroImageFor(movie)}
+            alt=""
+            onError={(event) => {
+              event.currentTarget.src = posterImageFor(movie)
+            }}
+          />
+        </picture>
         <DetailTopBar
           onBack={onBack}
           onShare={onShare}
@@ -2493,6 +2730,7 @@ function WatchScreen({
 type SearchScreenProps = {
   query: string
   results: Movie[]
+  categoryTiles: SearchCategoryTile[]
   loading: boolean
   error: string
   onQueryChange: (query: string) => void
@@ -2505,6 +2743,7 @@ type SearchScreenProps = {
 function SearchScreen({
   query,
   results,
+  categoryTiles,
   loading,
   error,
   onQueryChange,
@@ -2567,17 +2806,26 @@ function SearchScreen({
           </div>
         ) : (
           <div className="category-grid">
-            {searchCategories.map((category, index) => (
+            {categoryTiles.map((category, index) => (
               <button
-                key={category}
-                className={`category-card category-${(index % 12) + 1}`}
+                key={category.label}
+                className={`category-card category-${(index % 12) + 1}${
+                  category.image ? ' has-art' : ''
+                }`}
+                style={
+                  category.image
+                    ? ({
+                        '--category-art': `url(${category.image})`,
+                      } as CSSProperties)
+                    : undefined
+                }
                 type="button"
                 onClick={() => {
-                  onQueryChange(category)
-                  onSearch(category)
+                  onQueryChange(category.label)
+                  onSearch(category.label)
                 }}
               >
-                <span>{category}</span>
+                <span>{category.label}</span>
               </button>
             ))}
           </div>
@@ -2707,8 +2955,9 @@ function MovieRail({ title, movies, compact, onOpenDetail }: MovieRailProps) {
 }
 
 type ContinueWatchingRailProps = MovieRailProps & {
+  onMarkWatched: (movie: Movie) => void
   onRemoveContinue: (movie: Movie) => void
-  onRemoveSaved: (movie: Movie) => void
+  onRemoveWatchlist: (movie: Movie) => void
 }
 
 type ContinueMenuState = {
@@ -2722,8 +2971,9 @@ function ContinueWatchingRail({
   title,
   movies,
   onOpenDetail,
+  onMarkWatched,
   onRemoveContinue,
-  onRemoveSaved,
+  onRemoveWatchlist,
 }: ContinueWatchingRailProps) {
   const rowRef = useRef<HTMLDivElement | null>(null)
   const [menuState, setMenuState] = useState<ContinueMenuState | null>(null)
@@ -2791,6 +3041,26 @@ function ContinueWatchingRail({
   const runMenuAction = (action: () => void | Promise<void>) => {
     closeMenu()
     void action()
+  }
+
+  const downloadContinueArtwork = (movie: Movie) => {
+    const imageUrl = movie.poster || movie.hero || movie.still
+
+    if (!imageUrl) {
+      return
+    }
+
+    const link = document.createElement('a')
+    const filename =
+      normalizeMovieIdentity(movie.title).replace(/\s+/g, '-') || 'movie'
+
+    link.href = imageUrl
+    link.download = `${filename}-artwork.jpg`
+    link.rel = 'noopener noreferrer'
+    link.target = '_blank'
+    document.body.append(link)
+    link.click()
+    link.remove()
   }
 
   const shareContinueItem = async (movie: Movie, label: string) => {
@@ -2891,13 +3161,7 @@ function ContinueWatchingRail({
               type="button"
               role="menuitem"
               onClick={() =>
-                runMenuAction(() => {
-                  window.open(
-                    activeMenuMovie.poster || activeMenuMovie.hero,
-                    '_blank',
-                    'noopener,noreferrer',
-                  )
-                })
+                runMenuAction(() => downloadContinueArtwork(activeMenuMovie))
               }
             >
               <Download />
@@ -2953,7 +3217,9 @@ function ContinueWatchingRail({
             <button
               type="button"
               role="menuitem"
-              onClick={() => runMenuAction(() => onRemoveSaved(activeMenuMovie))}
+              onClick={() =>
+                runMenuAction(() => onRemoveWatchlist(activeMenuMovie))
+              }
             >
               <CircleMinus />
               <span>Remove from Watchlist</span>
@@ -2962,7 +3228,7 @@ function ContinueWatchingRail({
               type="button"
               role="menuitem"
               onClick={() =>
-                runMenuAction(() => onRemoveContinue(activeMenuMovie))
+                runMenuAction(() => onMarkWatched(activeMenuMovie))
               }
             >
               <Check />
@@ -3368,9 +3634,8 @@ function DesktopNav({
         <Home fill="currentColor" />
         <span>Home</span>
       </button>
-      <nav aria-label="Website">
+      <nav aria-label="Website" {...magneticEvents}>
         <button
-          {...magneticEvents}
           className={active === 'Home' ? 'active' : ''}
           type="button"
           onClick={onHome}
@@ -3379,7 +3644,6 @@ function DesktopNav({
           <span>Home</span>
         </button>
         <button
-          {...magneticEvents}
           className={active === 'Movies' ? 'active' : ''}
           type="button"
           onClick={onMovies}
@@ -3388,7 +3652,6 @@ function DesktopNav({
           <span>Movies</span>
         </button>
         <button
-          {...magneticEvents}
           className={active === 'TV Shows' ? 'active' : ''}
           type="button"
           onClick={onTvShows}
@@ -3397,7 +3660,6 @@ function DesktopNav({
           <span>TV Shows</span>
         </button>
         <button
-          {...magneticEvents}
           className={active === 'Library' ? 'active' : ''}
           type="button"
           onClick={onLibrary}
