@@ -1,12 +1,12 @@
 import {
   fetchMovieGluTrailerClips,
   movieGluConfigFromEnv,
-} from './movieglu-core'
+} from './movieglu-core.js'
 import {
   createTmdbTrailerAuthChain,
   fallbackTrailerSearchClips,
   fetchTmdbTrailerClips,
-} from './tmdb-trailer-core'
+} from './tmdb-trailer-core.js'
 
 type QueryValue = string | string[] | undefined
 

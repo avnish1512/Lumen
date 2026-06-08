@@ -1,4 +1,4 @@
-import { type TmdbAuth, normalizeWatchRegion } from './tmdb-watch-core'
+import { type TmdbAuth, normalizeWatchRegion } from './tmdb-watch-core.js'
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p'

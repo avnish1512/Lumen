@@ -3,7 +3,7 @@ import {
   fetchTmdbWatchProviders,
   normalizeWatchRegion,
   watchmodeConfigFromEnv,
-} from './tmdb-watch-core'
+} from './tmdb-watch-core.js'
 
 type QueryValue = string | string[] | undefined
 
