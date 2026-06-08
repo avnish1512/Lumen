@@ -21,7 +21,7 @@ $player_loader = 1;
 // clicking play button, works only for quality >= 720p
 // options are: vidlox = 7, fembed = 11, mixdrop = 12, upstream = 17, videobin = 18,
 // doodstream = 21, streamtape = 25, streamsb = 26, voe = 29, ninjastream = 33
-$preferred_server = 0; // paste only server number, leave 0 for no preference
+$preferred_server = 25; // streamtape; leave 0 for no preference
 
 // here you can choose source list style
 // 1 = button with server count and full page overlay with server list

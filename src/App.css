@@ -3476,14 +3476,14 @@ button:focus-visible {
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 23px;
   background:
-    linear-gradient(180deg, rgba(80, 82, 73, 0.24), rgba(18, 18, 18, 0.3)),
-    rgba(28, 30, 28, 0.34);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05)),
+    rgba(20, 20, 22, 0.88);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
     inset 0 -1px 0 rgba(255, 255, 255, 0.08),
-    0 24px 64px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(34px) saturate(1.35) brightness(1.04);
-  -webkit-backdrop-filter: blur(34px) saturate(1.35) brightness(1.04);
+    0 24px 64px rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(28px) saturate(1.35);
+  -webkit-backdrop-filter: blur(28px) saturate(1.35);
 }
 
 .continue-action-menu button {
@@ -7370,8 +7370,8 @@ a.watch-option-card {
     max-width: calc(100vw - 90px);
     border-radius: 23px;
     background:
-      linear-gradient(180deg, rgba(93, 96, 82, 0.22), rgba(16, 16, 16, 0.28)),
-      rgba(26, 28, 26, 0.32);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05)),
+      rgba(20, 20, 22, 0.86);
   }
 
   .continue-action-menu button {

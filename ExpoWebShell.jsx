@@ -1,8 +1,24 @@
+/* global process */
 import Constants from 'expo-constants'
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { WebView } from 'react-native-webview'
 
-const fallbackHost = '192.168.31.167'
+const fallbackHost = process.env.EXPO_PUBLIC_VITE_HOST || '192.168.31.5'
+const vitePort = process.env.EXPO_PUBLIC_VITE_PORT || '5173'
+
+function normalizeWebAppUrl(value) {
+  const trimmed = value?.trim()
+
+  if (!trimmed) {
+    return ''
+  }
+
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `http://${trimmed}`
+
+  return withProtocol.endsWith('/') ? withProtocol : `${withProtocol}/`
+}
 
 function getMetroHost() {
   const hostUri =
@@ -14,7 +30,9 @@ function getMetroHost() {
   return hostUri ? hostUri.split(':')[0] : fallbackHost
 }
 
-const webAppUrl = `http://${getMetroHost()}:5173/`
+const webAppUrl =
+  normalizeWebAppUrl(process.env.EXPO_PUBLIC_WEB_APP_URL) ||
+  `http://${getMetroHost()}:${vitePort}/`
 
 function LoadingView() {
   return (

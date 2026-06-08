@@ -612,7 +612,7 @@ function App() {
   const [homeError, setHomeError] = useState('')
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
-  const [searchQuery, setSearchQuery] = useState('Apple TV')
+  const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Movie[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
@@ -1072,9 +1072,8 @@ function App() {
     }
 
     setSelectedMovie(movie)
-    markContinueWatching(movie)
     setScreen('detail')
-    void hydrateMovie(movie).then(markContinueWatching)
+    void hydrateMovie(movie)
   }
 
   const openWatch = (movie: Movie) => {
@@ -1357,6 +1356,7 @@ function App() {
           streamProvider={streamProvider}
           onBack={() => setScreen('detail')}
           onSave={() => toggleSaved(selectedMovie)}
+          onStartWatching={markContinueWatching}
           onStreamProviderChange={setStreamProvider}
         />
       )}
@@ -1373,7 +1373,7 @@ function App() {
           onClear={() => {
             setSearchResults([])
             setSearchError('')
-            setSearchQuery('Apple TV')
+            setSearchQuery('')
           }}
           onOpenDetail={openDetail}
           onClose={() => setScreen('home')}
@@ -1460,6 +1460,31 @@ function HomeScreen({
   const psychologicalThrillers = useMemo(
     () => buildRail(movieCollection.thrilling, movieTopTenMovies),
     [movieCollection.thrilling, movieTopTenMovies],
+  )
+  const adventureMovies = useMemo(
+    () => buildRail(movieCollection.adventure, movieTopTenMovies),
+    [movieCollection.adventure, movieTopTenMovies],
+  )
+  const familyMovies = useMemo(
+    () => buildRail(movieCollection.kidsFamily, movieTopTenMovies),
+    [movieCollection.kidsFamily, movieTopTenMovies],
+  )
+  const bingeWorthyTvShows = useMemo(
+    () =>
+      buildRail(
+        [
+          ...tvShowCollection.thrilling,
+          ...tvShowCollection.adventure,
+          ...tvShowCollection.kidsFamily,
+        ],
+        tvTopTenMovies,
+      ),
+    [
+      tvShowCollection.adventure,
+      tvShowCollection.kidsFamily,
+      tvShowCollection.thrilling,
+      tvTopTenMovies,
+    ],
   )
   const newReleaseFallback = useMemo(
     () => [
@@ -1662,6 +1687,24 @@ function HomeScreen({
         movies={trendingNowItems}
         onOpenDetail={onOpenDetail}
       />
+
+      <MovieRail
+        title="Adventure Movies"
+        movies={adventureMovies}
+        onOpenDetail={onOpenDetail}
+      />
+
+      <MovieRail
+        title="Family Night"
+        movies={familyMovies}
+        onOpenDetail={onOpenDetail}
+      />
+
+      <MovieRail
+        title="Binge-Worthy TV"
+        movies={bingeWorthyTvShows}
+        onOpenDetail={onOpenDetail}
+      />
     </section>
   )
 }
@@ -1698,6 +1741,10 @@ function BrowseScreen({
     ? 'Top 10 Adventure TV Shows'
     : 'Top 10 Adventure'
   const kidsRailTitle = isTvMode ? 'Kids & Family TV Shows' : 'Kids & Family'
+  const freshRailTitle = isTvMode ? 'Fresh Episodes' : 'Fresh Picks'
+  const essentialsRailTitle = isTvMode
+    ? 'Series Essentials'
+    : 'Movie Essentials'
   const topItems = useMemo(
     () => buildRail(collection.top, movies),
     [collection.top, movies],
@@ -1725,6 +1772,44 @@ function BrowseScreen({
   const kidsFamilyItems = useMemo(
     () => buildRail(collection.kidsFamily, topItems),
     [collection.kidsFamily, topItems],
+  )
+  const freshItems = useMemo(
+    () =>
+      buildRail(
+        [
+          ...collection.top.slice(4),
+          ...collection.thrilling.slice(3),
+          ...collection.adventure.slice(3),
+          ...collection.kidsFamily.slice(3),
+        ],
+        movies,
+      ),
+    [
+      collection.adventure,
+      collection.kidsFamily,
+      collection.thrilling,
+      collection.top,
+      movies,
+    ],
+  )
+  const essentialItems = useMemo(
+    () =>
+      buildRail(
+        [
+          ...collection.thrilling,
+          ...collection.adventure,
+          ...collection.kidsFamily,
+          ...collection.top,
+        ],
+        movies,
+      ),
+    [
+      collection.adventure,
+      collection.kidsFamily,
+      collection.thrilling,
+      collection.top,
+      movies,
+    ],
   )
 
   useEffect(() => {
@@ -1852,6 +1937,16 @@ function BrowseScreen({
       <MovieRail
         title={kidsRailTitle}
         movies={kidsFamilyItems}
+        onOpenDetail={onOpenDetail}
+      />
+      <MovieRail
+        title={freshRailTitle}
+        movies={freshItems}
+        onOpenDetail={onOpenDetail}
+      />
+      <MovieRail
+        title={essentialsRailTitle}
+        movies={essentialItems}
         onOpenDetail={onOpenDetail}
       />
     </section>
@@ -2561,6 +2656,7 @@ type WatchScreenProps = {
   streamProvider: StreamProvider
   onBack: () => void
   onSave: () => void
+  onStartWatching: (movie: Movie) => void
   onStreamProviderChange: (provider: StreamProvider) => void
 }
 
@@ -2572,6 +2668,7 @@ function WatchScreen({
   streamProvider,
   onBack,
   onSave,
+  onStartWatching,
   onStreamProviderChange,
 }: WatchScreenProps) {
   const streamUrl = buildStreamUrl(movie, streamProvider)
@@ -2583,6 +2680,7 @@ function WatchScreen({
       return
     }
 
+    onStartWatching(movie)
     window.open(streamUrl, '_blank', 'noopener,noreferrer')
   }
 
@@ -2846,8 +2944,8 @@ function SearchScreen({
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Apple TV"
-            aria-label="Search Apple TV"
+            placeholder="Movie"
+            aria-label="Search movie"
           />
           <button className="mic-button" type="button" title="Voice search">
             <Mic />

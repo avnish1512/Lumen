@@ -91,6 +91,7 @@ type CastCrewResponse = {
 
 const streamTheme = '47A8FF'
 const defaultWatchRegion = 'IN'
+const superEmbedVipPreferredServer = '25'
 
 const emptyMediaCollection: MediaCollection = {
   adventure: [],
@@ -357,7 +358,7 @@ function buildRivestreamUrl(movie: Movie) {
   return `https://www.rivestream.app/embed?${params}`
 }
 
-function buildSuperEmbedPlayerUrl(movie: Movie) {
+function buildSuperEmbedPlayerUrl(movie: Movie, preferredServer = '0') {
   const params = new URLSearchParams()
 
   if (movie.tmdbId) {
@@ -374,6 +375,8 @@ function buildSuperEmbedPlayerUrl(movie: Movie) {
     params.set('e', String(movie.streamEpisode ?? 1))
   }
 
+  params.set('preferred_server', preferredServer)
+
   return `/se_player.php?${params}`
 }
 
@@ -386,7 +389,7 @@ export function buildStreamUrl(
   }
 
   if (provider === 'multiembed-vip') {
-    return buildSuperEmbedPlayerUrl(movie)
+    return buildSuperEmbedPlayerUrl(movie, superEmbedVipPreferredServer)
   }
 
   if (!movie.tmdbId) {
