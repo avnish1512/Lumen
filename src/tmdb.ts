@@ -118,13 +118,13 @@ export const streamProviderOptions: StreamProviderOption[] = [
     id: 'multiembed',
     name: 'MultiEmbed',
     logo: 'ME',
-    description: 'TMDB server',
+    description: 'Local player',
   },
   {
     id: 'multiembed-vip',
     name: 'VIP Server',
     logo: 'VIP',
-    description: 'Direct stream',
+    description: 'Local player',
   },
 ]
 
@@ -357,39 +357,44 @@ function buildRivestreamUrl(movie: Movie) {
   return `https://www.rivestream.app/embed?${params}`
 }
 
-function buildMultiEmbedUrl(movie: Movie, direct = false) {
-  const params = new URLSearchParams({
-    video_id: String(movie.tmdbId),
-    tmdb: '1',
-  })
+function buildSuperEmbedPlayerUrl(movie: Movie) {
+  const params = new URLSearchParams()
+
+  if (movie.tmdbId) {
+    params.set('video_id', String(movie.tmdbId))
+    params.set('tmdb', '1')
+  } else if (movie.id.startsWith('tt')) {
+    params.set('video_id', movie.id)
+  } else {
+    return ''
+  }
 
   if (movie.tmdbType === 'tv') {
     params.set('s', String(movie.streamSeason ?? 1))
     params.set('e', String(movie.streamEpisode ?? 1))
   }
 
-  const path = direct ? 'directstream.php' : ''
-  return `https://multiembed.mov/${path}?${params}`
+  return `/se_player.php?${params}`
 }
 
 export function buildStreamUrl(
   movie: Movie,
   provider: StreamProvider = defaultStreamProvider,
 ) {
+  if (provider === 'multiembed') {
+    return buildSuperEmbedPlayerUrl(movie)
+  }
+
+  if (provider === 'multiembed-vip') {
+    return buildSuperEmbedPlayerUrl(movie)
+  }
+
   if (!movie.tmdbId) {
     return ''
   }
 
   if (provider === 'vidsync') {
     return buildVidsyncUrl(movie)
-  }
-
-  if (provider === 'multiembed') {
-    return buildMultiEmbedUrl(movie)
-  }
-
-  if (provider === 'multiembed-vip') {
-    return buildMultiEmbedUrl(movie, true)
   }
 
   return buildRivestreamUrl(movie)

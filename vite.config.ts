@@ -29,6 +29,11 @@ import {
   type WatchmodeConfig,
   watchmodeConfigFromEnv,
 } from './api/tmdb-watch-core'
+import {
+  isSuperEmbedRedirectUrl,
+  resolveSuperEmbedPlayerUrl,
+  superEmbedOptionsFromParams,
+} from './api/superembed-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -39,6 +44,12 @@ function sendJson(res: ServerResponse, statusCode: number, body: unknown) {
   res.statusCode = statusCode
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(body))
+}
+
+function sendText(res: ServerResponse, statusCode: number, body: string) {
+  res.statusCode = statusCode
+  res.setHeader('Content-Type', 'text/plain')
+  res.end(body)
 }
 
 type OmdbApiKey = {
@@ -702,6 +713,52 @@ function tmdbHomeRailsDevProxy(
   }
 }
 
+function superEmbedPlayerDevProxy(): Plugin {
+  return {
+    name: 'superembed-player-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(
+        '/se_player.php',
+        async (req: IncomingMessage, res) => {
+          if (req.method !== 'GET') {
+            sendText(res, 405, 'Method not allowed.')
+            return
+          }
+
+          const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+          const options = superEmbedOptionsFromParams(requestUrl.searchParams)
+
+          if (!options) {
+            sendText(res, 400, 'Missing video_id')
+            return
+          }
+
+          try {
+            const playerUrl = await resolveSuperEmbedPlayerUrl(options)
+
+            if (!isSuperEmbedRedirectUrl(playerUrl)) {
+              sendText(res, 502, playerUrl || "Request server didn't respond")
+              return
+            }
+
+            res.statusCode = 302
+            res.setHeader('Location', playerUrl)
+            res.setHeader('Content-Type', 'text/plain')
+            res.end('Redirecting to player.')
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Request server didn't respond"
+
+            sendText(res, 502, message)
+          }
+        },
+      )
+    },
+  }
+}
+
 function createTmdbAuthChain(env: Record<string, string>) {
   const auths: TmdbAuth[] = [
     {
@@ -787,6 +844,7 @@ export default defineConfig(({ mode }) => {
         env.TMDB_WATCH_REGION,
         streamingAvailabilityConfigFromEnv(env),
       ),
+      superEmbedPlayerDevProxy(),
       movieGluDevProxy(
         movieGluConfigFromEnv(env),
         createTmdbTrailerAuthChain(env),
