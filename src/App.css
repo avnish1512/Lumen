@@ -2114,8 +2114,27 @@ button:focus-visible {
   }
 
   .server-selector {
-    grid-template-columns: repeat(2, minmax(0, 280px));
-    max-width: 680px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    max-width: 1180px;
+  }
+
+  .server-option {
+    grid-template-columns: 58px minmax(0, 1fr) 28px;
+    min-height: 90px;
+  }
+
+  .server-option .provider-logo {
+    width: 58px;
+    height: 58px;
+    font-size: 22px;
+  }
+
+  .server-copy strong {
+    font-size: 18px;
+  }
+
+  .server-copy small {
+    font-size: 13px;
   }
 
   .subscription-card {
