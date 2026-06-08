@@ -604,6 +604,7 @@ function App() {
   const [tmdbHomeRails, setTmdbHomeRails] =
     useState<TmdbHomeRails>(emptyTmdbHomeRails)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
+  const [homeHeroMovie, setHomeHeroMovie] = useState<Movie | null>(null)
   const [detailBackScreen, setDetailBackScreen] = useState<Screen>('home')
   const [savedMovies, setSavedMovies] = useState<SavedMovies>(readSavedMovies)
   const [watchHistory, setWatchHistory] =
@@ -623,8 +624,8 @@ function App() {
   const [navScrolled, setNavScrolled] = useState(false)
   const [navScrollProgress, setNavScrollProgress] = useState(0)
 
-  const featuredMovie = selectedMovie && !isTvShow(selectedMovie) ? selectedMovie : movies[0] ?? null
-  const featuredTvShow = selectedMovie && isTvShow(selectedMovie) ? selectedMovie : tvShows[0] ?? null
+  const featuredMovie = homeHeroMovie ?? movies[0] ?? null
+  const featuredTvShow = tvShows[0] ?? null
   const savedList = useMemo(() => Object.values(savedMovies), [savedMovies])
   const continueWatching = useMemo(
     () =>
@@ -721,6 +722,7 @@ function App() {
           setMovieCollection(nextTmdbHomeRails.movieCollection)
           setTvShowCollection(nextTmdbHomeRails.tvShowCollection)
           setTmdbHomeRails(nextTmdbHomeRails)
+          setHomeHeroMovie((current) => current ?? nextMovies[0] ?? null)
           setSelectedMovie((current) => current ?? nextMovies[0] ?? null)
           return
         }
@@ -741,6 +743,7 @@ function App() {
         setMovieCollection(nextMovieCollection)
         setTvShowCollection(nextTvShowCollection)
         setTmdbHomeRails(nextTmdbHomeRails)
+        setHomeHeroMovie((current) => current ?? nextMovies[0] ?? null)
         setSelectedMovie((current) => current ?? nextMovies[0] ?? null)
       } catch (error) {
         if (!isMounted) {
@@ -868,6 +871,11 @@ function App() {
     setTvShowCollection((current) => mergeCollection(current))
     setSearchResults((current) =>
       current.map((item) => mergeMovie(item)),
+    )
+    setHomeHeroMovie((current) =>
+      current && movieMatches(current, movie)
+        ? mergeKnownMovie(current, movie)
+        : current,
     )
     setWatchHistory((current) => {
       const matchingKey = findMatchingMovieKey(
@@ -1289,7 +1297,7 @@ function App() {
           onPlay={openWatch}
           onSave={toggleSaved}
           onSearch={() => setScreen('search')}
-          onSelectHero={setSelectedMovie}
+          onSelectHero={setHomeHeroMovie}
           onMarkWatched={markWatchedMovie}
           onRemoveContinue={removeContinueMovie}
           onRemoveWatchlist={removeWatchlistMovie}
@@ -1670,15 +1678,15 @@ function HomeScreen({
         onOpenDetail={onOpenDetail}
       />
 
-      <FeatureRail
-        title="Psychological Thrillers"
-        movies={psychologicalThrillers}
-        onOpenDetail={onOpenDetail}
-      />
-
       <MovieRail
         title="New Releases"
         movies={newReleaseItems}
+        onOpenDetail={onOpenDetail}
+      />
+
+      <FeatureRail
+        title="Psychological Thrillers"
+        movies={psychologicalThrillers}
         onOpenDetail={onOpenDetail}
       />
 
@@ -1700,7 +1708,7 @@ function HomeScreen({
         onOpenDetail={onOpenDetail}
       />
 
-      <MovieRail
+      <FeatureRail
         title="Binge-Worthy TV"
         movies={bingeWorthyTvShows}
         onOpenDetail={onOpenDetail}
@@ -1745,6 +1753,7 @@ function BrowseScreen({
   const essentialsRailTitle = isTvMode
     ? 'Series Essentials'
     : 'Movie Essentials'
+  const featureRailTitle = isTvMode ? 'Featured TV Shows' : 'Featured Movies'
   const topItems = useMemo(
     () => buildRail(collection.top, movies),
     [collection.top, movies],
@@ -1809,6 +1818,25 @@ function BrowseScreen({
       collection.thrilling,
       collection.top,
       movies,
+    ],
+  )
+  const featuredBrowseItems = useMemo(
+    () =>
+      buildRail(
+        [
+          ...collection.top.slice(1),
+          ...collection.adventure,
+          ...collection.thrilling,
+          ...collection.kidsFamily,
+        ],
+        topItems,
+      ),
+    [
+      collection.adventure,
+      collection.kidsFamily,
+      collection.thrilling,
+      collection.top,
+      topItems,
     ],
   )
 
@@ -1934,6 +1962,11 @@ function BrowseScreen({
         movies={adventureItems}
         onOpenDetail={onOpenDetail}
       />
+      <FeatureRail
+        title={featureRailTitle}
+        movies={featuredBrowseItems}
+        onOpenDetail={onOpenDetail}
+      />
       <MovieRail
         title={kidsRailTitle}
         movies={kidsFamilyItems}
@@ -1944,7 +1977,7 @@ function BrowseScreen({
         movies={freshItems}
         onOpenDetail={onOpenDetail}
       />
-      <MovieRail
+      <FeatureRail
         title={essentialsRailTitle}
         movies={essentialItems}
         onOpenDetail={onOpenDetail}
@@ -2675,6 +2708,8 @@ function WatchScreen({
   const currentProvider =
     streamProviderOptions.find((provider) => provider.id === streamProvider) ??
     streamProviderOptions[0]
+  const opensExternally =
+    streamProvider === 'multiembed' || streamProvider === 'multiembed-vip'
   const openCurrentStream = () => {
     if (!streamUrl) {
       return
@@ -2693,7 +2728,7 @@ function WatchScreen({
       />
 
       <section className="stream-player-section">
-        {streamUrl ? (
+        {streamUrl && !opensExternally ? (
           <iframe
             className="stream-player"
             src={streamUrl}
@@ -2702,6 +2737,24 @@ function WatchScreen({
             allowFullScreen
             referrerPolicy="no-referrer"
           />
+        ) : streamUrl ? (
+          <div
+            className="stream-placeholder external-stream-placeholder"
+            style={{
+              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.2), rgba(0,0,0,.84)), url(${movie.still})`,
+            }}
+          >
+            <Play fill="currentColor" strokeWidth={0} />
+            <h2>{currentProvider.name}</h2>
+            <p>This server opens outside the embedded player.</p>
+            <button
+              className="stream-open-button"
+              type="button"
+              onClick={openCurrentStream}
+            >
+              <span>Open Player</span>
+            </button>
+          </div>
         ) : (
           <div
             className="stream-placeholder"
@@ -3410,7 +3463,6 @@ function FeatureRail({ title, movies, onOpenDetail }: MovieRailProps) {
               <span className="feature-wide-badge">
                 {index === 0 ? 'New' : movie.year}
               </span>
-              <span className="feature-logo-title">{movie.logoTitle}</span>
               <span className="feature-wide-meta">
                 <span className="provider-badge">tv</span>
                 <span>{movie.type}</span>

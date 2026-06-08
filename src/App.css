@@ -658,6 +658,36 @@ button {
   line-height: 1.35;
 }
 
+.external-stream-placeholder {
+  gap: 12px;
+}
+
+.external-stream-placeholder svg {
+  margin-bottom: 0;
+}
+
+.stream-open-button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+  padding: 0 22px;
+  color: #050505;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.stream-open-button:hover,
+.stream-open-button:focus-visible {
+  background: #fff;
+  outline: 0;
+  transform: translateY(-1px);
+}
+
 .watch-still {
   display: block;
   width: 100%;
@@ -3156,7 +3186,7 @@ button:focus-visible {
 }
 
 .feature-wide-badge {
-  bottom: 112px;
+  bottom: 82px;
   padding: 7px 14px 8px;
   border: 2px solid rgba(255, 255, 255, 0.24);
   border-radius: 14px;
@@ -6664,6 +6694,7 @@ a.watch-option-card {
 /* Keep movie and TV rail cards nameless, including hover/focus states. */
 .poster-title,
 .feature-wide-title,
+.feature-logo-title,
 .continue-title {
   display: none !important;
 }
@@ -7044,27 +7075,13 @@ a.watch-option-card {
   }
 
   .home-screen .feature-wide-badge {
-    bottom: 133px;
+    bottom: 82px;
     padding: 4px 10px 5px;
     border-width: 1px;
     border-radius: 9px;
     background: rgba(0, 0, 0, 0.2);
     font-size: clamp(14px, 4vw, 17px);
     font-weight: 820;
-  }
-
-  .home-screen .feature-logo-title {
-    right: 18px;
-    bottom: 80px;
-    display: block;
-    overflow: hidden;
-    color: #fff;
-    font-size: clamp(30px, 9.6vw, 43px);
-    font-weight: 1000;
-    line-height: 0.88;
-    text-transform: uppercase;
-    white-space: pre-wrap;
-    text-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
   }
 
   .home-screen .feature-wide-meta {
