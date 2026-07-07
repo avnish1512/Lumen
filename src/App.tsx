@@ -61,6 +61,18 @@ import {
 } from './tmdb'
 import './App.css'
 
+// Eagerly import all avatar images so Vite bundles them for production
+const avatarAssets: Record<string, string> = {}
+const assetModules = import.meta.glob<string>(
+  './assets/**/*.png',
+  { eager: true, import: 'default', query: '?url' }
+)
+for (const [path, url] of Object.entries(assetModules)) {
+  // path looks like './assets/dark/image.png' -> store as 'dark/image.png', 'elite/image.png', etc.
+  const key = path.replace('./assets/', '')
+  avatarAssets[key] = url
+}
+
 type Screen = 'home' | 'movies' | 'tv' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles'
 type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Library' | 'Search'
 type SavedMovies = Record<string, Movie>
@@ -3609,26 +3621,22 @@ function LoginScreen({
 }
 
 function getAvatarSrc(avatarKey: string): string {
+  // Map avatar keys to their actual asset paths in the glob map
+  let assetPath = ''
   if (avatarKey.startsWith('elite/')) {
-    return `/src/assets/${avatarKey}`
+    assetPath = avatarKey
+  } else if (avatarKey.startsWith('stranger/')) {
+    assetPath = `stranger things/${avatarKey.replace('stranger/', '')}`
+  } else if (avatarKey.startsWith('squid/')) {
+    assetPath = `squide game/${avatarKey.replace('squid/', '')}`
+  } else if (avatarKey.startsWith('money/')) {
+    assetPath = `money heist/${avatarKey.replace('money/', '')}`
+  } else if (avatarKey.startsWith('dark/')) {
+    assetPath = avatarKey
+  } else {
+    assetPath = `classic_${avatarKey}.png`
   }
-  if (avatarKey.startsWith('stranger/')) {
-    const filename = avatarKey.replace('stranger/', '')
-    return `/src/assets/stranger things/${filename}`
-  }
-  if (avatarKey.startsWith('squid/')) {
-    const filename = avatarKey.replace('squid/', '')
-    return `/src/assets/squide game/${filename}`
-  }
-  if (avatarKey.startsWith('money/')) {
-    const filename = avatarKey.replace('money/', '')
-    return `/src/assets/money heist/${filename}`
-  }
-  if (avatarKey.startsWith('dark/')) {
-    const filename = avatarKey.replace('dark/', '')
-    return `/src/assets/dark/${filename}`
-  }
-  return `/src/assets/classic_${avatarKey}.png`
+  return avatarAssets[assetPath] ?? `/src/assets/${assetPath}`
 }
 
 function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserProfile[]) {
@@ -3871,7 +3879,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/elite/${filename}`} 
+                      src={avatarAssets[`elite/${filename}`] ?? `/src/assets/elite/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -3909,7 +3917,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/stranger things/${filename}`} 
+                      src={avatarAssets[`stranger things/${filename}`] ?? `/src/assets/stranger things/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -3950,7 +3958,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/squide game/${filename}`} 
+                      src={avatarAssets[`squide game/${filename}`] ?? `/src/assets/squide game/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -3985,7 +3993,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/money heist/${filename}`} 
+                      src={avatarAssets[`money heist/${filename}`] ?? `/src/assets/money heist/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -4020,7 +4028,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/dark/${filename}`} 
+                      src={avatarAssets[`dark/${filename}`] ?? `/src/assets/dark/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -4199,7 +4207,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/elite/${filename}`} 
+                      src={avatarAssets[`elite/${filename}`] ?? `/src/assets/elite/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -4237,7 +4245,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/stranger things/${filename}`} 
+                      src={avatarAssets[`stranger things/${filename}`] ?? `/src/assets/stranger things/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -4278,7 +4286,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/squide game/${filename}`} 
+                      src={avatarAssets[`squide game/${filename}`] ?? `/src/assets/squide game/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -4313,7 +4321,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/money heist/${filename}`} 
+                      src={avatarAssets[`money heist/${filename}`] ?? `/src/assets/money heist/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
@@ -4348,7 +4356,7 @@ function ProfilesScreen({
                     style={{ overflow: 'hidden' }}
                   >
                     <img 
-                      src={`/src/assets/dark/${filename}`} 
+                      src={avatarAssets[`dark/${filename}`] ?? `/src/assets/dark/${filename}`} 
                       alt={filename} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
