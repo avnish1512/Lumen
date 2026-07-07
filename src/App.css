@@ -9007,6 +9007,29 @@ a.watch-option-card {
   background-color: rgba(255, 255, 255, 0.06);
 }
 
+@media (min-width: 900px) {
+  .choose-icon-container {
+    max-width: 100%;
+    padding: 40px 60px;
+  }
+  
+  .choose-avatar-btn,
+  .empty-avatar-placeholder {
+    width: 140px;
+    height: 140px;
+    border-radius: 12px;
+  }
+  
+  .choose-icon-section h2 {
+    font-size: 24px;
+    margin-bottom: 22px;
+  }
+
+  .choose-icon-row {
+    gap: 20px;
+  }
+}
+
 /* Red Avatar Preset */
 .avatar-red {
   background: linear-gradient(135deg, #b91c1c, #ef4444);
