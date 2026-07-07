@@ -1437,6 +1437,14 @@ function hasCompleteLiveHomeRails(rails: TmdbHomeRails) {
   )
 }
 
+type CachedRails = {
+  data: TmdbHomeRails
+  expiresAt: number
+}
+
+const railsCache: Record<string, CachedRails> = {}
+const RAILS_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+
 export async function fetchTmdbHomeRails(
   authChain: TmdbAuth[],
   options: {
@@ -1445,6 +1453,13 @@ export async function fetchTmdbHomeRails(
   } = {},
 ): Promise<TmdbHomeRails> {
   const region = normalizeWatchRegion(options.region)
+  const cacheKey = `${region}:${Boolean(options.streamingAvailability)}`
+  const now = Date.now()
+
+  if (railsCache[cacheKey] && railsCache[cacheKey].expiresAt > now) {
+    return railsCache[cacheKey].data
+  }
+
   const fallbackRails = fallbackHomeRails()
   let liveRails: TmdbHomeRails | null = null
 
@@ -1456,6 +1471,10 @@ export async function fetchTmdbHomeRails(
       )
 
       if (hasCompleteLiveHomeRails(liveRails)) {
+        railsCache[cacheKey] = {
+          data: liveRails,
+          expiresAt: Date.now() + RAILS_CACHE_TTL,
+        }
         return liveRails
       }
     } catch {
@@ -1464,7 +1483,12 @@ export async function fetchTmdbHomeRails(
   }
 
   if (authChain.length === 0) {
-    return completeHomeRails(liveRails, fallbackRails)
+    const result = completeHomeRails(liveRails, fallbackRails)
+    railsCache[cacheKey] = {
+      data: result,
+      expiresAt: Date.now() + RAILS_CACHE_TTL,
+    }
+    return result
   }
 
   try {
@@ -1488,8 +1512,18 @@ export async function fetchTmdbHomeRails(
       })
     }
 
-    return await withTimeout(dynamicRails(), tmdbHomeRailsTimeoutMs)
+    const result = await withTimeout(dynamicRails(), tmdbHomeRailsTimeoutMs)
+    railsCache[cacheKey] = {
+      data: result,
+      expiresAt: Date.now() + RAILS_CACHE_TTL,
+    }
+    return result
   } catch {
-    return completeHomeRails(liveRails, fallbackRails)
+    const result = completeHomeRails(liveRails, fallbackRails)
+    railsCache[cacheKey] = {
+      data: result,
+      expiresAt: Date.now() + RAILS_CACHE_TTL,
+    }
+    return result
   }
 }

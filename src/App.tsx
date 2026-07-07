@@ -32,6 +32,9 @@ import {
   Trash2,
   Tv,
   VolumeX,
+  Eye,
+  EyeOff,
+  Pencil,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -58,7 +61,7 @@ import {
 } from './tmdb'
 import './App.css'
 
-type Screen = 'home' | 'movies' | 'tv' | 'detail' | 'watch' | 'search' | 'library'
+type Screen = 'home' | 'movies' | 'tv' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles'
 type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Library' | 'Search'
 type SavedMovies = Record<string, Movie>
 type WatchHistoryEntry = {
@@ -83,6 +86,50 @@ type LandscapeCard = {
 const savedMoviesKey = 'omdb.apple-tv-style.saved-movies'
 const watchHistoryKey = 'omdb.apple-tv-style.watch-history'
 const streamProviderKey = 'omdb.apple-tv-style.stream-provider'
+const streamSandboxKey = 'omdb.apple-tv-style.stream-sandbox'
+const homeCacheKey = 'omdb.apple-tv-style.home-cache-v2'
+const currentUserKey = 'omdb.apple-tv-style.current-user'
+
+type UserInfo = {
+  name: string
+  email: string
+  avatarColor?: string
+}
+
+function readCurrentUser(): UserInfo | null {
+  try {
+    const saved = window.localStorage.getItem(currentUserKey)
+    return saved ? (JSON.parse(saved) as UserInfo) : null
+  } catch {
+    return null
+  }
+}
+
+type HomeCache = {
+  movies: Movie[]
+  tvShows: Movie[]
+  movieCollection: MediaCollection
+  tvShowCollection: MediaCollection
+  tmdbHomeRails: TmdbHomeRails
+  homeHeroMovie: Movie | null
+}
+
+function readHomeCache(): HomeCache | null {
+  try {
+    const saved = window.localStorage.getItem(homeCacheKey)
+    return saved ? (JSON.parse(saved) as HomeCache) : null
+  } catch {
+    return null
+  }
+}
+
+function getInitials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '👤'
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase()
+}
+
 const heroAutoAdvanceMs = 6000
 const emptyMediaCollection: MediaCollection = {
   top: [],
@@ -161,9 +208,19 @@ function readStreamProvider(): StreamProvider {
   }
 }
 
+function readStreamSandboxEnabled() {
+  try {
+    return window.localStorage.getItem(streamSandboxKey) !== 'off'
+  } catch {
+    return true
+  }
+}
+
 function readSavedMovies(): SavedMovies {
   try {
-    const saved = window.localStorage.getItem(savedMoviesKey)
+    const user = readCurrentUser()
+    const key = user ? `${savedMoviesKey}.${user.name}` : savedMoviesKey
+    const saved = window.localStorage.getItem(key)
     return saved ? (JSON.parse(saved) as SavedMovies) : {}
   } catch {
     return {}
@@ -172,7 +229,9 @@ function readSavedMovies(): SavedMovies {
 
 function readWatchHistory(): WatchHistory {
   try {
-    const saved = window.localStorage.getItem(watchHistoryKey)
+    const user = readCurrentUser()
+    const key = user ? `${watchHistoryKey}.${user.name}` : watchHistoryKey
+    const saved = window.localStorage.getItem(key)
     return saved ? (JSON.parse(saved) as WatchHistory) : {}
   } catch {
     return {}
@@ -592,24 +651,104 @@ function resetMagneticNavOffset(event: PointerEvent<HTMLElement>) {
   event.currentTarget.style.setProperty('--nav-magnetic-y', '0px')
 }
 
+type UserProfile = {
+  name: string
+  avatarColor: string
+}
+
 function App() {
   const appShellRef = useRef<HTMLElement | null>(null)
-  const [screen, setScreenState] = useState<Screen>(getInitialScreen)
-  const [movies, setMovies] = useState<Movie[]>([])
-  const [tvShows, setTvShows] = useState<Movie[]>([])
+  const [screen, setScreenState] = useState<Screen>(() => {
+    const savedUser = readCurrentUser()
+    if (!savedUser) {
+      return 'login'
+    }
+    return getInitialScreen()
+  })
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(readCurrentUser)
+  const [loginBackScreen, setLoginBackScreen] = useState<Screen>('home')
+  const [tempUser, setTempUser] = useState<UserInfo | null>(null)
+  const [profiles, setProfiles] = useState<UserProfile[]>(() => {
+    try {
+      const saved = window.localStorage.getItem('omdb.apple-tv-style.profiles-list')
+      return saved ? (JSON.parse(saved) as UserProfile[]) : [{ name: 'Children', avatarColor: 'kids' }]
+    } catch {
+      return [{ name: 'Children', avatarColor: 'kids' }]
+    }
+  })
+
+  const handleAddProfile = (name: string, avatarColor: string) => {
+    const newProfile: UserProfile = {
+      name: name,
+      avatarColor: avatarColor,
+    }
+    const updated = [...profiles, newProfile]
+    setProfiles(updated)
+    window.localStorage.setItem('omdb.apple-tv-style.profiles-list', JSON.stringify(updated))
+  }
+
+  const handleEditProfile = (oldName: string, newName: string, avatarColor: string) => {
+    const updated = profiles.map((p) => {
+      if (p.name === oldName) {
+        return { name: newName, avatarColor }
+      }
+      return p
+    })
+    setProfiles(updated)
+    window.localStorage.setItem('omdb.apple-tv-style.profiles-list', JSON.stringify(updated))
+
+    if (oldName !== newName) {
+      const oldSaved = window.localStorage.getItem(`${savedMoviesKey}.${oldName}`)
+      if (oldSaved) {
+        window.localStorage.setItem(`${savedMoviesKey}.${newName}`, oldSaved)
+        window.localStorage.removeItem(`${savedMoviesKey}.${oldName}`)
+      }
+      const oldHistory = window.localStorage.getItem(`${watchHistoryKey}.${oldName}`)
+      if (oldHistory) {
+        window.localStorage.setItem(`${watchHistoryKey}.${newName}`, oldHistory)
+        window.localStorage.removeItem(`${watchHistoryKey}.${oldName}`)
+      }
+
+      if (currentUser && currentUser.name === oldName) {
+        setCurrentUser({ name: newName, email: currentUser.email })
+      }
+    }
+  }
+
+  const handleDeleteProfile = (name: string) => {
+    let updated = profiles.filter((p) => p.name !== name)
+    if (updated.length === 0) {
+      updated = [{ name: 'Children', avatarColor: 'kids' }]
+    }
+    setProfiles(updated)
+    window.localStorage.setItem('omdb.apple-tv-style.profiles-list', JSON.stringify(updated))
+
+    window.localStorage.removeItem(`${savedMoviesKey}.${name}`)
+    window.localStorage.removeItem(`${watchHistoryKey}.${name}`)
+
+    if (currentUser && currentUser.name === name) {
+      setCurrentUser(null)
+      setScreenState('login')
+    }
+  }
+
+  const initialCache = useMemo(() => readHomeCache(), [])
+
+  const [movies, setMovies] = useState<Movie[]>(() => initialCache?.movies ?? [])
+  const [tvShows, setTvShows] = useState<Movie[]>(() => initialCache?.tvShows ?? [])
   const [movieCollection, setMovieCollection] =
-    useState<MediaCollection>(emptyMediaCollection)
+    useState<MediaCollection>(() => initialCache?.movieCollection ?? emptyMediaCollection)
   const [tvShowCollection, setTvShowCollection] =
-    useState<MediaCollection>(emptyMediaCollection)
+    useState<MediaCollection>(() => initialCache?.tvShowCollection ?? emptyMediaCollection)
   const [tmdbHomeRails, setTmdbHomeRails] =
-    useState<TmdbHomeRails>(emptyTmdbHomeRails)
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
-  const [homeHeroMovie, setHomeHeroMovie] = useState<Movie | null>(null)
+    useState<TmdbHomeRails>(() => initialCache?.tmdbHomeRails ?? emptyTmdbHomeRails)
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
+  const [homeHeroMovie, setHomeHeroMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
   const [detailBackScreen, setDetailBackScreen] = useState<Screen>('home')
   const [savedMovies, setSavedMovies] = useState<SavedMovies>(readSavedMovies)
   const [watchHistory, setWatchHistory] =
     useState<WatchHistory>(readWatchHistory)
-  const [homeLoading, setHomeLoading] = useState(true)
+  const [homeLoading, setHomeLoading] = useState(() => !initialCache)
   const [homeError, setHomeError] = useState('')
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
@@ -621,6 +760,9 @@ function App() {
   const [streamError, setStreamError] = useState('')
   const [streamProvider, setStreamProvider] =
     useState<StreamProvider>(readStreamProvider)
+  const [streamSandboxEnabled, setStreamSandboxEnabled] = useState(
+    readStreamSandboxEnabled,
+  )
   const [navScrolled, setNavScrolled] = useState(false)
   const [navScrollProgress, setNavScrollProgress] = useState(0)
 
@@ -693,11 +835,18 @@ function App() {
     })
   }
 
+  const openProfileOrLogin = () => {
+    setLoginBackScreen(screen)
+    setScreen('login')
+  }
+
   useEffect(() => {
     let isMounted = true
 
     async function loadMovies() {
-      setHomeLoading(true)
+      if (!initialCache) {
+        setHomeLoading(true)
+      }
       setHomeError('')
 
       try {
@@ -722,8 +871,26 @@ function App() {
           setMovieCollection(nextTmdbHomeRails.movieCollection)
           setTvShowCollection(nextTmdbHomeRails.tvShowCollection)
           setTmdbHomeRails(nextTmdbHomeRails)
-          setHomeHeroMovie((current) => current ?? nextMovies[0] ?? null)
-          setSelectedMovie((current) => current ?? nextMovies[0] ?? null)
+          
+          const freshHero = nextMovies[0] ?? null
+          setHomeHeroMovie((current) => current ?? freshHero)
+          setSelectedMovie((current) => current ?? freshHero)
+
+          try {
+            window.localStorage.setItem(
+              homeCacheKey,
+              JSON.stringify({
+                movies: nextMovies,
+                tvShows: nextTvShows,
+                movieCollection: nextTmdbHomeRails.movieCollection,
+                tvShowCollection: nextTmdbHomeRails.tvShowCollection,
+                tmdbHomeRails: nextTmdbHomeRails,
+                homeHeroMovie: freshHero,
+              })
+            )
+          } catch (err) {
+            console.error('Failed to write home cache', err)
+          }
           return
         }
 
@@ -743,8 +910,26 @@ function App() {
         setMovieCollection(nextMovieCollection)
         setTvShowCollection(nextTvShowCollection)
         setTmdbHomeRails(nextTmdbHomeRails)
-        setHomeHeroMovie((current) => current ?? nextMovies[0] ?? null)
-        setSelectedMovie((current) => current ?? nextMovies[0] ?? null)
+        
+        const freshHero = nextMovies[0] ?? null
+        setHomeHeroMovie((current) => current ?? freshHero)
+        setSelectedMovie((current) => current ?? freshHero)
+
+        try {
+          window.localStorage.setItem(
+            homeCacheKey,
+            JSON.stringify({
+              movies: nextMovies,
+              tvShows: nextTvShows,
+              movieCollection: nextMovieCollection,
+              tvShowCollection: nextTvShowCollection,
+              tmdbHomeRails: nextTmdbHomeRails,
+              homeHeroMovie: freshHero,
+            })
+          )
+        } catch (err) {
+          console.error('Failed to write home cache', err)
+        }
       } catch (error) {
         if (!isMounted) {
           return
@@ -754,7 +939,10 @@ function App() {
           error instanceof Error
             ? error.message
             : 'Could not load movies and TV shows.'
-        setHomeError(message)
+        
+        if (!initialCache) {
+          setHomeError(message)
+        }
       } finally {
         if (isMounted) {
           setHomeLoading(false)
@@ -767,19 +955,51 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [initialCache])
 
   useEffect(() => {
-    window.localStorage.setItem(savedMoviesKey, JSON.stringify(savedMovies))
-  }, [savedMovies])
+    if (currentUser) {
+      window.localStorage.setItem(`${savedMoviesKey}.${currentUser.name}`, JSON.stringify(savedMovies))
+    } else {
+      window.localStorage.setItem(savedMoviesKey, JSON.stringify(savedMovies))
+    }
+  }, [savedMovies, currentUser])
 
   useEffect(() => {
-    window.localStorage.setItem(watchHistoryKey, JSON.stringify(watchHistory))
-  }, [watchHistory])
+    if (currentUser) {
+      window.localStorage.setItem(`${watchHistoryKey}.${currentUser.name}`, JSON.stringify(watchHistory))
+    } else {
+      window.localStorage.setItem(watchHistoryKey, JSON.stringify(watchHistory))
+    }
+  }, [watchHistory, currentUser])
+
+  useEffect(() => {
+    if (currentUser) {
+      window.localStorage.setItem(currentUserKey, JSON.stringify(currentUser))
+
+      // Switch watch list and history for the active profile
+      const savedStr = window.localStorage.getItem(`${savedMoviesKey}.${currentUser.name}`)
+      setSavedMovies(savedStr ? JSON.parse(savedStr) : {})
+
+      const historyStr = window.localStorage.getItem(`${watchHistoryKey}.${currentUser.name}`)
+      setWatchHistory(historyStr ? JSON.parse(historyStr) : {})
+    } else {
+      window.localStorage.removeItem(currentUserKey)
+      setSavedMovies({})
+      setWatchHistory({})
+    }
+  }, [currentUser])
 
   useEffect(() => {
     window.localStorage.setItem(streamProviderKey, streamProvider)
   }, [streamProvider])
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      streamSandboxKey,
+      streamSandboxEnabled ? 'on' : 'off',
+    )
+  }, [streamSandboxEnabled])
 
   useEffect(() => {
     let frameId = 0
@@ -1301,6 +1521,9 @@ function App() {
           onMarkWatched={markWatchedMovie}
           onRemoveContinue={removeContinueMovie}
           onRemoveWatchlist={removeWatchlistMovie}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          profiles={profiles}
         />
       )}
 
@@ -1315,6 +1538,9 @@ function App() {
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSave={toggleSaved}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          profiles={profiles}
         />
       )}
 
@@ -1362,9 +1588,11 @@ function App() {
           streamLoading={streamLoading}
           streamError={streamError}
           streamProvider={streamProvider}
+          streamSandboxEnabled={streamSandboxEnabled}
           onBack={() => setScreen('detail')}
           onSave={() => toggleSaved(selectedMovie)}
           onStartWatching={markContinueWatching}
+          onStreamSandboxChange={setStreamSandboxEnabled}
           onStreamProviderChange={setStreamProvider}
         />
       )}
@@ -1385,6 +1613,9 @@ function App() {
           }}
           onOpenDetail={openDetail}
           onClose={() => setScreen('home')}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          profiles={profiles}
         />
       )}
 
@@ -1392,10 +1623,59 @@ function App() {
         <LibraryScreen
           savedMovies={savedList}
           onOpenDetail={openDetail}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          profiles={profiles}
         />
       )}
 
-      {screen !== 'search' && (
+      {screen === 'login' && (
+        <LoginScreen
+          currentUser={currentUser}
+          onLogin={(user) => {
+            setTempUser(user)
+            setScreen('profiles')
+          }}
+          onLogout={() => {
+            setCurrentUser(null)
+            setScreen('login')
+          }}
+          onBack={() => setScreen(loginBackScreen)}
+          savedMoviesCount={savedList.length}
+          watchHistoryCount={Object.keys(watchHistory).length}
+          onSwitchProfile={() => {
+            setTempUser(currentUser)
+            setScreen('profiles')
+          }}
+          profiles={profiles}
+        />
+      )}
+
+      {screen === 'profiles' && (
+        <ProfilesScreen
+          profiles={profiles}
+          onSelectProfile={(profileName) => {
+            const matchedProfile = profiles.find((p) => p.name === profileName)
+            const finalUser = {
+              name: profileName,
+              email: tempUser?.email ?? currentUser?.email ?? 'guest@apple-tv.com',
+              avatarColor: matchedProfile?.avatarColor,
+            }
+            setCurrentUser(finalUser)
+            setScreen(loginBackScreen)
+            setTempUser(null)
+          }}
+          onAddProfile={handleAddProfile}
+          onEditProfile={handleEditProfile}
+          onDeleteProfile={handleDeleteProfile}
+          onBack={() => {
+            setScreen('login')
+            setTempUser(null)
+          }}
+        />
+      )}
+
+      {screen !== 'search' && screen !== 'login' && screen !== 'profiles' && (
         <BottomNav
           active={activeTab}
           onHome={() => setScreen('home')}
@@ -1405,7 +1685,7 @@ function App() {
           onLibrary={() => setScreen('library')}
         />
       )}
-      {screen !== 'detail' && screen !== 'watch' && (
+      {screen !== 'detail' && screen !== 'watch' && screen !== 'login' && screen !== 'profiles' && (
         <DesktopNav
           active={activeTab}
           onHome={() => setScreen('home')}
@@ -1413,6 +1693,9 @@ function App() {
           onTvShows={() => setScreen('tv')}
           onSearch={() => setScreen('search')}
           onLibrary={() => setScreen('library')}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          profiles={profiles}
         />
       )}
     </main>
@@ -1436,6 +1719,9 @@ type HomeScreenProps = {
   onMarkWatched: (movie: Movie) => void
   onRemoveContinue: (movie: Movie) => void
   onRemoveWatchlist: (movie: Movie) => void
+  currentUser: UserInfo | null
+  onProfile: () => void
+  profiles: UserProfile[]
 }
 
 function HomeScreen({
@@ -1455,6 +1741,9 @@ function HomeScreen({
   onMarkWatched,
   onRemoveContinue,
   onRemoveWatchlist,
+  currentUser,
+  onProfile,
+  profiles,
 }: HomeScreenProps) {
   const heroMovies = useMemo(() => movies.slice(0, 6), [movies])
   const movieTopTenMovies = useMemo(
@@ -1581,8 +1870,13 @@ function HomeScreen({
             <button className="mute-button" type="button" title="Muted">
               <VolumeX />
             </button>
-            <button className="avatar-button" type="button" title="Profile">
-              AB
+            <button 
+              className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
+              type="button" 
+              title="Profile"
+              onClick={onProfile}
+            >
+              {renderProfileAvatarMini(currentUser, profiles)}
             </button>
           </div>
         </header>
@@ -1726,6 +2020,9 @@ type BrowseScreenProps = {
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSave: (movie: Movie) => void
+  currentUser: UserInfo | null
+  onProfile: () => void
+  profiles: UserProfile[]
 }
 
 function BrowseScreen({
@@ -1737,6 +2034,9 @@ function BrowseScreen({
   onOpenDetail,
   onPlay,
   onSave,
+  currentUser,
+  onProfile,
+  profiles,
 }: BrowseScreenProps) {
   const [browseHeroIndex, setBrowseHeroIndex] = useState(0)
   const isTvMode = mode === 'tv'
@@ -1877,8 +2177,13 @@ function BrowseScreen({
               <button className="mute-button" type="button" title="Muted">
                 <VolumeX />
               </button>
-              <button className="avatar-button" type="button" title="Profile">
-                AB
+              <button 
+                className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
+                type="button" 
+                title="Profile"
+                onClick={onProfile}
+              >
+                {renderProfileAvatarMini(currentUser, profiles)}
               </button>
             </div>
           </header>
@@ -2687,9 +2992,11 @@ type WatchScreenProps = {
   streamLoading: boolean
   streamError: string
   streamProvider: StreamProvider
+  streamSandboxEnabled: boolean
   onBack: () => void
   onSave: () => void
   onStartWatching: (movie: Movie) => void
+  onStreamSandboxChange: (enabled: boolean) => void
   onStreamProviderChange: (provider: StreamProvider) => void
 }
 
@@ -2699,9 +3006,11 @@ function WatchScreen({
   streamLoading,
   streamError,
   streamProvider,
+  streamSandboxEnabled,
   onBack,
   onSave,
   onStartWatching,
+  onStreamSandboxChange,
   onStreamProviderChange,
 }: WatchScreenProps) {
   const streamUrl = buildStreamUrl(movie, streamProvider)
@@ -2736,6 +3045,11 @@ function WatchScreen({
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
             referrerPolicy="no-referrer"
+            sandbox={
+              streamSandboxEnabled
+                ? 'allow-forms allow-presentation allow-same-origin allow-scripts'
+                : undefined
+            }
           />
         ) : streamUrl ? (
           <div
@@ -2816,6 +3130,24 @@ function WatchScreen({
 
       <section className="content-section watch-card-section">
         <h2 className="visually-hidden">Streaming servers</h2>
+        <label className="stream-sandbox-toggle">
+          <span>
+            <strong>Sandbox</strong>
+            <small>
+              {streamSandboxEnabled
+                ? 'Blocks popups and redirects'
+                : 'Allows full player behavior'}
+            </small>
+          </span>
+          <input
+            type="checkbox"
+            checked={streamSandboxEnabled}
+            onChange={(event) => onStreamSandboxChange(event.target.checked)}
+          />
+          <span aria-hidden="true" className="toggle-track">
+            <span />
+          </span>
+        </label>
         <div
           className="server-selector"
           role="radiogroup"
@@ -2889,6 +3221,9 @@ type SearchScreenProps = {
   onClear: () => void
   onOpenDetail: (movie: Movie) => void
   onClose: () => void
+  currentUser: UserInfo | null
+  onProfile: () => void
+  profiles: UserProfile[]
 }
 
 function SearchScreen({
@@ -2902,6 +3237,9 @@ function SearchScreen({
   onClear,
   onOpenDetail,
   onClose,
+  currentUser,
+  onProfile,
+  profiles,
 }: SearchScreenProps) {
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -2912,8 +3250,13 @@ function SearchScreen({
     <section className="screen search-screen">
       <header className="search-header">
         <h1>Search</h1>
-        <button className="avatar-button" type="button" title="Profile">
-          AB
+        <button 
+          className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
+          type="button" 
+          title="Profile"
+          onClick={onProfile}
+        >
+          {renderProfileAvatarMini(currentUser, profiles)}
         </button>
       </header>
 
@@ -3017,43 +3360,1240 @@ function SearchScreen({
   )
 }
 
+type LoginScreenProps = {
+  currentUser: UserInfo | null
+  onLogin: (user: UserInfo) => void
+  onLogout: () => void
+  onBack: () => void
+  savedMoviesCount: number
+  watchHistoryCount: number
+  onSwitchProfile: () => void
+  profiles: UserProfile[]
+}
+
+function LoginScreen({
+  currentUser,
+  onLogin,
+  onLogout,
+  onBack,
+  savedMoviesCount,
+  watchHistoryCount,
+  onSwitchProfile,
+  profiles,
+}: LoginScreenProps) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setError('')
+
+    const allowedEmails = [
+      'avnishpc00@gmail.com',
+      'appclone@gmail.com',
+      'netflixclone@gmail.com',
+    ]
+    const requiredPassword = 'Avnish@00'
+
+    const trimmedEmail = email.trim()
+    const trimmedPassword = password.trim()
+
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      setError('Please enter a valid email address.')
+      return
+    }
+
+    if (trimmedPassword.length < 6) {
+      setError('Password must be at least 6 characters.')
+      return
+    }
+
+    const isAllowedEmail = allowedEmails.some(
+      (allowed) => allowed.toLowerCase() === trimmedEmail.toLowerCase()
+    )
+
+    if (!isAllowedEmail || trimmedPassword !== requiredPassword) {
+      setError('Invalid email or password.')
+      return
+    }
+
+    setLoading(true)
+
+    setTimeout(() => {
+      setLoading(false)
+      onLogin({
+        name: trimmedEmail.split('@')[0],
+        email: trimmedEmail,
+      })
+    }, 1500)
+  }
+
+  const handleSocialLogin = (provider: 'Apple' | 'Google') => {
+    setError('')
+    setLoading(true)
+    setTimeout(() => {
+      setLoading(false)
+      const targetEmail = provider === 'Apple' ? 'Appclone@gmail.com' : 'avnishpc00@gmail.com'
+      onLogin({
+        name: targetEmail.split('@')[0],
+        email: targetEmail,
+      })
+    }, 1200)
+  }
+
+  if (currentUser) {
+    return (
+      <section className="screen login-screen profile-mode">
+        <div className="login-background">
+          <div className="blob blob-purple"></div>
+          <div className="blob blob-blue"></div>
+          <div className="blob blob-cyan"></div>
+        </div>
+        
+        <header className="login-header">
+          <button className="round-nav" type="button" onClick={onBack} title="Back">
+            <ChevronLeft />
+          </button>
+          <h1>Account</h1>
+          <div className="placeholder-right" />
+        </header>
+
+        <section className="login-content">
+          <div className="glass-card profile-card">
+            <div className={`profile-avatar-large ${currentUser.avatarColor ? 'has-avatar-img' : ''}`}>
+              {renderProfileAvatarLarge(currentUser, profiles)}
+            </div>
+            
+            <h2 className="user-name">{currentUser.name}</h2>
+            <p className="user-email">{currentUser.email}</p>
+            
+            <div className="membership-tag">
+              <span className="premium-badge">Apple One Premier</span>
+            </div>
+
+            <hr className="card-divider" />
+
+            <div className="stats-grid">
+              <div className="stat-item">
+                <span className="stat-num">{watchHistoryCount}</span>
+                <span className="stat-label">Watched</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-num">{savedMoviesCount}</span>
+                <span className="stat-label">Library</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-num">4K HDR</span>
+                <span className="stat-label">Quality</span>
+              </div>
+            </div>
+
+            <div className="profile-actions">
+              <button className="secondary-play full-width-btn" type="button" onClick={onBack}>
+                Continue Watching
+              </button>
+              <button 
+                className="secondary-play full-width-btn" 
+                type="button" 
+                onClick={onSwitchProfile}
+                style={{ marginTop: '8px', background: 'rgba(255, 255, 255, 0.08)', color: '#fff', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+              >
+                Switch Profile
+              </button>
+              <button className="destructive-btn full-width-btn" type="button" onClick={onLogout} style={{ marginTop: '8px' }}>
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </section>
+      </section>
+    )
+  }
+
+  return (
+    <section className="screen login-screen">
+      <div className="login-background">
+        <div className="blob blob-purple"></div>
+        <div className="blob blob-blue"></div>
+        <div className="blob blob-cyan"></div>
+      </div>
+
+      <header className="login-header" style={{ justifyContent: 'center' }}>
+        <h1>Sign In</h1>
+      </header>
+
+      <section className="login-content">
+        <div className="glass-card login-card">
+          <div className="logo-container">
+            <div className="apple-tv-logo-symbol">tv</div>
+            <h2>Apple TV</h2>
+          </div>
+
+          {error && <div className="login-error-msg">{error}</div>}
+
+          <form onSubmit={handleFormSubmit} className="login-form">
+            <div className="input-group">
+              <input 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                placeholder="Email Address" 
+                disabled={loading} 
+                required
+              />
+            </div>
+
+            <div className="input-group password-input-group">
+              <input 
+                type={showPassword ? 'text' : 'password'} 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                placeholder="Password" 
+                disabled={loading} 
+                required
+              />
+              <button
+                type="button"
+                className="toggle-password-btn"
+                onClick={() => setShowPassword(!showPassword)}
+                disabled={loading}
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff /> : <Eye />}
+              </button>
+            </div>
+
+            <button className="primary-play submit-btn" type="submit" disabled={loading}>
+              {loading ? (
+                <>
+                  <LoaderCircle className="spin-icon-btn" />
+                  <span>Authenticating...</span>
+                </>
+              ) : (
+                <span>Sign In with Email</span>
+              )}
+            </button>
+          </form>
+
+          <div className="divider-or">
+            <span>or</span>
+          </div>
+
+          <div className="social-login-group">
+            <button 
+              className="social-btn apple-btn" 
+              type="button" 
+              onClick={() => handleSocialLogin('Apple')}
+              disabled={loading}
+            >
+              <span className="social-icon"></span>
+              <span>Sign In with Apple</span>
+            </button>
+            <button 
+              className="social-btn google-btn" 
+              type="button" 
+              onClick={() => handleSocialLogin('Google')}
+              disabled={loading}
+            >
+              <span className="social-icon">G</span>
+              <span>Sign In with Google</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function getAvatarSrc(avatarKey: string): string {
+  if (avatarKey.startsWith('elite/')) {
+    return `/src/assets/${avatarKey}`
+  }
+  if (avatarKey.startsWith('stranger/')) {
+    const filename = avatarKey.replace('stranger/', '')
+    return `/src/assets/stranger things/${filename}`
+  }
+  if (avatarKey.startsWith('squid/')) {
+    const filename = avatarKey.replace('squid/', '')
+    return `/src/assets/squide game/${filename}`
+  }
+  if (avatarKey.startsWith('money/')) {
+    const filename = avatarKey.replace('money/', '')
+    return `/src/assets/money heist/${filename}`
+  }
+  if (avatarKey.startsWith('dark/')) {
+    const filename = avatarKey.replace('dark/', '')
+    return `/src/assets/dark/${filename}`
+  }
+  return `/src/assets/classic_${avatarKey}.png`
+}
+
+function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserProfile[]) {
+  if (!currentUser) return '👤'
+  const matched = profiles.find((p) => p.name.toLowerCase() === currentUser.name.toLowerCase())
+  const avatarColor = currentUser.avatarColor ?? matched?.avatarColor
+  
+  if (!avatarColor) {
+    return getInitials(currentUser.name)
+  }
+
+  if (avatarColor === 'kids') {
+    return (
+      <div 
+        className="profile-avatar avatar-kids mini-avatar" 
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          borderRadius: '50%', 
+          overflow: 'hidden', 
+          position: 'relative',
+          display: 'block'
+        }}
+      >
+        <div className="kids-bg" style={{ transform: 'scale(1.2)', width: '100%', height: '100%' }}>
+          <div className="stripe red"></div>
+          <div className="stripe orange"></div>
+          <div className="stripe yellow"></div>
+          <div className="stripe green"></div>
+          <div className="stripe blue"></div>
+        </div>
+        <span className="kids-text" style={{ fontSize: '10px', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 800 }}>kids</span>
+      </div>
+    )
+  }
+
+  return (
+    <div 
+      className="profile-avatar mini-avatar" 
+      style={{ 
+        width: '100%', 
+        height: '100%', 
+        borderRadius: '50%', 
+        overflow: 'hidden',
+        display: 'block'
+      }}
+    >
+      <img 
+        src={getAvatarSrc(avatarColor)} 
+        alt={currentUser.name} 
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
+    </div>
+  )
+}
+
+function renderProfileAvatarLarge(currentUser: UserInfo | null, profiles: UserProfile[]) {
+  if (!currentUser) return '👤'
+  const matched = profiles.find((p) => p.name.toLowerCase() === currentUser.name.toLowerCase())
+  const avatarColor = currentUser.avatarColor ?? matched?.avatarColor
+  
+  if (!avatarColor) {
+    return getInitials(currentUser.name)
+  }
+
+  if (avatarColor === 'kids') {
+    return (
+      <div 
+        className="profile-avatar avatar-kids large-avatar" 
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          borderRadius: '16px', 
+          overflow: 'hidden', 
+          position: 'relative',
+          display: 'block'
+        }}
+      >
+        <div className="kids-bg" style={{ transform: 'scale(1.2)', width: '100%', height: '100%' }}>
+          <div className="stripe red"></div>
+          <div className="stripe orange"></div>
+          <div className="stripe yellow"></div>
+          <div className="stripe green"></div>
+          <div className="stripe blue"></div>
+        </div>
+        <span className="kids-text large" style={{ fontSize: '24px', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 800 }}>kids</span>
+      </div>
+    )
+  }
+
+  return (
+    <img 
+      src={getAvatarSrc(avatarColor)} 
+      alt={currentUser.name} 
+      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '16px' }}
+    />
+  )
+}
+
+type ProfilesScreenProps = {
+  profiles: UserProfile[]
+  onSelectProfile: (profileName: string) => void
+  onAddProfile: (name: string, avatarColor: string) => void
+  onEditProfile: (oldName: string, newName: string, avatarColor: string) => void
+  onDeleteProfile: (name: string) => void
+  onBack: () => void
+}
+
+function ProfilesScreen({
+  profiles,
+  onSelectProfile,
+  onAddProfile,
+  onEditProfile,
+  onDeleteProfile,
+  onBack
+}: ProfilesScreenProps) {
+  const [isAdding, setIsAdding] = useState(false)
+  const [isChoosingIcon, setIsChoosingIcon] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [isKids, setIsKids] = useState(false)
+  const [selectedAvatarColor, setSelectedAvatarColor] = useState('red')
+  const [error, setError] = useState('')
+
+  // Edit profile states
+  const [isManaging, setIsManaging] = useState(false)
+  const [editingProfile, setEditingProfile] = useState<UserProfile | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editIsKids, setEditIsKids] = useState(false)
+
+  const handleCreate = () => {
+    setError('')
+    const trimmed = newName.trim()
+    if (!trimmed) {
+      setError('Profile name cannot be empty.')
+      return
+    }
+    if (profiles.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
+      setError('A profile with this name already exists.')
+      return
+    }
+    const finalColor = isKids ? 'kids' : selectedAvatarColor
+    onAddProfile(trimmed, finalColor)
+    setNewName('')
+    setIsKids(false)
+    setSelectedAvatarColor('red')
+    setIsAdding(false)
+  }
+
+  const handleSaveEdit = () => {
+    setError('')
+    if (!editingProfile) return
+    const trimmed = editName.trim()
+    if (!trimmed) {
+      setError('Profile name cannot be empty.')
+      return
+    }
+    if (profiles.some((p) => p.name.toLowerCase() === trimmed.toLowerCase() && p.name !== editingProfile.name)) {
+      setError('A profile with this name already exists.')
+      return
+    }
+    const finalColor = editIsKids ? 'kids' : selectedAvatarColor
+    onEditProfile(editingProfile.name, trimmed, finalColor)
+    setEditingProfile(null)
+    setError('')
+  }
+
+  const handleDelete = () => {
+    if (!editingProfile) return
+    onDeleteProfile(editingProfile.name)
+    setEditingProfile(null)
+    setError('')
+  }
+
+  if (editingProfile) {
+    if (isChoosingIcon) {
+      return (
+        <section className="screen choose-icon-screen">
+          <header className="choose-icon-header">
+            <button 
+              className="round-nav" 
+              type="button" 
+              onClick={() => setIsChoosingIcon(false)} 
+              title="Back"
+            >
+              <ChevronLeft />
+            </button>
+            <h1>Choose Icon</h1>
+            <div className="placeholder-right" />
+          </header>
+
+          <div className="choose-icon-container">
+            <div className="choose-icon-section">
+              <h2>The Classics</h2>
+              <div className="choose-icon-row">
+                {['red', 'yellow', 'blue', 'grey'].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(color)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={getAvatarSrc(color)} 
+                      alt={color} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Elite</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png',
+                  'image copy 10.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`elite/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/elite/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Stranger Things</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png',
+                  'image copy 10.png',
+                  'image copy 11.png',
+                  'image copy 12.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`stranger/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/stranger things/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Squid Game</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png',
+                  'image copy 10.png',
+                  'image copy 11.png',
+                  'image copy 12.png',
+                  'image copy 13.png',
+                  'image copy 14.png',
+                  'image copy 15.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`squid/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/squide game/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Money Heist</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`money/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/money heist/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Dark</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`dark/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/dark/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )
+    }
+
+    return (
+      <section className="screen add-profile-screen edit-profile-screen">
+        <header className="add-profile-header">
+          <button 
+            className="header-text-btn" 
+            type="button" 
+            onClick={() => {
+              setEditingProfile(null)
+              setError('')
+            }}
+          >
+            Cancel
+          </button>
+          <h1>Edit Profile</h1>
+          <button 
+            className="header-text-btn save-btn" 
+            type="button" 
+            onClick={handleSaveEdit}
+            disabled={!editName.trim()}
+          >
+            Save
+          </button>
+        </header>
+
+        <div className="add-profile-container">
+          <div className="avatar-edit-container">
+            {editIsKids ? (
+              <div className="profile-avatar avatar-kids large-avatar">
+                <div className="kids-bg">
+                  <div className="stripe red"></div>
+                  <div className="stripe orange"></div>
+                  <div className="stripe yellow"></div>
+                  <div className="stripe green"></div>
+                  <div className="stripe blue"></div>
+                </div>
+                <span className="kids-text large">kids</span>
+              </div>
+            ) : (
+              <div className="profile-avatar large-avatar" style={{ overflow: 'hidden' }}>
+                <img 
+                  src={getAvatarSrc(selectedAvatarColor)} 
+                  alt="Selected Avatar" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              </div>
+            )}
+            <button 
+              className="avatar-edit-pencil-btn" 
+              type="button" 
+              onClick={() => setIsChoosingIcon(true)}
+              title="Change Icon"
+            >
+              <Pencil size={18} />
+            </button>
+          </div>
+
+          <div className="add-profile-form">
+            {error && <div className="login-error-msg center-text">{error}</div>}
+            <div className="input-group">
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Profile name"
+                maxLength={15}
+                required
+              />
+            </div>
+
+            <div className="children-toggle-section">
+              <button 
+                type="button"
+                className={`ios-toggle-switch ${editIsKids ? 'active' : ''}`}
+                onClick={() => setEditIsKids(!editIsKids)}
+              >
+                <span className="toggle-handle" />
+              </button>
+              <h2 className="children-title-label">Children's Profile</h2>
+              <p className="children-desc">
+                Made for children 12 and under, but parents have all the control.
+              </p>
+            </div>
+
+            <button
+              className="destructive-btn full-width-btn"
+              type="button"
+              onClick={handleDelete}
+              style={{ marginTop: '30px', height: '48px', width: '100%', maxWidth: '280px', borderRadius: '8px' }}
+            >
+              Delete Profile
+            </button>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  if (isAdding) {
+    if (isChoosingIcon) {
+      return (
+        <section className="screen choose-icon-screen">
+          <header className="choose-icon-header">
+            <button 
+              className="round-nav" 
+              type="button" 
+              onClick={() => setIsChoosingIcon(false)} 
+              title="Back"
+            >
+              <ChevronLeft />
+            </button>
+            <h1>Choose Icon</h1>
+            <div className="placeholder-right" />
+          </header>
+
+          <div className="choose-icon-container">
+            <div className="choose-icon-section">
+              <h2>The Classics</h2>
+              <div className="choose-icon-row">
+                {['red', 'yellow', 'blue', 'grey'].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(color)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={getAvatarSrc(color)} 
+                      alt={color} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Elite</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png',
+                  'image copy 10.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`elite/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/elite/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Stranger Things</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png',
+                  'image copy 10.png',
+                  'image copy 11.png',
+                  'image copy 12.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`stranger/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/stranger things/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Squid Game</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png',
+                  'image copy 10.png',
+                  'image copy 11.png',
+                  'image copy 12.png',
+                  'image copy 13.png',
+                  'image copy 14.png',
+                  'image copy 15.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`squid/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/squide game/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Money Heist</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`money/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/money heist/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Dark</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
+                      setSelectedAvatarColor(`dark/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={`/src/assets/dark/${filename}`} 
+                      alt={filename} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )
+    }
+
+    return (
+      <section className="screen add-profile-screen">
+        <header className="add-profile-header">
+          <button 
+            className="header-text-btn" 
+            type="button" 
+            onClick={() => {
+              setIsAdding(false)
+              setNewName('')
+              setError('')
+              setIsKids(false)
+              setSelectedAvatarColor('red')
+            }}
+          >
+            Cancel
+          </button>
+          <h1>Add Profile</h1>
+          <button 
+            className="header-text-btn save-btn" 
+            type="button" 
+            onClick={handleCreate}
+            disabled={!newName.trim()}
+          >
+            Save
+          </button>
+        </header>
+
+        <div className="add-profile-container">
+          <div className="avatar-edit-container">
+            {isKids ? (
+              <div className="profile-avatar avatar-kids large-avatar">
+                <div className="kids-bg">
+                  <div className="stripe red"></div>
+                  <div className="stripe orange"></div>
+                  <div className="stripe yellow"></div>
+                  <div className="stripe green"></div>
+                  <div className="stripe blue"></div>
+                </div>
+                <span className="kids-text large">kids</span>
+              </div>
+            ) : (
+              <div className="profile-avatar large-avatar" style={{ overflow: 'hidden' }}>
+                <img 
+                  src={getAvatarSrc(selectedAvatarColor)} 
+                  alt="Selected Avatar" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              </div>
+            )}
+            <button 
+              className="avatar-edit-pencil-btn" 
+              type="button" 
+              onClick={() => setIsChoosingIcon(true)}
+              title="Change Icon"
+            >
+              <Pencil size={18} />
+            </button>
+          </div>
+
+          <div className="add-profile-form">
+            {error && <div className="login-error-msg center-text">{error}</div>}
+            <div className="input-group">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Profile name"
+                maxLength={15}
+                required
+              />
+            </div>
+
+            <div className="children-toggle-section">
+              <button 
+                type="button"
+                className={`ios-toggle-switch ${isKids ? 'active' : ''}`}
+                onClick={() => setIsKids(!isKids)}
+              >
+                <span className="toggle-handle" />
+              </button>
+              <h2 className="children-title-label">Children's Profile</h2>
+              <p className="children-desc">
+                Made for children 12 and under, but parents have all the control.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="screen profiles-screen">
+      <header className="profiles-header">
+        <button className="round-nav" type="button" onClick={onBack} title="Back">
+          <ChevronLeft />
+        </button>
+        <div className="placeholder-right" />
+      </header>
+
+      <div className="profiles-container">
+        <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : "Who's watching?"}</h1>
+        
+        <div className="profiles-grid">
+          {profiles.map((profile) => (
+            <button 
+              key={profile.name}
+              className="profile-item" 
+              type="button" 
+              onClick={() => {
+                if (isManaging) {
+                  setEditingProfile(profile)
+                  setEditName(profile.name)
+                  setEditIsKids(profile.avatarColor === 'kids')
+                  setSelectedAvatarColor(profile.avatarColor === 'kids' ? 'red' : profile.avatarColor)
+                } else {
+                  onSelectProfile(profile.name)
+                }
+              }}
+            >
+              <div className="profile-avatar-container" style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
+                {profile.avatarColor === 'kids' ? (
+                  <div className="profile-avatar avatar-kids">
+                    <div className="kids-bg">
+                      <div className="stripe red"></div>
+                      <div className="stripe orange"></div>
+                      <div className="stripe yellow"></div>
+                      <div className="stripe green"></div>
+                      <div className="stripe blue"></div>
+                    </div>
+                    <span className="kids-text">kids</span>
+                  </div>
+                ) : (
+                  <div className="profile-avatar" style={{ overflow: 'hidden', width: '100%', height: '100%' }}>
+                    <img 
+                      src={getAvatarSrc(profile.avatarColor)} 
+                      alt={profile.name} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </div>
+                )}
+                {isManaging && (
+                  <div className="profile-avatar-manage-overlay">
+                    <Pencil size={32} className="manage-pencil-icon" />
+                  </div>
+                )}
+              </div>
+              <span className="profile-name">{profile.name}</span>
+            </button>
+          ))}
+
+          <button className="profile-item" type="button" onClick={() => setIsAdding(true)}>
+            <div className="profile-avatar avatar-add">
+              <Plus size={32} />
+            </div>
+            <span className="profile-name">Add Profile</span>
+          </button>
+        </div>
+
+        <button 
+          className={`manage-profiles-btn ${isManaging ? 'active-done' : ''}`} 
+          type="button"
+          onClick={() => setIsManaging(!isManaging)}
+        >
+          {isManaging ? 'Done' : 'Manage Profiles'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
 type LibraryScreenProps = {
   savedMovies: Movie[]
   onOpenDetail: (movie: Movie) => void
+  currentUser: UserInfo | null
+  onProfile: () => void
+  profiles: UserProfile[]
 }
 
 function LibraryScreen({
   savedMovies,
   onOpenDetail,
+  currentUser,
+  onProfile,
+  profiles,
 }: LibraryScreenProps) {
   return (
     <section className="screen library-screen">
       <header className="library-header">
         <h1>Library</h1>
-        <button className="avatar-button" type="button" title="Profile">
-          AB
+        <button 
+          className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
+          type="button" 
+          title="Profile"
+          onClick={onProfile}
+        >
+          {renderProfileAvatarMini(currentUser, profiles)}
         </button>
       </header>
 
-      {savedMovies.length > 0 ? (
-        <section className="library-content">
-          <h2>Saved Movies</h2>
-          <div className="result-grid library-grid">
-            {savedMovies.map((movie) => (
-              <PosterCard
-                key={movie.id}
-                movie={movie}
-                onOpenDetail={onOpenDetail}
-              />
-            ))}
+      <section className="library-content">
+        {!currentUser && (
+          <div className="glass-card library-signin-banner">
+            <div className="banner-text">
+              <h3>Sync Your Library</h3>
+              <p>Sign in to save and sync TV shows, movies, and watch history across all your devices.</p>
+            </div>
+            <button className="primary-play small" type="button" onClick={onProfile}>
+              Sign In
+            </button>
           </div>
-        </section>
-      ) : (
-        <section className="library-empty-state">
-          <h2>Your Library Is Empty</h2>
-          <p>TV shows and movies you save from the app will appear here.</p>
-        </section>
-      )}
+        )}
+
+        {savedMovies.length > 0 ? (
+          <>
+            <h2>Saved Movies</h2>
+            <div className="result-grid library-grid">
+              {savedMovies.map((movie) => (
+                <PosterCard
+                  key={movie.id}
+                  movie={movie}
+                  onOpenDetail={onOpenDetail}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="library-empty-state">
+            <h2>Your Library Is Empty</h2>
+            <p>TV shows and movies you save from the app will appear here.</p>
+          </div>
+        )}
+      </section>
     </section>
   )
 }
@@ -3759,6 +5299,9 @@ function DesktopNav({
   onTvShows,
   onSearch,
   onLibrary,
+  currentUser,
+  onProfile,
+  profiles,
 }: {
   active: PrimaryTab
   onHome: () => void
@@ -3766,6 +5309,9 @@ function DesktopNav({
   onTvShows: () => void
   onSearch: () => void
   onLibrary: () => void
+  currentUser: UserInfo | null
+  onProfile: () => void
+  profiles: UserProfile[]
 }) {
   const magneticEvents = {
     onPointerLeave: resetMagneticNavOffset,
@@ -3832,11 +5378,12 @@ function DesktopNav({
         </button>
         <button
           {...magneticEvents}
-          className="avatar-button desktop-avatar"
+          className={`avatar-button desktop-avatar ${currentUser ? 'has-avatar' : ''}`}
           type="button"
           title="Profile"
+          onClick={onProfile}
         >
-          AB
+          {renderProfileAvatarMini(currentUser, profiles)}
         </button>
       </div>
     </header>

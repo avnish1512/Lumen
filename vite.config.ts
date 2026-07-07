@@ -98,7 +98,7 @@ async function requestOmdb(apiKey: OmdbApiKey, params: Record<string, string>) {
   }
 }
 
-async function fetchOmdb(apiKeys: OmdbApiKey[], params: Record<string, string>) {
+async function fetchOmdbRaw(apiKeys: OmdbApiKey[], params: Record<string, string>) {
   if (apiKeys.length === 0) {
     return {
       status: 500,
@@ -124,6 +124,36 @@ async function fetchOmdb(apiKeys: OmdbApiKey[], params: Record<string, string>) 
   }
 
   return requestOmdb(apiKeys[apiKeys.length - 1], params)
+}
+
+type CachedOmdb = {
+  status: number
+  body: OmdbApiBody
+  expiresAt: number
+}
+
+const omdbCache: Record<string, CachedOmdb> = {}
+const OMDB_CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
+
+async function fetchOmdb(apiKeys: OmdbApiKey[], params: Record<string, string>) {
+  const cacheKey = JSON.stringify(params)
+  const now = Date.now()
+
+  if (omdbCache[cacheKey] && omdbCache[cacheKey].expiresAt > now) {
+    return omdbCache[cacheKey]
+  }
+
+  const result = await fetchOmdbRaw(apiKeys, params)
+
+  if (result.status === 200 && result.body.Response !== 'False') {
+    omdbCache[cacheKey] = {
+      status: result.status,
+      body: result.body,
+      expiresAt: Date.now() + OMDB_CACHE_TTL,
+    }
+  }
+
+  return result
 }
 
 type TmdbFindResult = {
