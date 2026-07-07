@@ -11,6 +11,7 @@ import {
 } from 'react'
 import {
   AlertCircle,
+  Bell,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -35,11 +36,13 @@ import {
   Eye,
   EyeOff,
   Pencil,
+  Sparkles,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
   fetchMovieById,
   fetchTvShowCollection,
+  fetchAnimeCollection,
   searchMovies,
   type MediaCollection,
   type Movie,
@@ -73,8 +76,8 @@ for (const [path, url] of Object.entries(assetModules)) {
   avatarAssets[key] = url
 }
 
-type Screen = 'home' | 'movies' | 'tv' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles'
-type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Library' | 'Search'
+type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles'
+type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search'
 type SavedMovies = Record<string, Movie>
 type WatchHistoryEntry = {
   movie: Movie
@@ -120,8 +123,10 @@ function readCurrentUser(): UserInfo | null {
 type HomeCache = {
   movies: Movie[]
   tvShows: Movie[]
+  anime?: Movie[]
   movieCollection: MediaCollection
   tvShowCollection: MediaCollection
+  animeCollection?: MediaCollection
   tmdbHomeRails: TmdbHomeRails
   homeHeroMovie: Movie | null
 }
@@ -157,14 +162,7 @@ const emptyTmdbHomeRails: TmdbHomeRails = {
   trendingNow: [],
   tvShowCollection: emptyMediaCollection,
 }
-const fallbackPosterImages = [
-  'https://image.tmdb.org/t/p/w780/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
-  'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-  'https://image.tmdb.org/t/p/w780/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
-  'https://image.tmdb.org/t/p/w780/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
-  'https://image.tmdb.org/t/p/w780/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg',
-  'https://image.tmdb.org/t/p/w780/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
-]
+
 
 const searchCategories = [
   'Apple TV',
@@ -603,8 +601,8 @@ function imdbUrl(movie: Movie) {
   return `https://www.imdb.com/title/${movie.id}/`
 }
 
-function fallbackPosterForRank(rank: number) {
-  return fallbackPosterImages[(rank - 1) % fallbackPosterImages.length]
+function fallbackPosterForRank(_rank: number) {
+  return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
 }
 
 function cleanImageUrl(value?: string) {
@@ -688,6 +686,15 @@ function App() {
       return [{ name: 'Children', avatarColor: 'kids' }]
     }
   })
+  const [designMode, setDesignMode] = useState<'apple' | 'netflix'>(() => {
+    return (window.localStorage.getItem('omdb.apple-tv-style.designMode') as 'apple' | 'netflix') || 'apple'
+  })
+
+  const toggleDesignMode = () => {
+    const nextMode = designMode === 'apple' ? 'netflix' : 'apple'
+    setDesignMode(nextMode)
+    window.localStorage.setItem('omdb.apple-tv-style.designMode', nextMode)
+  }
 
   const handleAddProfile = (name: string, avatarColor: string) => {
     const newProfile: UserProfile = {
@@ -748,10 +755,13 @@ function App() {
 
   const [movies, setMovies] = useState<Movie[]>(() => initialCache?.movies ?? [])
   const [tvShows, setTvShows] = useState<Movie[]>(() => initialCache?.tvShows ?? [])
+  const [anime, setAnime] = useState<Movie[]>(() => initialCache?.anime ?? [])
   const [movieCollection, setMovieCollection] =
     useState<MediaCollection>(() => initialCache?.movieCollection ?? emptyMediaCollection)
   const [tvShowCollection, setTvShowCollection] =
     useState<MediaCollection>(() => initialCache?.tvShowCollection ?? emptyMediaCollection)
+  const [animeCollection, setAnimeCollection] =
+    useState<MediaCollection>(() => initialCache?.animeCollection ?? emptyMediaCollection)
   const [tmdbHomeRails, setTmdbHomeRails] =
     useState<TmdbHomeRails>(() => initialCache?.tmdbHomeRails ?? emptyTmdbHomeRails)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
@@ -805,17 +815,20 @@ function App() {
         ...collectionMovies(tmdbHomeRails.tvShowCollection),
         ...collectionMovies(movieCollection),
         ...collectionMovies(tvShowCollection),
+        ...collectionMovies(animeCollection),
         ...movies,
         ...tvShows,
+        ...anime,
       ]),
-    [movieCollection, movies, tmdbHomeRails, tvShowCollection, tvShows],
+    [movieCollection, movies, tmdbHomeRails, tvShowCollection, tvShows, animeCollection, anime],
   )
   const relatedMedia = selectedMovie && isTvShow(selectedMovie) ? tvShows : movies
-  const requiredMedia = screen === 'tv' ? tvShows : movies
+  const requiredMedia = screen === 'tv' ? tvShows : screen === 'anime' ? anime : movies
   const needsMovieBootstrap =
     screen === 'home' ||
     screen === 'movies' ||
     screen === 'tv' ||
+    screen === 'anime' ||
     screen === 'detail' ||
     screen === 'watch'
   const activeTab: PrimaryTab =
@@ -827,7 +840,9 @@ function App() {
           ? 'Search'
           : screen === 'tv'
             ? 'TV Shows'
-            : 'Movies'
+            : screen === 'anime'
+              ? 'Anime'
+              : 'Movies'
 
   const setScreen = (nextScreen: Screen) => {
     setScreenState(nextScreen)
@@ -862,7 +877,10 @@ function App() {
       setHomeError('')
 
       try {
-        const nextTmdbHomeRails = await fetchTmdbHomeRails()
+        const [nextTmdbHomeRails, nextAnimeCollection] = await Promise.all([
+          fetchTmdbHomeRails(),
+          fetchAnimeCollection()
+        ])
 
         if (hasHomeBootstrapRails(nextTmdbHomeRails)) {
           const nextMovies = buildRail(
@@ -873,6 +891,7 @@ function App() {
             nextTmdbHomeRails.featuredTvShows,
             nextTmdbHomeRails.tvShowCollection.top,
           )
+          const nextAnime = nextAnimeCollection.top
 
           if (!isMounted) {
             return
@@ -880,8 +899,10 @@ function App() {
 
           setMovies(nextMovies)
           setTvShows(nextTvShows)
+          setAnime(nextAnime)
           setMovieCollection(nextTmdbHomeRails.movieCollection)
           setTvShowCollection(nextTmdbHomeRails.tvShowCollection)
+          setAnimeCollection(nextAnimeCollection)
           setTmdbHomeRails(nextTmdbHomeRails)
           
           const freshHero = nextMovies[0] ?? null
@@ -894,8 +915,10 @@ function App() {
               JSON.stringify({
                 movies: nextMovies,
                 tvShows: nextTvShows,
+                anime: nextAnime,
                 movieCollection: nextTmdbHomeRails.movieCollection,
                 tvShowCollection: nextTmdbHomeRails.tvShowCollection,
+                animeCollection: nextAnimeCollection,
                 tmdbHomeRails: nextTmdbHomeRails,
                 homeHeroMovie: freshHero,
               })
@@ -906,12 +929,14 @@ function App() {
           return
         }
 
-        const [nextMovieCollection, nextTvShowCollection] = await Promise.all([
+        const [nextMovieCollection, nextTvShowCollection, fallbackAnimeCollection] = await Promise.all([
           fetchMovieCollection(),
           fetchTvShowCollection(),
+          fetchAnimeCollection(),
         ])
         const nextMovies = nextMovieCollection.top
         const nextTvShows = nextTvShowCollection.top
+        const nextAnime = fallbackAnimeCollection.top
 
         if (!isMounted) {
           return
@@ -919,8 +944,10 @@ function App() {
 
         setMovies(nextMovies)
         setTvShows(nextTvShows)
+        setAnime(nextAnime)
         setMovieCollection(nextMovieCollection)
         setTvShowCollection(nextTvShowCollection)
+        setAnimeCollection(fallbackAnimeCollection)
         setTmdbHomeRails(nextTmdbHomeRails)
         
         const freshHero = nextMovies[0] ?? null
@@ -933,8 +960,10 @@ function App() {
             JSON.stringify({
               movies: nextMovies,
               tvShows: nextTvShows,
+              anime: nextAnime,
               movieCollection: nextMovieCollection,
               tvShowCollection: nextTvShowCollection,
+              animeCollection: fallbackAnimeCollection,
               tmdbHomeRails: nextTmdbHomeRails,
               homeHeroMovie: freshHero,
             })
@@ -1512,7 +1541,7 @@ function App() {
   return (
     <main
       ref={appShellRef}
-      className={navScrolled ? 'app-shell nav-scrolled' : 'app-shell'}
+      className={`app-shell ${designMode}-theme ${navScrolled ? 'nav-scrolled' : ''}`}
       style={appShellStyle}
     >
       {screen === 'home' && featuredMovie && (
@@ -1536,16 +1565,17 @@ function App() {
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
           profiles={profiles}
+          designMode={designMode}
         />
       )}
 
-      {(screen === 'movies' || screen === 'tv') && (
+      {(screen === 'movies' || screen === 'tv' || screen === 'anime') && (
         <BrowseScreen
           key={screen}
           mode={screen}
-          movies={screen === 'tv' ? tvShows : movies}
-          collection={screen === 'tv' ? tvShowCollection : movieCollection}
-          featuredMovie={screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0]}
+          movies={screen === 'anime' ? anime : screen === 'tv' ? tvShows : movies}
+          collection={screen === 'anime' ? animeCollection : screen === 'tv' ? tvShowCollection : movieCollection}
+          featuredMovie={screen === 'anime' ? anime[0] : screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0]}
           savedMovies={savedMovies}
           onOpenDetail={openDetail}
           onPlay={openWatch}
@@ -1553,6 +1583,8 @@ function App() {
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
           profiles={profiles}
+          onSearch={() => setScreen('search')}
+          designMode={designMode}
         />
       )}
 
@@ -1638,6 +1670,7 @@ function App() {
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
           profiles={profiles}
+          onSearch={() => setScreen('search')}
         />
       )}
 
@@ -1660,6 +1693,8 @@ function App() {
             setScreen('profiles')
           }}
           profiles={profiles}
+          designMode={designMode}
+          onToggleDesignMode={toggleDesignMode}
         />
       )}
 
@@ -1693,7 +1728,7 @@ function App() {
           onHome={() => setScreen('home')}
           onMovies={() => setScreen('movies')}
           onTvShows={() => setScreen('tv')}
-          onSearch={() => setScreen('search')}
+          onAnime={() => setScreen('anime')}
           onLibrary={() => setScreen('library')}
         />
       )}
@@ -1703,11 +1738,13 @@ function App() {
           onHome={() => setScreen('home')}
           onMovies={() => setScreen('movies')}
           onTvShows={() => setScreen('tv')}
+          onAnime={() => setScreen('anime')}
           onSearch={() => setScreen('search')}
           onLibrary={() => setScreen('library')}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
           profiles={profiles}
+          designMode={designMode}
         />
       )}
     </main>
@@ -1734,6 +1771,7 @@ type HomeScreenProps = {
   currentUser: UserInfo | null
   onProfile: () => void
   profiles: UserProfile[]
+  designMode: 'apple' | 'netflix'
 }
 
 function HomeScreen({
@@ -1756,6 +1794,7 @@ function HomeScreen({
   currentUser,
   onProfile,
   profiles,
+  designMode,
 }: HomeScreenProps) {
   const heroMovies = useMemo(() => movies.slice(0, 6), [movies])
   const movieTopTenMovies = useMemo(
@@ -1879,6 +1918,9 @@ function HomeScreen({
         <header className="home-header">
           <h1>Home</h1>
           <div className="header-actions">
+            <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
+              <Search />
+            </button>
             <button className="mute-button" type="button" title="Muted">
               <VolumeX />
             </button>
@@ -1914,32 +1956,45 @@ function HomeScreen({
               <Play fill="currentColor" strokeWidth={0} />
               <span>Play</span>
             </button>
-            <button
-              className="circle-action"
-              type="button"
-              onClick={() => onSave(featuredMovie)}
-              title={
-                hasMatchingMovie(
+            {designMode === 'netflix' ? (
+              <button
+                className="secondary-play"
+                type="button"
+                onClick={() => onOpenDetail(featuredMovie)}
+              >
+                <Info size={20} />
+                <span>More Info</span>
+              </button>
+            ) : (
+              <button
+                className="circle-action"
+                type="button"
+                onClick={() => onSave(featuredMovie)}
+                title={
+                  hasMatchingMovie(
+                    savedMovies,
+                    featuredMovie,
+                    (savedMovie) => savedMovie,
+                  )
+                    ? 'Remove from library'
+                    : 'Add to library'
+                }
+              >
+                {hasMatchingMovie(
                   savedMovies,
                   featuredMovie,
                   (savedMovie) => savedMovie,
-                )
-                  ? 'Remove from library'
-                  : 'Add to library'
-              }
-            >
-              {hasMatchingMovie(
-                savedMovies,
-                featuredMovie,
-                (savedMovie) => savedMovie,
-              ) ? <Check /> : <Plus />}
-            </button>
+                ) ? <Check /> : <Plus />}
+              </button>
+            )}
           </div>
 
-          <button className="hero-search" type="button" onClick={onSearch}>
-            <Search />
-            <span>Search Apple TV</span>
-          </button>
+          {designMode === 'apple' && (
+            <button className="hero-search" type="button" onClick={onSearch}>
+              <Search />
+              <span>Search Apple TV</span>
+            </button>
+          )}
         </div>
 
         <div className="carousel-dots" aria-label="Featured movies">
@@ -1961,6 +2016,11 @@ function HomeScreen({
             />
           ))}
         </div>
+        {designMode === 'netflix' && (
+          <div className="rating-chip-netflix">
+            {featuredMovie.maturity}
+          </div>
+        )}
       </div>
 
       <ContinueWatchingRail
@@ -2024,7 +2084,7 @@ function HomeScreen({
 }
 
 type BrowseScreenProps = {
-  mode: 'movies' | 'tv'
+  mode: 'movies' | 'tv' | 'anime'
   movies: Movie[]
   collection: MediaCollection
   featuredMovie?: Movie
@@ -2035,6 +2095,8 @@ type BrowseScreenProps = {
   currentUser: UserInfo | null
   onProfile: () => void
   profiles: UserProfile[]
+  onSearch: () => void
+  designMode: 'apple' | 'netflix'
 }
 
 function BrowseScreen({
@@ -2049,23 +2111,32 @@ function BrowseScreen({
   currentUser,
   onProfile,
   profiles,
+  onSearch,
+  designMode,
 }: BrowseScreenProps) {
   const [browseHeroIndex, setBrowseHeroIndex] = useState(0)
   const isTvMode = mode === 'tv'
-  const screenTitle = isTvMode ? 'TV Shows' : 'Movies'
-  const firstRailTitle = isTvMode ? 'Top 10 TV Shows' : 'Top 10 Movies'
-  const thrillingRailTitle = isTvMode
-    ? 'Top 10 Thrilling TV Shows'
-    : 'Top 10 Thrilling Movies'
-  const adventureRailTitle = isTvMode
-    ? 'Top 10 Adventure TV Shows'
-    : 'Top 10 Adventure'
-  const kidsRailTitle = isTvMode ? 'Kids & Family TV Shows' : 'Kids & Family'
-  const freshRailTitle = isTvMode ? 'Fresh Episodes' : 'Fresh Picks'
-  const essentialsRailTitle = isTvMode
-    ? 'Series Essentials'
-    : 'Movie Essentials'
-  const featureRailTitle = isTvMode ? 'Featured TV Shows' : 'Featured Movies'
+  const isAnimeMode = mode === 'anime'
+  const screenTitle = isAnimeMode ? 'Anime' : isTvMode ? 'TV Shows' : 'Movies'
+  const firstRailTitle = isAnimeMode ? 'Top Anime Series' : isTvMode ? 'Top 10 TV Shows' : 'Top 10 Movies'
+  const thrillingRailTitle = isAnimeMode
+    ? 'Action & Shonen'
+    : isTvMode
+      ? 'Top 10 Thrilling TV Shows'
+      : 'Top 10 Thrilling Movies'
+  const adventureRailTitle = isAnimeMode
+    ? 'Fantasy & Adventure'
+    : isTvMode
+      ? 'Top 10 Adventure TV Shows'
+      : 'Top 10 Adventure'
+  const kidsRailTitle = isAnimeMode ? 'Ghibli & Family' : isTvMode ? 'Kids & Family TV Shows' : 'Kids & Family'
+  const freshRailTitle = isAnimeMode ? 'Fresh Anime' : isTvMode ? 'Fresh Episodes' : 'Fresh Picks'
+  const essentialsRailTitle = isAnimeMode
+    ? 'Anime Essentials'
+    : isTvMode
+      ? 'Series Essentials'
+      : 'Movie Essentials'
+  const featureRailTitle = isAnimeMode ? 'Featured Anime' : isTvMode ? 'Featured TV Shows' : 'Featured Movies'
   const topItems = useMemo(
     () => buildRail(collection.top, movies),
     [collection.top, movies],
@@ -2186,6 +2257,9 @@ function BrowseScreen({
           <header className="home-header">
             <h1>{screenTitle}</h1>
             <div className="header-actions">
+              <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
+                <Search />
+              </button>
               <button className="mute-button" type="button" title="Muted">
                 <VolumeX />
               </button>
@@ -2219,26 +2293,37 @@ function BrowseScreen({
                 <Play fill="currentColor" strokeWidth={0} />
                 <span>Play</span>
               </button>
-              <button
-                className="circle-action"
-                type="button"
-                onClick={() => onSave(heroMovie)}
-                title={
-                  hasMatchingMovie(
+              {designMode === 'netflix' ? (
+                <button
+                  className="secondary-play"
+                  type="button"
+                  onClick={() => onOpenDetail(heroMovie)}
+                >
+                  <Info size={20} />
+                  <span>More Info</span>
+                </button>
+              ) : (
+                <button
+                  className="circle-action"
+                  type="button"
+                  onClick={() => onSave(heroMovie)}
+                  title={
+                    hasMatchingMovie(
+                      savedMovies,
+                      heroMovie,
+                      (savedMovie) => savedMovie,
+                    )
+                      ? 'Remove from library'
+                      : 'Add to library'
+                  }
+                >
+                  {hasMatchingMovie(
                     savedMovies,
                     heroMovie,
                     (savedMovie) => savedMovie,
-                  )
-                    ? 'Remove from library'
-                    : 'Add to library'
-                }
-              >
-                {hasMatchingMovie(
-                  savedMovies,
-                  heroMovie,
-                  (savedMovie) => savedMovie,
-                ) ? <Check /> : <Plus />}
-              </button>
+                  ) ? <Check /> : <Plus />}
+                </button>
+              )}
             </div>
           </div>
 
@@ -2261,6 +2346,11 @@ function BrowseScreen({
               />
             ))}
           </div>
+          {designMode === 'netflix' && (
+            <div className="rating-chip-netflix">
+              {heroMovie.maturity}
+            </div>
+          )}
         </div>
       )}
 
@@ -3381,6 +3471,8 @@ type LoginScreenProps = {
   watchHistoryCount: number
   onSwitchProfile: () => void
   profiles: UserProfile[]
+  designMode: 'apple' | 'netflix'
+  onToggleDesignMode: () => void
 }
 
 function LoginScreen({
@@ -3392,6 +3484,8 @@ function LoginScreen({
   watchHistoryCount,
   onSwitchProfile,
   profiles,
+  designMode,
+  onToggleDesignMode,
 }: LoginScreenProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -3514,6 +3608,14 @@ function LoginScreen({
                 style={{ marginTop: '8px', background: 'rgba(255, 255, 255, 0.08)', color: '#fff', border: '1px solid rgba(255, 255, 255, 0.1)' }}
               >
                 Switch Profile
+              </button>
+              <button 
+                className="secondary-play full-width-btn" 
+                type="button" 
+                onClick={onToggleDesignMode}
+                style={{ marginTop: '8px', background: '#E50914', color: '#fff', border: 'none', fontWeight: 'bold' }}
+              >
+                {designMode === 'netflix' ? 'Switch to Apple TV Design' : 'Switch to Netflix Design'}
               </button>
               <button className="destructive-btn full-width-btn" type="button" onClick={onLogout} style={{ marginTop: '8px' }}>
                 Sign Out
@@ -4546,6 +4648,7 @@ type LibraryScreenProps = {
   currentUser: UserInfo | null
   onProfile: () => void
   profiles: UserProfile[]
+  onSearch: () => void
 }
 
 function LibraryScreen({
@@ -4554,19 +4657,25 @@ function LibraryScreen({
   currentUser,
   onProfile,
   profiles,
+  onSearch,
 }: LibraryScreenProps) {
   return (
     <section className="screen library-screen">
       <header className="library-header">
         <h1>Library</h1>
-        <button 
-          className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
-          type="button" 
-          title="Profile"
-          onClick={onProfile}
-        >
-          {renderProfileAvatarMini(currentUser, profiles)}
-        </button>
+        <div className="header-actions">
+          <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
+            <Search />
+          </button>
+          <button 
+            className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
+            type="button" 
+            title="Profile"
+            onClick={onProfile}
+          >
+            {renderProfileAvatarMini(currentUser, profiles)}
+          </button>
+        </div>
       </header>
 
       <section className="library-content">
@@ -5221,14 +5330,14 @@ function BottomNav({
   onHome,
   onMovies,
   onTvShows,
-  onSearch,
+  onAnime,
   onLibrary,
 }: {
   active: PrimaryTab
   onHome: () => void
   onMovies: () => void
   onTvShows: () => void
-  onSearch: () => void
+  onAnime: () => void
   onLibrary: () => void
 }) {
   const magneticEvents = {
@@ -5275,6 +5384,17 @@ function BottomNav({
         </button>
         <button
           {...magneticEvents}
+          className={active === 'Anime' ? 'active' : ''}
+          type="button"
+          onClick={onAnime}
+          aria-current={active === 'Anime' ? 'page' : undefined}
+          title="Anime"
+        >
+          <Sparkles />
+          <span>Anime</span>
+        </button>
+        <button
+          {...magneticEvents}
           className={active === 'Library' ? 'active' : ''}
           type="button"
           onClick={onLibrary}
@@ -5285,17 +5405,6 @@ function BottomNav({
           <span>Library</span>
         </button>
       </nav>
-      <button
-        {...magneticEvents}
-        className={active === 'Search' ? 'search-float active' : 'search-float'}
-        type="button"
-        title="Search"
-        aria-label="Search movies"
-        aria-current={active === 'Search' ? 'page' : undefined}
-        onClick={onSearch}
-      >
-        <Search />
-      </button>
     </div>
   )
 }
@@ -5305,21 +5414,25 @@ function DesktopNav({
   onHome,
   onMovies,
   onTvShows,
+  onAnime,
   onSearch,
   onLibrary,
   currentUser,
   onProfile,
   profiles,
+  designMode,
 }: {
   active: PrimaryTab
   onHome: () => void
   onMovies: () => void
   onTvShows: () => void
+  onAnime: () => void
   onSearch: () => void
   onLibrary: () => void
   currentUser: UserInfo | null
   onProfile: () => void
   profiles: UserProfile[]
+  designMode: 'apple' | 'netflix'
 }) {
   const magneticEvents = {
     onPointerLeave: resetMagneticNavOffset,
@@ -5329,71 +5442,110 @@ function DesktopNav({
 
   return (
     <header className="desktop-nav">
-      <button
-        {...magneticEvents}
-        className="desktop-brand"
-        type="button"
-        onClick={onHome}
-      >
-        <Home fill="currentColor" />
-        <span>Home</span>
-      </button>
-      <nav aria-label="Website" {...magneticEvents}>
-        <button
-          className={active === 'Home' ? 'active' : ''}
-          type="button"
-          onClick={onHome}
-        >
-          <Home fill="currentColor" />
-          <span>Home</span>
-        </button>
-        <button
-          className={active === 'Movies' ? 'active' : ''}
-          type="button"
-          onClick={onMovies}
-        >
-          <Clapperboard />
-          <span>Movies</span>
-        </button>
-        <button
-          className={active === 'TV Shows' ? 'active' : ''}
-          type="button"
-          onClick={onTvShows}
-        >
-          <Tv />
-          <span>TV Shows</span>
-        </button>
-        <button
-          className={active === 'Library' ? 'active' : ''}
-          type="button"
-          onClick={onLibrary}
-        >
-          <Library />
-          <span>Library</span>
-        </button>
-      </nav>
-      <div className="desktop-actions">
-        <button
-          {...magneticEvents}
-          className={
-            active === 'Search' ? 'desktop-search active' : 'desktop-search'
-          }
-          type="button"
-          onClick={onSearch}
-        >
-          <Search />
-          <span>Search</span>
-        </button>
-        <button
-          {...magneticEvents}
-          className={`avatar-button desktop-avatar ${currentUser ? 'has-avatar' : ''}`}
-          type="button"
-          title="Profile"
-          onClick={onProfile}
-        >
-          {renderProfileAvatarMini(currentUser, profiles)}
-        </button>
-      </div>
+      {designMode === 'netflix' ? (
+        <>
+          <button className="desktop-brand netflix-logo-btn" type="button" onClick={onHome}>
+            NETFLIX
+          </button>
+          <nav aria-label="Website" className="netflix-desktop-links">
+            <button className={active === 'Home' ? 'active' : ''} type="button" onClick={onHome}>Home</button>
+            <button className={active === 'TV Shows' ? 'active' : ''} type="button" onClick={onTvShows}>Shows</button>
+            <button className={active === 'Movies' ? 'active' : ''} type="button" onClick={onMovies}>Movies</button>
+            <button type="button">Games</button>
+            <button type="button">New & Popular</button>
+            <button className={active === 'Library' ? 'active' : ''} type="button" onClick={onLibrary}>My List</button>
+            <button type="button">Browse by Languages</button>
+          </nav>
+          <div className="desktop-actions netflix-actions">
+            <button className="netflix-action-btn search-btn" type="button" onClick={onSearch} title="Search">
+              <Search size={20} />
+            </button>
+            <button className="netflix-action-btn bell-btn" type="button" title="Notifications">
+              <Bell size={20} />
+              <span className="bell-badge">7</span>
+            </button>
+            <button className="avatar-button desktop-avatar netflix-avatar" type="button" onClick={onProfile} title="Profile">
+              {renderProfileAvatarMini(currentUser, profiles)}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <button
+            {...magneticEvents}
+            className="desktop-brand"
+            type="button"
+            onClick={onHome}
+          >
+            <Home fill="currentColor" />
+            <span>Home</span>
+          </button>
+          <nav aria-label="Website" {...magneticEvents}>
+            <button
+              className={active === 'Home' ? 'active' : ''}
+              type="button"
+              onClick={onHome}
+            >
+              <Home fill="currentColor" />
+              <span>Home</span>
+            </button>
+            <button
+              className={active === 'Movies' ? 'active' : ''}
+              type="button"
+              onClick={onMovies}
+            >
+              <Clapperboard />
+              <span>Movies</span>
+            </button>
+            <button
+              className={active === 'TV Shows' ? 'active' : ''}
+              type="button"
+              onClick={onTvShows}
+            >
+              <Tv />
+              <span>TV Shows</span>
+            </button>
+            <button
+              className={active === 'Anime' ? 'active' : ''}
+              type="button"
+              onClick={onAnime}
+            >
+              <Sparkles />
+              <span>Anime</span>
+            </button>
+            <button
+              className={active === 'Library' ? 'active' : ''}
+              type="button"
+              onClick={onLibrary}
+            >
+              <Library />
+              <span>Library</span>
+            </button>
+          </nav>
+          <div className="desktop-actions">
+            <button
+              {...magneticEvents}
+              className={
+                active === 'Search' ? 'desktop-search active' : 'desktop-search'
+              }
+              type="button"
+              onClick={onSearch}
+            >
+              <Search />
+              <span>Search</span>
+            </button>
+            <button
+              {...magneticEvents}
+              className={`avatar-button desktop-avatar ${currentUser ? 'has-avatar' : ''}`}
+              type="button"
+              title="Profile"
+              onClick={onProfile}
+            >
+              {renderProfileAvatarMini(currentUser, profiles)}
+            </button>
+          </div>
+        </>
+      )}
     </header>
   )
 }

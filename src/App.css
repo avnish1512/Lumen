@@ -120,6 +120,38 @@ button {
   height: 30px;
 }
 
+.mobile-search-btn {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: rgba(28, 28, 30, 0.66);
+  backdrop-filter: blur(18px);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.25s, transform 0.2s, border-color 0.25s;
+}
+
+.mobile-search-btn:active {
+  transform: scale(0.92);
+  background: rgba(28, 28, 30, 0.85);
+}
+
+.mobile-search-btn svg {
+  width: 28px;
+  height: 28px;
+}
+
+@media (min-width: 900px) {
+  .mobile-search-btn {
+    display: none;
+  }
+}
+
+
 .hero-copy {
   position: absolute;
   right: 20px;
@@ -1030,7 +1062,7 @@ button {
 .tab-dock {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   height: 78px;
   padding: 6px;
   border: 1px solid rgba(255, 255, 255, 0.17);
@@ -1054,7 +1086,7 @@ button {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 780;
   line-height: 1;
   cursor: pointer;
@@ -3734,6 +3766,17 @@ button:focus-visible {
   font-weight: 760;
 }
 
+.library-header .mobile-search-btn {
+  width: clamp(58px, 15vw, 78px);
+  height: clamp(58px, 15vw, 78px);
+  border-radius: 50%;
+}
+
+.library-header .mobile-search-btn svg {
+  width: clamp(25px, 7vw, 36px);
+  height: clamp(25px, 7vw, 36px);
+}
+
 .library-empty-state {
   display: flex;
   min-height: calc(100svh - 190px);
@@ -5245,6 +5288,11 @@ a.watch-option-card {
   --nav-bubble-x: 300%;
 }
 
+.tab-dock:has(button:nth-child(5).active),
+.desktop-nav nav:has(button:nth-child(5).active) {
+  --nav-bubble-x: 400%;
+}
+
 .tab-dock::after,
 .desktop-nav nav::after {
   position: absolute;
@@ -5252,7 +5300,7 @@ a.watch-option-card {
   top: 6px;
   bottom: 6px;
   left: 6px;
-  width: calc((100% - 12px) / 4);
+  width: calc((100% - 12px) / 5);
   pointer-events: none;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
@@ -5493,7 +5541,7 @@ a.watch-option-card {
   .desktop-nav nav {
     display: grid;
     gap: 0;
-    grid-template-columns: repeat(4, minmax(max-content, 1fr));
+    grid-template-columns: repeat(5, minmax(max-content, 1fr));
   }
 
   .desktop-nav nav::after {
@@ -9090,6 +9138,345 @@ a.watch-option-card {
 .destructive-btn:hover {
   background-color: rgba(255, 69, 58, 0.25);
   border-color: rgba(255, 69, 58, 0.55);
+}
+
+/* ==========================================
+   NETFLIX MODE UI THEME OVERRIDES (Phase 2)
+   ========================================== */
+
+.netflix-theme {
+  font-family: "Netflix Sans", "Helvetica Neue", "Segoe UI", Roboto, sans-serif !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.netflix-theme .screen,
+.netflix-theme .home-screen,
+.netflix-theme .browse-screen,
+.netflix-theme .library-screen,
+.netflix-theme .search-screen,
+.netflix-theme .login-screen {
+  background: #000000 !important;
+  background-image: none !important;
+}
+
+/* Hide ambient colorful blobs in Netflix mode */
+.netflix-theme .blob,
+.netflix-theme .login-background {
+  display: none !important;
+}
+
+/* Crisp Rectangular Corners */
+.netflix-theme .poster-card,
+.netflix-theme .movie-card,
+.netflix-theme .card-btn,
+.netflix-theme .round-nav,
+.netflix-theme .tab-dock,
+.netflix-theme .tab-dock button,
+.netflix-theme .desktop-nav,
+.netflix-theme .glass-card,
+.netflix-theme .profile-avatar-large,
+.netflix-theme .profile-card,
+.netflix-theme .add-profile-card,
+.netflix-theme .avatar-button,
+.netflix-theme .avatar-option,
+.netflix-theme .avatar-grid button {
+  border-radius: 4px !important;
+}
+
+/* Clean up glass backgrounds to flat solid colors */
+.netflix-theme .glass-card {
+  background: #181818 !important;
+  border: 1px solid #2f2f2f !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: none !important;
+}
+
+/* Netflix Accent Buttons */
+.netflix-theme .primary-play {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-radius: 4px !important;
+  font-weight: bold !important;
+  border: none !important;
+  box-shadow: none !important;
+  transition: background-color 0.2s ease !important;
+}
+
+.netflix-theme .primary-play:hover {
+  background: rgba(255, 255, 255, 0.75) !important;
+}
+
+.netflix-theme .secondary-play {
+  background: rgba(109, 109, 110, 0.7) !important;
+  color: #ffffff !important;
+  border-radius: 4px !important;
+  border: none !important;
+  box-shadow: none !important;
+  transition: background-color 0.2s ease !important;
+}
+
+.netflix-theme .secondary-play:hover {
+  background: rgba(109, 109, 110, 0.4) !important;
+}
+
+/* Mobile Bottom Tab Dock */
+.netflix-theme .tab-dock {
+  background: #101010 !important;
+  border: 1px solid #202020 !important;
+  backdrop-filter: none !important;
+}
+
+.netflix-theme .tab-dock::after {
+  background: #E50914 !important;
+  border-radius: 4px !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.netflix-theme .tab-dock button {
+  color: #808080 !important;
+}
+
+.netflix-theme .tab-dock button.active {
+  color: #ffffff !important;
+}
+
+.netflix-theme .tab-dock button:active svg {
+  transform: scale(0.95) !important;
+}
+
+/* Netflix Header & Nav Override (Phase 3) */
+.netflix-theme .desktop-nav {
+  background: #000000 !important;
+  border-bottom: none !important;
+  height: 68px !important;
+  padding: 0 4% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5) !important;
+}
+
+.netflix-theme .netflix-logo-btn {
+  color: #E50914 !important;
+  font-size: 25px !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.5px !important;
+  background: none !important;
+  border: none !important;
+  cursor: pointer !important;
+  margin-right: 25px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 0 !important;
+}
+
+.netflix-theme .netflix-desktop-links {
+  display: flex !important;
+  gap: 18px !important;
+  align-items: center !important;
+  flex: 1 1 auto !important;
+}
+
+.netflix-theme .netflix-desktop-links button {
+  background: none !important;
+  border: none !important;
+  color: #e5e5e5 !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+  padding: 4px 8px !important;
+  font-weight: normal !important;
+  transition: color 0.2s ease !important;
+}
+
+.netflix-theme .netflix-desktop-links button:hover {
+  color: #b3b3b3 !important;
+}
+
+.netflix-theme .netflix-desktop-links button.active {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-radius: 999px !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  padding: 6px 16px !important;
+}
+
+.netflix-theme .netflix-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 20px !important;
+}
+
+.netflix-theme .netflix-action-btn {
+  background: none !important;
+  border: none !important;
+  color: #ffffff !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+}
+
+.netflix-theme .bell-badge {
+  position: absolute !important;
+  top: -2px !important;
+  right: -2px !important;
+  background: #E50914 !important;
+  color: #ffffff !important;
+  font-size: 10px !important;
+  font-weight: bold !important;
+  border-radius: 50% !important;
+  width: 14px !important;
+  height: 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+
+.netflix-theme .netflix-avatar {
+  border-radius: 4px !important;
+  width: 32px !important;
+  height: 32px !important;
+  border: none !important;
+}
+
+/* Netflix Hero Banner Overrides (Phase 4) */
+.netflix-theme .home-hero {
+  background-size: cover !important;
+  background-position: center !important;
+}
+
+.netflix-theme .hero-copy {
+  align-items: flex-start !important;
+  text-align: left !important;
+  padding-bottom: 100px !important;
+}
+
+.netflix-theme .floating-label {
+  color: #E50914 !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.netflix-theme .logo-title {
+  font-size: clamp(32px, 6vw, 56px) !important;
+  font-weight: 900 !important;
+  text-align: left !important;
+  line-height: 1.1 !important;
+}
+
+.netflix-theme .meta-line {
+  justify-content: flex-start !important;
+}
+
+.netflix-theme .hero-description {
+  max-width: 500px !important;
+  text-align: left !important;
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+  color: #e5e5e5 !important;
+}
+
+.netflix-theme .hero-actions {
+  justify-content: flex-start !important;
+  gap: 12px !important;
+}
+
+.netflix-theme .hero-actions .primary-play {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-radius: 4px !important;
+  padding: 8px 28px !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+}
+
+.netflix-theme .hero-actions .secondary-play {
+  background: rgba(109, 109, 110, 0.7) !important;
+  color: #ffffff !important;
+  border-radius: 4px !important;
+  padding: 8px 24px !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+}
+
+/* Netflix Maturity Rating Chip (right side of hero) */
+.rating-chip-netflix {
+  position: absolute;
+  right: 4%;
+  bottom: 35%;
+  background: rgba(0, 0, 0, 0.5);
+  border-left: 3px solid rgba(255, 255, 255, 0.6);
+  padding: 4px 16px 4px 8px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Netflix Poster Rails & Cards (Phase 5) */
+.netflix-theme .poster-card {
+  border-radius: 4px !important;
+  overflow: hidden !important;
+  transition: transform 0.15s ease-out !important;
+}
+
+.netflix-theme .poster-card:hover {
+  transform: scale(1.08) !important;
+  z-index: 5 !important;
+}
+
+.netflix-theme .poster-card img {
+  border-radius: 4px !important;
+}
+
+.netflix-theme .movie-card {
+  border-radius: 4px !important;
+}
+
+/* Netflix desktop nav should hide the Apple-style pill bubble indicator */
+.netflix-theme .desktop-nav nav::after {
+  display: none !important;
+}
+
+/* Netflix theme hides Apple-specific UI elements */
+.netflix-theme .hero-search {
+  display: none !important;
+}
+
+.netflix-theme .provider-badge.hero-provider {
+  display: none !important;
+}
+
+/* Netflix mode: ensure rail titles match Netflix styling */
+.netflix-theme .rail-section h2,
+.netflix-theme .rail-title {
+  font-weight: 700 !important;
+  font-size: 20px !important;
+  letter-spacing: 0 !important;
+}
+
+/* Top 10 rank styling for Netflix mode */
+.netflix-theme .rank-number {
+  color: transparent !important;
+  -webkit-text-stroke: 2px rgba(255, 255, 255, 0.5) !important;
+  font-weight: 900 !important;
+  font-style: italic !important;
+}
+
+/* Netflix mode carousel dots */
+.netflix-theme .carousel-dots button {
+  background: rgba(255, 255, 255, 0.3) !important;
+  border-radius: 2px !important;
+}
+
+.netflix-theme .carousel-dots button.active {
+  background: #ffffff !important;
 }
 
 

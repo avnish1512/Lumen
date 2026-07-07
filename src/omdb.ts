@@ -188,14 +188,48 @@ const tvShowCollectionIds = {
   ],
 }
 
-const fallbackPosters = [
-  'https://image.tmdb.org/t/p/w780/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
-  'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-  'https://image.tmdb.org/t/p/w780/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
-  'https://image.tmdb.org/t/p/w780/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
-  'https://image.tmdb.org/t/p/w780/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg',
-  'https://image.tmdb.org/t/p/w780/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
-]
+const animeCollectionIds = {
+  top: [
+    'tt2560140', // Attack on Titan
+    'tt0877057', // Death Note
+    'tt1438016', // Fullmetal Alchemist: Brotherhood
+    'tt8333036', // Demon Slayer
+    'tt0988824', // Naruto: Shippuden
+    'tt12343534', // Jujutsu Kaisen
+    'tt0280280', // One Piece
+    'tt5626028', // My Hero Academia
+    'tt2005611', // Hunter x Hunter
+    'tt1910272', // Steins;Gate
+  ],
+  thrilling: [
+    'tt0877057', // Death Note
+    'tt2560140', // Attack on Titan
+    'tt12343534', // Jujutsu Kaisen
+    'tt8333036', // Demon Slayer
+    'tt3006802', // Tokyo Ghoul
+    'tt4609130', // One Punch Man
+    'tt13610562', // Chainsaw Man
+  ],
+  adventure: [
+    'tt0280280', // One Piece
+    'tt2005611', // Hunter x Hunter
+    'tt0988824', // Naruto: Shippuden
+    'tt5626028', // My Hero Academia
+    'tt15410188', // Frieren: Beyond Journey's End
+    'tt6074184', // Black Clover
+    'tt0388562', // Bleach
+  ],
+  kidsFamily: [
+    'tt0245429', // Spirited Away
+    'tt5311514', // Your Name.
+    'tt0119698', // Princess Mononoke
+    'tt0096283', // My Neighbor Totoro
+    'tt0347149', // Howl's Moving Castle
+    'tt16508614', // Suzume
+  ],
+}
+
+
 
 const fallbackHeroImages = [
   'https://image.tmdb.org/t/p/original/s3TBrRGB1iav7gFOCNx3H31MoES.jpg',
@@ -459,6 +493,27 @@ const fallbackTitlesById: Record<
   tt8688814: { title: 'Carmen Sandiego', type: 'series', genres: ['Animation', 'Adventure'] },
   tt3061046: { title: 'Miraculous: Tales of Ladybug & Cat Noir', type: 'series', genres: ['Animation', 'Action'] },
   tt0983983: { title: 'WordGirl', type: 'series', genres: ['Animation', 'Family'] },
+  tt2560140: { title: 'Attack on Titan', type: 'series', genres: ['Animation', 'Action', 'Fantasy'] },
+  tt0877057: { title: 'Death Note', type: 'series', genres: ['Animation', 'Crime', 'Drama'] },
+  tt1438016: { title: 'Fullmetal Alchemist: Brotherhood', type: 'series', genres: ['Animation', 'Action', 'Adventure'] },
+  tt8333036: { title: 'Demon Slayer', type: 'series', genres: ['Animation', 'Action', 'Adventure'] },
+  tt0988824: { title: 'Naruto: Shippuden', type: 'series', genres: ['Animation', 'Action', 'Adventure'] },
+  tt12343534: { title: 'Jujutsu Kaisen', type: 'series', genres: ['Animation', 'Action', 'Fantasy'] },
+  tt0280280: { title: 'One Piece', type: 'series', genres: ['Animation', 'Action', 'Adventure'] },
+  tt5626028: { title: 'My Hero Academia', type: 'series', genres: ['Animation', 'Action', 'Adventure'] },
+  tt2005611: { title: 'Hunter x Hunter', type: 'series', genres: ['Animation', 'Action', 'Adventure'] },
+  tt1910272: { title: 'Steins;Gate', type: 'series', genres: ['Animation', 'Drama', 'Sci-Fi'] },
+  tt3006802: { title: 'Tokyo Ghoul', type: 'series', genres: ['Animation', 'Action', 'Drama'] },
+  tt4609130: { title: 'One Punch Man', type: 'series', genres: ['Animation', 'Action', 'Comedy'] },
+  tt13610562: { title: 'Chainsaw Man', type: 'series', genres: ['Animation', 'Action', 'Fantasy'] },
+  tt15410188: { title: "Frieren: Beyond Journey's End", type: 'series', genres: ['Animation', 'Adventure', 'Drama'] },
+  tt6074184: { title: 'Black Clover', type: 'series', genres: ['Animation', 'Action', 'Adventure'] },
+  tt0388562: { title: 'Bleach', type: 'series', genres: ['Animation', 'Action', 'Adventure'] },
+  tt5311514: { title: 'Your Name.', type: 'movie', genres: ['Animation', 'Drama', 'Fantasy'] },
+  tt0119698: { title: 'Princess Mononoke', type: 'movie', genres: ['Animation', 'Adventure', 'Fantasy'] },
+  tt0096283: { title: 'My Neighbor Totoro', type: 'movie', genres: ['Animation', 'Family', 'Fantasy'] },
+  tt0347149: { title: "Howl's Moving Castle", type: 'movie', genres: ['Animation', 'Adventure', 'Family'] },
+  tt16508614: { title: 'Suzume', type: 'movie', genres: ['Animation', 'Action', 'Adventure'] },
 }
 
 function safeText(value: string | undefined, fallback = 'N/A') {
@@ -469,8 +524,8 @@ function safeText(value: string | undefined, fallback = 'N/A') {
   return value
 }
 
-function fallbackPoster(rank: number) {
-  return fallbackPosters[(rank - 1) % fallbackPosters.length]
+function fallbackPoster(_rank: number) {
+  return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
 }
 
 function fallbackHero(rank: number) {
@@ -728,6 +783,10 @@ export async function fetchMovieCollection() {
 
 export async function fetchTvShowCollection() {
   return fetchMediaCollection(tvShowCollectionIds)
+}
+
+export async function fetchAnimeCollection() {
+  return fetchMediaCollection(animeCollectionIds)
 }
 
 export async function fetchMovieById(id: string, rank = 1) {
