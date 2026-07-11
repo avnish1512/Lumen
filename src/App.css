@@ -12602,11 +12602,21 @@ a.watch-option-card {
 
 .netflix-theme .home-screen .poster-row:not(.compact) .poster-card img,
 .netflix-theme .browse-screen .poster-row:not(.compact) .poster-card img {
+  display: block !important;
   width: 100% !important;
   height: auto !important;
   aspect-ratio: 2 / 3 !important;
   object-fit: cover !important;
+  object-position: center !important;
   border-radius: 4px !important;
+  background: #111 !important;
+}
+
+/* Poster row lays cards out from the top so the image ratio stays exact and
+   the titles below never stretch the poster. */
+.netflix-theme .home-screen .poster-row:not(.compact),
+.netflix-theme .browse-screen .poster-row:not(.compact) {
+  align-items: start !important;
 }
 
 .netflix-theme .poster-row:not(.compact) .poster-card .poster-card-title {

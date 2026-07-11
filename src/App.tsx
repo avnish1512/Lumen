@@ -7937,6 +7937,7 @@ function DesktopNav({
             >
               Library
             </button>
+            <span className="apple-nav-divider" aria-hidden="true" />
             <button
               className="apple-nav-link apple-nav-anime-link"
               type="button"
@@ -7944,7 +7945,6 @@ function DesktopNav({
             >
               Anime
             </button>
-            <span className="apple-nav-divider" aria-hidden="true" />
             <button
               className="apple-nav-icon-btn"
               type="button"

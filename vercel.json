@@ -9,13 +9,18 @@
     }
   },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
+    { "source": "/api/poster", "destination": "/api/hub?kind=poster" },
+    { "source": "/api/tmdb-trailer", "destination": "/api/hub?kind=trailer" },
+    { "source": "/api/profiles", "destination": "/api/hub?kind=profiles" },
+    { "source": "/api/watch-party", "destination": "/api/hub?kind=watch-party" },
+    { "source": "/api/accounts", "destination": "/api/hub?kind=accounts" },
     {
       "source": "/se_player.php",
       "destination": "/api/se-player"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     },
     {
       "source": "/(.*)",
