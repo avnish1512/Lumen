@@ -233,29 +233,192 @@ async function fetchTmdbByImdbId(imdbId: string) {
   }
 }
 
-export default async function handler(req: ApiRequest, res: ApiResponse) {
-  res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800')
+async function fetchTmdbByTitle(title: string, preferredType?: 'movie' | 'tv') {
+  const authChain = getTmdbAuthChain()
 
+  if (authChain.length === 0) {
+    return {
+      status: 500,
+      body: {
+        Response: 'False',
+        Error: 'TMDB_API_READ_ACCESS_TOKEN or TMDB_API_KEY is not configured on the server.',
+      },
+    }
+  }
+
+  const searchTv = async () => {
+    const url = new URL(`${TMDB_BASE_URL}/search/tv`)
+    url.searchParams.set('query', title)
+    const response = await fetch(url, applyTmdbAuth(url, authChain[0]))
+    const body = (await response.json()) as any
+    const tv = body.results?.[0]
+
+    return tv
+      ? { Response: 'True', tmdbId: tv.id, mediaType: 'tv', title: tv.name }
+      : null
+  }
+
+  const searchMovie = async () => {
+    const url = new URL(`${TMDB_BASE_URL}/search/movie`)
+    url.searchParams.set('query', title)
+    const response = await fetch(url, applyTmdbAuth(url, authChain[0]))
+    const body = (await response.json()) as any
+    const movie = body.results?.[0]
+
+    return movie
+      ? { Response: 'True', tmdbId: movie.id, mediaType: 'movie', title: movie.title }
+      : null
+  }
+
+  // Search the preferred media type first (e.g. anime films -> movie search)
+  // so we do not mis-match an anime movie to a similarly named TV series.
+  const order = preferredType === 'movie' ? [searchMovie, searchTv] : [searchTv, searchMovie]
+
+  try {
+    for (const search of order) {
+      const match = await search()
+
+      if (match) {
+        return { status: 200, body: match }
+      }
+    }
+
+    return {
+      status: 404,
+      body: {
+        Response: 'False',
+        Error: 'No TMDB match found for this title.',
+      },
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not query TMDB by title.'
+    return {
+      status: 502,
+      body: {
+        Response: 'False',
+        Error: message,
+      },
+    }
+  }
+}
+
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method && req.method !== 'GET') {
     res.status(405).json({ Response: 'False', Error: 'Method not allowed.' })
     return
   }
 
-  const imdbId = getQueryValue(req.query.imdbId)
+  const action = getQueryValue(req.query.action)
 
-  if (!imdbId) {
+  if (action === 'dramovnime') {
+    let id = getQueryValue(req.query.id)
+    const title = getQueryValue(req.query.title)
+    const se = getQueryValue(req.query.se)
+    const ep = getQueryValue(req.query.ep)
+    const quality = getQueryValue(req.query.quality)
+    const lang = getQueryValue(req.query.lang)
+
+    const apiKey = process.env.RAPIDAPI_KEY
+    if (!apiKey) {
+      res.status(500).json({ error: 'RAPIDAPI_KEY not configured' })
+      return
+    }
+
+    let detailPath = ''
+
+    // Resolve the internal Dramovnime subject ID by searching via Filmbox
+    if (title) {
+      try {
+        const searchResponse = await fetch(
+          'https://multilang-movie-drama-database-api.p.rapidapi.com/filmbox/search',
+          {
+            method: 'POST',
+            headers: {
+              'x-rapidapi-key': apiKey,
+              'x-rapidapi-host': 'multilang-movie-drama-database-api.p.rapidapi.com',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              keyword: title,
+              page: '1',
+              perPage: '5',
+              subjectType: '2',
+            }),
+          },
+        )
+
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json()
+          const firstResult = searchData?.data?.[0]
+          if (firstResult) {
+            id = firstResult.id || firstResult.subjectId || id
+            detailPath = firstResult.detailPath || ''
+          }
+        }
+      } catch (err) {
+        console.error('Filmbox search failed, using fallback:', err)
+      }
+    }
+
+    const params = new URLSearchParams()
+    if (id) params.set('id', id)
+    if (se) params.set('se', se)
+    if (ep) params.set('ep', ep)
+    params.set('quality', quality || '1080')
+    params.set('lang', lang || 'en')
+    if (detailPath) params.set('detailPath', detailPath)
+
+    try {
+      const response = await fetch(
+        `https://multilang-movie-drama-database-api.p.rapidapi.com/dramovnime/getplay?${params}`,
+        {
+          method: 'GET',
+          headers: {
+            'x-rapidapi-key': apiKey,
+            'x-rapidapi-host': 'multilang-movie-drama-database-api.p.rapidapi.com',
+            'Content-Type': 'application/json',
+          },
+        },
+      )
+      const data = await response.json()
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600')
+      res.status(response.status).json(data)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to fetch from Dramovnime API'
+      res.status(502).json({ error: message })
+    }
+    return
+  }
+
+  res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800')
+
+  const imdbId = getQueryValue(req.query.imdbId)
+  const title = getQueryValue(req.query.title)
+
+  if (!imdbId && !title) {
     res.status(400).json({
       Response: 'False',
-      Error: 'Provide imdbId.',
+      Error: 'Provide imdbId or title.',
     })
     return
   }
 
+  if (title) {
+    const typeHint = getQueryValue(req.query.type)
+    const preferredType =
+      typeHint === 'movie' || typeHint === 'tv' ? typeHint : undefined
+    const result = await fetchTmdbByTitle(title, preferredType)
+    res.status(result.status).json(result.body)
+    return
+  }
+
   try {
-    const result = await fetchTmdbByImdbId(imdbId)
+    const result = await fetchTmdbByImdbId(imdbId!)
     res.status(result.status).json(result.body)
   } catch (error) {
-    const fallbackMatch = fallbackTmdbMatches[imdbId]
+    const fallbackMatch = fallbackTmdbMatches[imdbId!]
 
     if (fallbackMatch) {
       res.status(200).json({
@@ -274,3 +437,4 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     })
   }
 }
+

@@ -58,6 +58,12 @@ export type Movie = {
   tmdbType?: 'movie' | 'tv'
   streamSeason?: number
   streamEpisode?: number
+  anilistId?: number
+  malId?: number
+  isAnime?: boolean
+  animeFormat?: string
+  episodeCount?: number
+  trailerYoutubeId?: string
   rank: number
   title: string
   logoTitle: string
@@ -78,8 +84,8 @@ export type Movie = {
   awards: string
   boxOffice: string
   ratings: OmdbRating[]
-  badges: string[]
-  isFull: boolean
+  badges?: string[]
+  isFull?: boolean
 }
 
 export const featuredMovieIds = [

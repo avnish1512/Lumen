@@ -476,13 +476,20 @@ function normalizeStreamingCountry(value?: string) {
 }
 
 function normalizeStreamingCatalogs(value?: string) {
-  return (
+  const normalized =
     value
       ?.split(',')
       .map((catalog) => catalog.trim().toLowerCase())
       .filter(Boolean)
-      .join(',') || 'apple'
-  )
+      .join(',') ?? ''
+
+  // Empty or "all" means: search across every platform available in the
+  // country instead of restricting to a single service (e.g. Apple TV).
+  if (!normalized || normalized === 'all') {
+    return ''
+  }
+
+  return normalized
 }
 
 function parseStreamingAvailabilityApiKeys(value?: string) {
@@ -756,7 +763,7 @@ function movieFromStreamingAvailability(
 
   return {
     awards: 'Awards unavailable',
-    badges: rating === 'N/A' ? ['HD', 'Apple TV'] : ['HD', `Rating ${rating}`],
+    badges: rating === 'N/A' ? ['HD'] : ['HD', `Rating ${rating}`],
     boxOffice: 'Box office unavailable',
     cast: show.cast?.slice(0, 6) ?? ['Cast unavailable'],
     director,
@@ -822,7 +829,9 @@ async function fetchStreamingAvailabilityRail(
       config,
       '/shows/search/filters',
       {
-        catalogs: config.catalogs,
+        // Omit `catalogs` when configured for all platforms so the API returns
+        // shows from every service available in the country.
+        ...(config.catalogs ? { catalogs: config.catalogs } : {}),
         country: config.country,
         output_language: 'en',
         show_type: showType,
@@ -838,22 +847,28 @@ async function fetchStreamingAvailabilityTopRail(
   label: string,
   showType: 'movie' | 'series',
 ) {
-  try {
-    const response = await requestStreamingAvailability<
-      StreamingAvailabilityShow[]
-    >(config, '/shows/top', {
-      country: config.country,
-      output_language: 'en',
-      service: config.catalogs.split(',')[0] || 'apple',
-      show_type: showType,
-    })
-    const rail = buildStreamingRail(response, label, showType)
+  // The per-service Top chart only applies to a single platform. When we are
+  // showing all platforms, skip straight to cross-platform popularity.
+  const topService = config.catalogs.split(',').filter(Boolean)[0]
 
-    if (rail.length > 0) {
-      return rail
+  if (topService) {
+    try {
+      const response = await requestStreamingAvailability<
+        StreamingAvailabilityShow[]
+      >(config, '/shows/top', {
+        country: config.country,
+        output_language: 'en',
+        service: topService,
+        show_type: showType,
+      })
+      const rail = buildStreamingRail(response, label, showType)
+
+      if (rail.length > 0) {
+        return rail
+      }
+    } catch {
+      // Fall back to popularity when a service does not expose an official chart.
     }
-  } catch {
-    // Fall back to popularity when a service does not expose an official chart.
   }
 
   return fetchStreamingAvailabilityRail(

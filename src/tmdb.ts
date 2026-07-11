@@ -11,8 +11,12 @@ export type TmdbMatch = {
 export type StreamProvider =
   | 'rivestream'
   | 'vidsync'
+  | 'vidlink'
   | 'multiembed'
   | 'multiembed-vip'
+  | 'vidking'
+  | 'megaplay'
+  | 'animeplay'
 
 export type StreamProviderOption = {
   id: StreamProvider
@@ -104,6 +108,12 @@ export const defaultStreamProvider: StreamProvider = 'rivestream'
 
 export const streamProviderOptions: StreamProviderOption[] = [
   {
+    id: 'vidking',
+    name: 'Vidking',
+    logo: 'VK',
+    description: 'HLS player · TMDB',
+  },
+  {
     id: 'rivestream',
     name: 'Rivestream',
     logo: 'RS',
@@ -116,6 +126,12 @@ export const streamProviderOptions: StreamProviderOption[] = [
     description: 'With ads',
   },
   {
+    id: 'vidlink',
+    name: 'VidLink',
+    logo: 'VL',
+    description: 'Fast player',
+  },
+  {
     id: 'multiembed',
     name: 'MultiEmbed',
     logo: 'ME',
@@ -126,6 +142,18 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'VIP Server',
     logo: 'VIP',
     description: 'Local player',
+  },
+  {
+    id: 'megaplay',
+    name: 'MegaPlay',
+    logo: 'MP',
+    description: 'Anime · AniList',
+  },
+  {
+    id: 'animeplay',
+    name: 'AnimePlay',
+    logo: 'AP',
+    description: 'Anime · AniList',
   },
 ]
 
@@ -160,9 +188,23 @@ const fallbackTmdbMatches: Record<string, TmdbMatch> = {
   tt0413573: { tmdbId: 1416, mediaType: 'tv', title: "Grey's Anatomy" },
 }
 
-export async function fetchTmdbMatch(imdbId: string): Promise<TmdbMatch> {
-  const params = new URLSearchParams({ imdbId })
-  const fallbackMatch = fallbackTmdbMatches[imdbId]
+export async function fetchTmdbMatch(
+  identifier: string,
+  isTitle = false,
+  mediaHint?: 'movie' | 'tv',
+): Promise<TmdbMatch> {
+  const params = new URLSearchParams()
+  if (isTitle || (!identifier.startsWith('tt') && isNaN(Number(identifier)))) {
+    params.set('title', identifier)
+  } else {
+    params.set('imdbId', identifier)
+  }
+
+  if (mediaHint) {
+    params.set('type', mediaHint)
+  }
+
+  const fallbackMatch = fallbackTmdbMatches[identifier]
 
   if (fallbackMatch) {
     return fallbackMatch
@@ -380,20 +422,97 @@ function buildSuperEmbedPlayerUrl(movie: Movie, preferredServer = '0') {
   return `/se_player.php?${params}`
 }
 
+export type SeasonEpisode = {
+  number: number
+  name: string
+  overview: string
+  still: string
+  runtime: string
+}
+
+export async function fetchSeasonEpisodes(
+  tmdbId: number,
+  season: number,
+): Promise<SeasonEpisode[]> {
+  try {
+    const response = await fetch(`/api/tmdb-episodes?tmdbId=${tmdbId}&season=${season}`)
+    const body = (await response.json()) as { Response?: string; episodes?: SeasonEpisode[] }
+
+    if (!response.ok || body.Response === 'False') {
+      return []
+    }
+
+    return body.episodes ?? []
+  } catch {
+    return []
+  }
+}
+
+export async function fetchKoreanChineseDramas(): Promise<Movie[]> {
+  try {
+    const response = await fetch('/api/tmdb-drama')
+    const body = (await response.json()) as { Response?: string; results?: Movie[] }
+
+    if (!response.ok || body.Response === 'False') {
+      return []
+    }
+
+    return body.results ?? []
+  } catch {
+    return []
+  }
+}
+
 export function buildStreamUrl(
   movie: Movie,
   provider: StreamProvider = defaultStreamProvider,
 ) {
+  if (provider === 'megaplay' || provider === 'animeplay') {
+    // Both accept the AniList id directly, same path format:
+    //   https://megaplay.buzz/stream/ani/{anilist-id}/{ep-num}/{language}
+    //   https://animeplay.cfd/stream/ani/{anilist-id}/{ep-num}/{language}
+    if (!movie.anilistId) {
+      return ''
+    }
+
+    const ep = movie.streamEpisode ?? 1
+    const host = provider === 'animeplay' ? 'animeplay.cfd' : 'megaplay.buzz'
+    return `https://${host}/stream/ani/${movie.anilistId}/${ep}/sub`
+  }
+
+  if (!movie.tmdbId) {
+    return ''
+  }
+
+  if (provider === 'vidking') {
+    // Vidking uses the TMDB id (resolved via the TMDB proxy) for both movies
+    // and series. Anime that matches a TMDB tv/movie entry plays here too.
+    const color = 'e50914'
+
+    if (movie.tmdbType === 'tv') {
+      const season = movie.streamSeason ?? 1
+      const episode = movie.streamEpisode ?? 1
+      return `https://www.vidking.net/embed/tv/${movie.tmdbId}/${season}/${episode}?color=${color}&autoPlay=true&nextEpisode=true&episodeSelector=true`
+    }
+
+    return `https://www.vidking.net/embed/movie/${movie.tmdbId}?color=${color}&autoPlay=true`
+  }
+
+  if (provider === 'vidlink') {
+    if (movie.tmdbType === 'tv') {
+      const season = movie.streamSeason ?? 1
+      const episode = movie.streamEpisode ?? 1
+      return `https://vidlink.pro/embed/tv/${movie.tmdbId}/${season}/${episode}?primaryColor=ff3b30`
+    }
+    return `https://vidlink.pro/embed/movie/${movie.tmdbId}?primaryColor=ff3b30`
+  }
+
   if (provider === 'multiembed') {
     return buildSuperEmbedPlayerUrl(movie)
   }
 
   if (provider === 'multiembed-vip') {
     return buildSuperEmbedPlayerUrl(movie, superEmbedVipPreferredServer)
-  }
-
-  if (!movie.tmdbId) {
-    return ''
   }
 
   if (provider === 'vidsync') {

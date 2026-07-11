@@ -34,6 +34,10 @@ import {
   resolveSuperEmbedPlayerUrl,
   superEmbedOptionsFromParams,
 } from './api/superembed-core'
+import { fetchAnikotoRecent, fetchAnikotoSeries } from './api/anikoto-core'
+import { fetchKoreanChineseDramas } from './api/tmdb-drama-core'
+import { fetchKinocheckTrailer } from './api/kinocheck-core'
+import { fetchTmdbSeasonEpisodes } from './api/tmdb-episodes-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -789,6 +793,136 @@ function superEmbedPlayerDevProxy(): Plugin {
   }
 }
 
+function tmdbEpisodesDevProxy(authChain: TmdbWatchAuth[]): Plugin {
+  return {
+    name: 'tmdb-episodes-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/tmdb-episodes', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { Response: 'False', Error: 'Method not allowed.', episodes: [] })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const tmdbId = Number(requestUrl.searchParams.get('tmdbId') ?? 0)
+        const season = Number(requestUrl.searchParams.get('season') ?? 1)
+
+        if (!tmdbId) {
+          sendJson(res, 400, { Response: 'False', Error: 'Provide tmdbId.', episodes: [] })
+          return
+        }
+
+        try {
+          const episodes = await fetchTmdbSeasonEpisodes(authChain, tmdbId, season || 1)
+          sendJson(res, 200, { Response: 'True', episodes })
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Could not reach TMDB.'
+          sendJson(res, 502, { Response: 'False', Error: message, episodes: [] })
+        }
+      })
+    },
+  }
+}
+
+function tmdbDramaDevProxy(authChain: TmdbWatchAuth[]): Plugin {
+  return {
+    name: 'tmdb-drama-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/tmdb-drama', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { Response: 'False', Error: 'Method not allowed.', results: [] })
+          return
+        }
+
+        try {
+          const results = await fetchKoreanChineseDramas(authChain)
+          sendJson(res, 200, { Response: 'True', results })
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Could not reach TMDB.'
+          sendJson(res, 502, { Response: 'False', Error: message, results: [] })
+        }
+      })
+    },
+  }
+}
+
+function kinocheckDevProxy(apiKey?: string): Plugin {
+  return {
+    name: 'kinocheck-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/kinocheck', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { youtubeId: null, error: 'Method not allowed.' })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const type = requestUrl.searchParams.get('type') === 'tv' ? 'tv' : 'movie'
+
+        try {
+          const trailer = await fetchKinocheckTrailer(
+            {
+              tmdbId: requestUrl.searchParams.get('tmdbId') ?? undefined,
+              imdbId: requestUrl.searchParams.get('imdbId') ?? undefined,
+              type,
+            },
+            apiKey,
+          )
+          sendJson(res, 200, trailer ?? { youtubeId: null })
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Could not reach KinoCheck.'
+          sendJson(res, 502, { youtubeId: null, error: message })
+        }
+      })
+    },
+  }
+}
+
+function anikotoDevProxy(): Plugin {
+  return {
+    name: 'anikoto-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/anikoto', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { ok: false, error: 'Method not allowed.' })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const action = requestUrl.searchParams.get('action') ?? 'recent'
+
+        try {
+          if (action === 'series') {
+            const id = requestUrl.searchParams.get('id')
+
+            if (!id) {
+              sendJson(res, 400, { ok: false, error: 'Provide id for a series lookup.' })
+              return
+            }
+
+            const body = await fetchAnikotoSeries(id)
+            sendJson(res, 200, body)
+            return
+          }
+
+          const body = await fetchAnikotoRecent(
+            requestUrl.searchParams.get('page') ?? undefined,
+            requestUrl.searchParams.get('per_page') ?? undefined,
+          )
+          sendJson(res, 200, body)
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Could not reach Anikoto.'
+          sendJson(res, 502, { ok: false, error: message })
+        }
+      })
+    },
+  }
+}
+
 function createTmdbAuthChain(env: Record<string, string>) {
   const auths: TmdbAuth[] = [
     {
@@ -875,6 +1009,10 @@ export default defineConfig(({ mode }) => {
         streamingAvailabilityConfigFromEnv(env),
       ),
       superEmbedPlayerDevProxy(),
+      anikotoDevProxy(),
+      kinocheckDevProxy(env.KINOCHECK_API_KEY),
+      tmdbDramaDevProxy(createTmdbWatchAuthChain(env)),
+      tmdbEpisodesDevProxy(createTmdbWatchAuthChain(env)),
       movieGluDevProxy(
         movieGluConfigFromEnv(env),
         createTmdbTrailerAuthChain(env),

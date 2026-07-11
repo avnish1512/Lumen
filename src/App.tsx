@@ -21,6 +21,7 @@ import {
   Download,
   Home,
   Info,
+  ThumbsUp,
   Library,
   LoaderCircle,
   Mic,
@@ -36,7 +37,12 @@ import {
   Eye,
   EyeOff,
   Pencil,
-  Sparkles,
+  Radio,
+  LogOut,
+  ArrowLeftRight,
+  CircleHelp,
+  CircleUserRound,
+  UserCog,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -55,6 +61,9 @@ import {
   fetchTmdbMatch,
   fetchTmdbWatchAvailability,
   fetchWatchmodeCastCrew,
+  fetchKoreanChineseDramas,
+  fetchSeasonEpisodes,
+  type SeasonEpisode,
   streamProviderOptions,
   type CastCrewMember,
   type StreamProvider,
@@ -62,6 +71,15 @@ import {
   type TmdbWatchAvailability,
   type TmdbWatchProvider,
 } from './tmdb'
+import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds } from './anilist'
+import {
+  fetchLiveChannels,
+  fetchLiveCategories,
+  loadHlsJs,
+  type LiveChannel,
+} from './livetv'
+import { TOP_POSTER_KEYS, topPosterUrl, hasTopPoster } from './posters'
+import { fetchTrailerYoutubeId } from './kinocheck'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -76,8 +94,8 @@ for (const [path, url] of Object.entries(assetModules)) {
   avatarAssets[key] = url
 }
 
-type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles'
-type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search'
+type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles' | 'drama' | 'livetv'
+type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search' | 'Drama' | 'Live TV'
 type SavedMovies = Record<string, Movie>
 type WatchHistoryEntry = {
   movie: Movie
@@ -102,13 +120,40 @@ const savedMoviesKey = 'omdb.apple-tv-style.saved-movies'
 const watchHistoryKey = 'omdb.apple-tv-style.watch-history'
 const streamProviderKey = 'omdb.apple-tv-style.stream-provider'
 const streamSandboxKey = 'omdb.apple-tv-style.stream-sandbox'
-const homeCacheKey = 'omdb.apple-tv-style.home-cache-v2'
+const homeCacheKey = 'omdb.apple-tv-style.home-cache-v3'
 const currentUserKey = 'omdb.apple-tv-style.current-user'
+const profilesListKey = 'omdb.apple-tv-style.profiles-list'
 
 type UserInfo = {
   name: string
   email: string
   avatarColor?: string
+}
+
+// Profiles are stored per login account (keyed by email) so each of the
+// separate logins keeps its own set of profiles and they are never
+// overwritten by another account on the same device.
+function profilesKeyFor(user: UserInfo | null) {
+  return user?.email
+    ? `${profilesListKey}.${user.email.toLowerCase()}`
+    : profilesListKey
+}
+
+function readProfilesFor(user: UserInfo | null): UserProfile[] {
+  const fallback: UserProfile[] = [{ name: 'Children', avatarColor: 'kids' }]
+  try {
+    const key = profilesKeyFor(user)
+    let saved = window.localStorage.getItem(key)
+
+    // One-time migration: seed a new account from any pre-existing global list.
+    if (!saved && user) {
+      saved = window.localStorage.getItem(profilesListKey)
+    }
+
+    return saved ? (JSON.parse(saved) as UserProfile[]) : fallback
+  } catch {
+    return fallback
+  }
 }
 
 function readCurrentUser(): UserInfo | null {
@@ -129,6 +174,7 @@ type HomeCache = {
   animeCollection?: MediaCollection
   tmdbHomeRails: TmdbHomeRails
   homeHeroMovie: Movie | null
+  searchRecommendations?: Movie[]
 }
 
 function readHomeCache(): HomeCache | null {
@@ -147,7 +193,7 @@ function getInitials(name: string) {
   return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase()
 }
 
-const heroAutoAdvanceMs = 6000
+const heroAutoAdvanceMs = 15000
 const emptyMediaCollection: MediaCollection = {
   top: [],
   thrilling: [],
@@ -165,7 +211,7 @@ const emptyTmdbHomeRails: TmdbHomeRails = {
 
 
 const searchCategories = [
-  'Apple TV',
+  'Lumen',
   'Sports',
   'Movie Bundles',
   'Bollywood',
@@ -188,7 +234,9 @@ function getInitialScreen(): Screen {
     hash === 'detail' ||
     hash === 'watch' ||
     hash === 'search' ||
-    hash === 'library'
+    hash === 'library' ||
+    hash === 'drama' ||
+    hash === 'livetv'
   ) {
     return hash
   }
@@ -204,8 +252,12 @@ function isStreamProvider(value: string | null): value is StreamProvider {
   return (
     value === 'rivestream' ||
     value === 'vidsync' ||
+    value === 'vidlink' ||
     value === 'multiembed' ||
-    value === 'multiembed-vip'
+    value === 'multiembed-vip' ||
+    value === 'vidking' ||
+    value === 'megaplay' ||
+    value === 'animeplay'
   )
 }
 
@@ -268,7 +320,7 @@ function compactRuntime(runtime: string) {
 
 const hiddenMediaBadges = new Set(['CC', 'SDH'])
 
-function visibleMediaBadges(badges: string[]) {
+function visibleMediaBadges(badges: string[] = []) {
   return badges.filter((badge) => !hiddenMediaBadges.has(badge.trim().toUpperCase()))
 }
 
@@ -359,6 +411,13 @@ const episodeTitlePool = [
 ]
 
 function seasonsFor(movie: Movie) {
+  if (movie.isAnime) {
+    // AniList anime use a single continuous season with absolute episode
+    // numbering, which is what the anime stream providers expect.
+    const total = movie.episodeCount && movie.episodeCount > 0 ? movie.episodeCount : 12
+    return [{ season: 1, episodeCount: total }]
+  }
+
   const knownCounts = seasonEpisodeCounts[movie.id]
   const fallbackSeasonCount = movie.year.includes('-') ? 4 : 2
   const counts =
@@ -431,7 +490,7 @@ function collectionMovies(collection: MediaCollection) {
 }
 
 const searchCategoryAliases: Record<string, string[]> = {
-  'Apple TV': ['movie', 'series', 'drama', 'adventure'],
+  Lumen: ['movie', 'series', 'drama', 'adventure'],
   Action: ['action', 'thriller', 'crime'],
   Adventure: ['adventure', 'fantasy', 'sci fi'],
   Bollywood: ['drama', 'music', 'romance'],
@@ -519,6 +578,23 @@ function continueRuntimeLabel(movie: Movie) {
 }
 
 function isTvShow(movie: Movie) {
+  if (movie.isAnime) {
+    const fmt = (movie.animeFormat ?? '').toUpperCase()
+
+    // Anime films (and music videos) behave like movies: no season/episode list.
+    if (fmt === 'MOVIE' || fmt === 'MUSIC') {
+      return false
+    }
+
+    // A single-episode entry (e.g. a one-shot special) is movie-like too.
+    if ((movie.episodeCount ?? 0) === 1) {
+      return false
+    }
+
+    // Everything else (TV, ONA, OVA, multi-episode specials) is a series.
+    return true
+  }
+
   return movie.tmdbType === 'tv' || movie.type.toLowerCase() === 'series'
 }
 
@@ -661,6 +737,169 @@ function resetMagneticNavOffset(event: PointerEvent<HTMLElement>) {
   event.currentTarget.style.setProperty('--nav-magnetic-y', '0px')
 }
 
+function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
+  const title = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Unknown Anime'
+  const year = anime.seasonYear ? String(anime.seasonYear) : 'N/A'
+  const banner = anime.bannerImage || anime.coverImage?.large || ''
+  const poster = anime.coverImage?.large || anime.coverImage?.medium || ''
+  const animeFormat = (anime.format || '').toUpperCase()
+  const isAnimeFilm = animeFormat === 'MOVIE' || animeFormat === 'MUSIC'
+  const episodeCount = Number(anime.episodes) || 0
+  const trailerYoutubeId =
+    anime.trailer && (anime.trailer.site === 'youtube' || anime.trailer.site === 'YouTube')
+      ? anime.trailer.id
+      : undefined
+  const runtime = isAnimeFilm
+    ? 'Movie'
+    : `${anime.episodes || '?'} Episode${episodeCount === 1 ? '' : 's'}`
+
+  return {
+    id: `anilist-${anime.id}`,
+    anilistId: anime.id,
+    malId: anime.idMal,
+    isAnime: true,
+    animeFormat,
+    episodeCount,
+    trailerYoutubeId,
+    rank,
+    title,
+    logoTitle: title,
+    label: anime.status || 'Ongoing',
+    type: 'Anime',
+    genres: anime.genres || [],
+    year,
+    runtime,
+    rating: 'N/A',
+    maturity: 'TV-14',
+    progress: 0,
+    hero: banner,
+    poster,
+    still: banner,
+    synopsis: (anime.description || '').replace(/<[^>]*>/g, ''),
+    cast: [],
+    director: '',
+    awards: '',
+    boxOffice: '',
+    ratings: [],
+  }
+}
+
+async function fetchAniListHomeCollection(): Promise<MediaCollection> {
+  try {
+    const [trending, action, fantasy, comedy] = await Promise.all([
+      fetchAnimeByOptions({ sort: ['TRENDING_DESC', 'POPULARITY_DESC'], perPage: 15 }),
+      fetchAnimeByOptions({ genre: 'Action', sort: ['POPULARITY_DESC'], perPage: 15 }),
+      fetchAnimeByOptions({ genre: 'Fantasy', sort: ['POPULARITY_DESC'], perPage: 15 }),
+      fetchAnimeByOptions({ genre: 'Comedy', sort: ['POPULARITY_DESC'], perPage: 15 }),
+    ])
+
+    const mapList = (list: any[]) => list.map((item, i) => mapAniListToMovieStandalone(item, i + 1))
+
+    return {
+      top: mapList(trending),
+      thrilling: mapList(action),
+      adventure: mapList(fantasy),
+      kidsFamily: mapList(comedy),
+    }
+  } catch (e) {
+    console.error('Failed to fetch anime collection from AniList', e)
+    return fetchAnimeCollection()
+  }
+}
+
+type AnimeHomeExtras = {
+  movieCollection: MediaCollection
+  tvCollection: MediaCollection
+  newReleases: Movie[]
+  trending: Movie[]
+}
+
+const emptyAnimeExtras: AnimeHomeExtras = {
+  movieCollection: emptyMediaCollection,
+  tvCollection: emptyMediaCollection,
+  newReleases: [],
+  trending: [],
+}
+
+// Fetches many AniList category lists and de-duplicates globally so that each
+// home rail shows a genuinely different set of anime (popular titles otherwise
+// appear across many genres). Earlier rails get first pick of the titles.
+async function fetchAnimeRails(): Promise<AnimeHomeExtras> {
+  try {
+    const [
+      trending,
+      action,
+      fantasy,
+      comedy,
+      supernatural,
+      romance,
+      adventure,
+      sliceOfLife,
+      newest,
+      topRated,
+    ] = await Promise.all([
+      fetchAnimeByOptions({ sort: ['TRENDING_DESC', 'POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ genre: 'Action', sort: ['POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ genre: 'Fantasy', sort: ['POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ genre: 'Comedy', sort: ['POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ genre: 'Supernatural', sort: ['POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ genre: 'Romance', sort: ['POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ genre: 'Adventure', sort: ['POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ genre: 'Slice of Life', sort: ['POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ sort: ['START_DATE_DESC', 'POPULARITY_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ sort: ['SCORE_DESC'], perPage: 25 }),
+    ])
+
+    const used = new Set<number>()
+    const take = (list: any[], limit = 14): Movie[] => {
+      const out: Movie[] = []
+      for (const item of list) {
+        if (!item || used.has(item.id)) {
+          continue
+        }
+        used.add(item.id)
+        out.push(mapAniListToMovieStandalone(item, out.length + 1))
+        if (out.length >= limit) {
+          break
+        }
+      }
+      return out
+    }
+
+    // Order defines priority — a title claimed by an earlier rail is skipped later.
+    const top = take(trending)
+    const actionList = take(action)
+    const fantasyList = take(fantasy)
+    const comedyList = take(comedy)
+    const supernaturalList = take(supernatural)
+    const romanceList = take(romance)
+    const adventureList = take(adventure)
+    const sliceList = take(sliceOfLife)
+    const newestList = take(newest)
+    const topRatedList = take(topRated)
+
+    return {
+      movieCollection: {
+        top,
+        thrilling: actionList,
+        adventure: fantasyList,
+        kidsFamily: comedyList,
+      },
+      tvCollection: {
+        top: supernaturalList,
+        thrilling: romanceList,
+        adventure: adventureList,
+        kidsFamily: sliceList,
+      },
+      newReleases: newestList,
+      trending: topRatedList,
+    }
+  } catch (e) {
+    console.error('Failed to fetch anime rails from AniList', e)
+    return emptyAnimeExtras
+  }
+}
+
 type UserProfile = {
   name: string
   avatarColor: string
@@ -673,19 +912,19 @@ function App() {
     if (!savedUser) {
       return 'login'
     }
+    // On mobile, always open the "Choose your profile" screen (Netflix-style)
+    // so the viewer confirms which independent profile they're using.
+    if (typeof window !== 'undefined' && window.innerWidth <= 899) {
+      return 'profiles'
+    }
     return getInitialScreen()
   })
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(readCurrentUser)
   const [loginBackScreen, setLoginBackScreen] = useState<Screen>('home')
   const [tempUser, setTempUser] = useState<UserInfo | null>(null)
-  const [profiles, setProfiles] = useState<UserProfile[]>(() => {
-    try {
-      const saved = window.localStorage.getItem('omdb.apple-tv-style.profiles-list')
-      return saved ? (JSON.parse(saved) as UserProfile[]) : [{ name: 'Children', avatarColor: 'kids' }]
-    } catch {
-      return [{ name: 'Children', avatarColor: 'kids' }]
-    }
-  })
+  const [profiles, setProfiles] = useState<UserProfile[]>(() =>
+    readProfilesFor(readCurrentUser()),
+  )
   const [designMode, setDesignMode] = useState<'apple' | 'netflix'>(() => {
     return (window.localStorage.getItem('omdb.apple-tv-style.designMode') as 'apple' | 'netflix') || 'apple'
   })
@@ -703,7 +942,7 @@ function App() {
     }
     const updated = [...profiles, newProfile]
     setProfiles(updated)
-    window.localStorage.setItem('omdb.apple-tv-style.profiles-list', JSON.stringify(updated))
+    window.localStorage.setItem(profilesKeyFor(currentUser ?? tempUser), JSON.stringify(updated))
   }
 
   const handleEditProfile = (oldName: string, newName: string, avatarColor: string) => {
@@ -714,7 +953,7 @@ function App() {
       return p
     })
     setProfiles(updated)
-    window.localStorage.setItem('omdb.apple-tv-style.profiles-list', JSON.stringify(updated))
+    window.localStorage.setItem(profilesKeyFor(currentUser ?? tempUser), JSON.stringify(updated))
 
     if (oldName !== newName) {
       const oldSaved = window.localStorage.getItem(`${savedMoviesKey}.${oldName}`)
@@ -740,7 +979,7 @@ function App() {
       updated = [{ name: 'Children', avatarColor: 'kids' }]
     }
     setProfiles(updated)
-    window.localStorage.setItem('omdb.apple-tv-style.profiles-list', JSON.stringify(updated))
+    window.localStorage.setItem(profilesKeyFor(currentUser ?? tempUser), JSON.stringify(updated))
 
     window.localStorage.removeItem(`${savedMoviesKey}.${name}`)
     window.localStorage.removeItem(`${watchHistoryKey}.${name}`)
@@ -750,6 +989,12 @@ function App() {
       setScreenState('login')
     }
   }
+
+  // Load the active account's own profile list whenever the login changes, so
+  // each of the separate logins always sees its own profiles.
+  useEffect(() => {
+    setProfiles(readProfilesFor(currentUser ?? tempUser))
+  }, [currentUser, tempUser])
 
   const initialCache = useMemo(() => readHomeCache(), [])
 
@@ -762,10 +1007,13 @@ function App() {
     useState<MediaCollection>(() => initialCache?.tvShowCollection ?? emptyMediaCollection)
   const [animeCollection, setAnimeCollection] =
     useState<MediaCollection>(() => initialCache?.animeCollection ?? emptyMediaCollection)
+  const [animeExtras, setAnimeExtras] = useState<AnimeHomeExtras>(emptyAnimeExtras)
+  const [kcDramas, setKcDramas] = useState<Movie[]>([])
   const [tmdbHomeRails, setTmdbHomeRails] =
     useState<TmdbHomeRails>(() => initialCache?.tmdbHomeRails ?? emptyTmdbHomeRails)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
   const [homeHeroMovie, setHomeHeroMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
+  const [dramaHeroMovie, setDramaHeroMovie] = useState<Movie | null>(null)
   const [detailBackScreen, setDetailBackScreen] = useState<Screen>('home')
   const [savedMovies, setSavedMovies] = useState<SavedMovies>(readSavedMovies)
   const [watchHistory, setWatchHistory] =
@@ -776,6 +1024,7 @@ function App() {
   const [detailError, setDetailError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Movie[]>([])
+  const [searchRecommendations, setSearchRecommendations] = useState<Movie[]>(() => initialCache?.searchRecommendations ?? [])
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [streamLoading, setStreamLoading] = useState(false)
@@ -787,9 +1036,25 @@ function App() {
   )
   const [navScrolled, setNavScrolled] = useState(false)
   const [navScrollProgress, setNavScrollProgress] = useState(0)
+  const [aniListToken, setAniListToken] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!currentUser) {
+      setAniListToken(null)
+      return
+    }
+    const token = window.localStorage.getItem(`omdb.apple-tv-style.anilistToken.${currentUser.name}`)
+    setAniListToken(token)
+  }, [currentUser])
 
   const featuredMovie = homeHeroMovie ?? movies[0] ?? null
   const featuredTvShow = tvShows[0] ?? null
+  // Anime hero: use the rotating hero pick when it's one of the anime titles,
+  // otherwise fall back to the first anime so the carousel can advance.
+  const animeHeroMovie =
+    (homeHeroMovie && anime.some((item) => item.id === homeHeroMovie.id)
+      ? homeHeroMovie
+      : anime[0]) ?? null
   const savedList = useMemo(() => Object.values(savedMovies), [savedMovies])
   const continueWatching = useMemo(
     () =>
@@ -822,7 +1087,71 @@ function App() {
       ]),
     [movieCollection, movies, tmdbHomeRails, tvShowCollection, tvShows, animeCollection, anime],
   )
-  const relatedMedia = selectedMovie && isTvShow(selectedMovie) ? tvShows : movies
+  const dramaList = useMemo(() => {
+    // Korean/Chinese series (from TMDB) lead, followed by any local drama titles.
+    // Anime is intentionally excluded here — otherwise, when the TMDB drama feed
+    // is empty, the Drama tab ends up showing anime (many anime carry a "Drama"
+    // genre tag), which makes it look like it navigated to the anime screen.
+    const localDramas = [...movies, ...tvShows].filter(
+      (m) => !m.isAnime && m.genres.some((g) => g.toLowerCase() === 'drama'),
+    )
+    const all = [...kcDramas, ...localDramas]
+    const seen = new Set<string>()
+    return all.filter((m) => {
+      if (seen.has(m.id)) return false
+      seen.add(m.id)
+      return true
+    })
+  }, [movies, tvShows, kcDramas])
+
+  const dramaCollection = useMemo<MediaCollection>(() => {
+    const top = dramaList.slice(0, 10)
+    const thrilling = dramaList
+      .filter((m) =>
+        m.genres.some((g) =>
+          ['crime', 'thriller', 'mystery', 'horror'].includes(g.toLowerCase()),
+        ),
+      )
+      .slice(0, 10)
+    const adventure = dramaList
+      .filter((m) =>
+        m.genres.some((g) =>
+          ['adventure', 'action', 'sci-fi', 'fantasy'].includes(g.toLowerCase()),
+        ),
+      )
+      .slice(0, 10)
+    const kidsFamily = dramaList
+      .filter(
+        (m) =>
+          !thrilling.some((t) => t.id === m.id) &&
+          !adventure.some((a) => a.id === m.id),
+      )
+      .slice(0, 10)
+
+    return {
+      top: top.length > 0 ? top : dramaList.slice(0, 5),
+      thrilling: thrilling.length > 0 ? thrilling : dramaList.slice(2, 7),
+      adventure: adventure.length > 0 ? adventure : dramaList.slice(4, 9),
+      kidsFamily: kidsFamily.length > 0 ? kidsFamily : dramaList.slice(1, 6),
+    }
+  }, [dramaList])
+
+  const featuredDramaMovie = useMemo(() => {
+    const preferred = dramaList.find(
+      (m) =>
+        m.title === 'Chernobyl' ||
+        m.title === 'Better Call Saul' ||
+        m.title === 'Ozark' ||
+        m.title === 'Breaking Bad',
+    )
+    return dramaHeroMovie || preferred || dramaList[0] || null
+  }, [dramaList, dramaHeroMovie])
+
+  const relatedMedia = selectedMovie?.isAnime
+    ? anime
+    : selectedMovie && isTvShow(selectedMovie)
+      ? tvShows
+      : movies
   const requiredMedia = screen === 'tv' ? tvShows : screen === 'anime' ? anime : movies
   const needsMovieBootstrap =
     screen === 'home' ||
@@ -832,17 +1161,27 @@ function App() {
     screen === 'detail' ||
     screen === 'watch'
   const activeTab: PrimaryTab =
-    screen === 'home'
-      ? 'Home'
-      : screen === 'library'
-        ? 'Library'
-        : screen === 'search'
-          ? 'Search'
-          : screen === 'tv'
-            ? 'TV Shows'
-            : screen === 'anime'
-              ? 'Anime'
-              : 'Movies'
+    designMode === 'netflix'
+      ? screen === 'home'
+        ? 'Anime'
+        : screen === 'drama'
+          ? 'Drama'
+          : screen === 'livetv'
+            ? 'Live TV'
+            : screen === 'search'
+              ? 'Search'
+              : 'Anime'
+      : screen === 'home'
+        ? 'Home'
+        : screen === 'library'
+          ? 'Library'
+          : screen === 'search'
+            ? 'Search'
+            : screen === 'tv'
+              ? 'TV Shows'
+              : screen === 'anime'
+                ? 'Anime'
+                : 'Movies'
 
   const setScreen = (nextScreen: Screen) => {
     setScreenState(nextScreen)
@@ -867,6 +1206,51 @@ function App() {
     setScreen('login')
   }
 
+  const switchToProfile = (profileName: string) => {
+    const matchedProfile = profiles.find((p) => p.name === profileName)
+    setCurrentUser({
+      name: profileName,
+      email: currentUser?.email ?? 'guest@apple-tv.com',
+      avatarColor: matchedProfile?.avatarColor,
+    })
+  }
+
+  const openManageProfiles = () => {
+    setLoginBackScreen(screen)
+    setTempUser(currentUser)
+    setScreen('profiles')
+  }
+
+  const signOut = () => {
+    setCurrentUser(null)
+    setScreen('login')
+  }
+
+  const openHelpCenter = () => {
+    // Placeholder support contact — swap for your real help center URL.
+    window.open('mailto:support@lumen.tv', '_blank', 'noopener,noreferrer')
+  }
+
+  useEffect(() => {
+    let active = true
+
+    void fetchAnimeRails().then((extras) => {
+      if (active) {
+        setAnimeExtras(extras)
+      }
+    })
+
+    void fetchKoreanChineseDramas().then((dramas) => {
+      if (active) {
+        setKcDramas(dramas)
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
   useEffect(() => {
     let isMounted = true
 
@@ -877,10 +1261,13 @@ function App() {
       setHomeError('')
 
       try {
-        const [nextTmdbHomeRails, nextAnimeCollection] = await Promise.all([
+        const [nextTmdbHomeRails, nextAnimeCollection, recAnime] = await Promise.all([
           fetchTmdbHomeRails(),
-          fetchAnimeCollection()
+          fetchAniListHomeCollection(),
+          fetchAnimeListByIds([21, 1535, 110277, 101922, 16498, 113415, 101280]).catch(() => [])
         ])
+
+        const nextRecommendations = recAnime.map((item, i) => mapAniListToMovieStandalone(item, i + 1))
 
         if (hasHomeBootstrapRails(nextTmdbHomeRails)) {
           const nextMovies = buildRail(
@@ -904,6 +1291,7 @@ function App() {
           setTvShowCollection(nextTmdbHomeRails.tvShowCollection)
           setAnimeCollection(nextAnimeCollection)
           setTmdbHomeRails(nextTmdbHomeRails)
+          setSearchRecommendations(nextRecommendations)
           
           const freshHero = nextMovies[0] ?? null
           setHomeHeroMovie((current) => current ?? freshHero)
@@ -921,6 +1309,7 @@ function App() {
                 animeCollection: nextAnimeCollection,
                 tmdbHomeRails: nextTmdbHomeRails,
                 homeHeroMovie: freshHero,
+                searchRecommendations: nextRecommendations,
               })
             )
           } catch (err) {
@@ -929,14 +1318,16 @@ function App() {
           return
         }
 
-        const [nextMovieCollection, nextTvShowCollection, fallbackAnimeCollection] = await Promise.all([
+        const [nextMovieCollection, nextTvShowCollection, fallbackAnimeCollection, fallbackRecAnime] = await Promise.all([
           fetchMovieCollection(),
           fetchTvShowCollection(),
-          fetchAnimeCollection(),
+          fetchAniListHomeCollection(),
+          fetchAnimeListByIds([21, 1535, 110277, 101922, 16498, 113415, 101280]).catch(() => [])
         ])
         const nextMovies = nextMovieCollection.top
         const nextTvShows = nextTvShowCollection.top
         const nextAnime = fallbackAnimeCollection.top
+        const fallbackRecommendations = fallbackRecAnime.map((item, i) => mapAniListToMovieStandalone(item, i + 1))
 
         if (!isMounted) {
           return
@@ -949,6 +1340,7 @@ function App() {
         setTvShowCollection(nextTvShowCollection)
         setAnimeCollection(fallbackAnimeCollection)
         setTmdbHomeRails(nextTmdbHomeRails)
+        setSearchRecommendations(fallbackRecommendations)
         
         const freshHero = nextMovies[0] ?? null
         setHomeHeroMovie((current) => current ?? freshHero)
@@ -966,6 +1358,7 @@ function App() {
               animeCollection: fallbackAnimeCollection,
               tmdbHomeRails: nextTmdbHomeRails,
               homeHeroMovie: freshHero,
+              searchRecommendations: fallbackRecommendations,
             })
           )
         } catch (err) {
@@ -998,7 +1391,18 @@ function App() {
     }
   }, [initialCache])
 
+  // Tracks which profile's data is currently loaded into state. Used to stop
+  // the persistence effects from writing the previous profile's watchlist /
+  // history into the newly selected profile during a profile switch (which
+  // otherwise "bleeds" one profile's activity into every profile).
+  const loadedProfileRef = useRef<string | null>(currentUser?.name ?? null)
+
   useEffect(() => {
+    if ((currentUser?.name ?? null) !== loadedProfileRef.current) {
+      // A profile switch is in progress; the loader effect below will replace
+      // savedMovies with the correct profile's data — don't persist yet.
+      return
+    }
     if (currentUser) {
       window.localStorage.setItem(`${savedMoviesKey}.${currentUser.name}`, JSON.stringify(savedMovies))
     } else {
@@ -1007,6 +1411,9 @@ function App() {
   }, [savedMovies, currentUser])
 
   useEffect(() => {
+    if ((currentUser?.name ?? null) !== loadedProfileRef.current) {
+      return
+    }
     if (currentUser) {
       window.localStorage.setItem(`${watchHistoryKey}.${currentUser.name}`, JSON.stringify(watchHistory))
     } else {
@@ -1029,6 +1436,9 @@ function App() {
       setSavedMovies({})
       setWatchHistory({})
     }
+    // Mark this profile as the one now loaded so the persistence effects above
+    // are allowed to write its data.
+    loadedProfileRef.current = currentUser?.name ?? null
   }, [currentUser])
 
   useEffect(() => {
@@ -1089,6 +1499,21 @@ function App() {
   }, [])
 
   const markContinueWatching = useCallback((movie: Movie) => {
+    if (movie.isAnime && movie.anilistId && aniListToken) {
+      const episode = movie.streamEpisode ?? 1
+      const progressPercent = continueProgressFor(movie)
+      const status = progressPercent >= 90 ? 'COMPLETED' : 'CURRENT'
+
+      void syncAnimeProgressToAniList(
+        aniListToken,
+        movie.anilistId,
+        episode,
+        status
+      ).catch((err) => {
+        console.error('Failed to sync progress to AniList:', err)
+      })
+    }
+
     setWatchHistory((current) => {
       const matchingKey =
         findMatchingMovieKey(current, movie, (entry) => entry.movie) ?? movie.id
@@ -1110,7 +1535,7 @@ function App() {
         },
       }
     })
-  }, [])
+  }, [aniListToken])
 
   const upsertMovie = (movie: Movie) => {
     const mergeMovie = (item: Movie) =>
@@ -1190,7 +1615,15 @@ function App() {
       setDetailError('')
 
       try {
-        const fullMovie = await fetchMovieById(movie.id, movie.rank)
+        let fullMovie: Movie
+        if (movie.id.startsWith('anilist-') || movie.isAnime) {
+          const anilistId = movie.anilistId || parseInt(movie.id.replace('anilist-', ''))
+          const animeData = await getAnimeDetails(anilistId)
+          fullMovie = mapAniListToMovieStandalone(animeData, movie.rank)
+          fullMovie.isFull = true
+        } else {
+          fullMovie = await fetchMovieById(movie.id, movie.rank)
+        }
 
         // Prevent late/stale hydration from overwriting a newer selection.
         if (selectedMovieIdRef.current !== movie.id) {
@@ -1253,7 +1686,16 @@ function App() {
         setStreamError('')
 
         try {
-          const match = await fetchTmdbMatch(movie.id)
+          const isTitle = movie.id.startsWith('anilist-') || !movie.id.startsWith('tt')
+          const queryParam = isTitle ? movie.title : movie.id
+          // For anime, steer the TMDB match toward the right media type so an
+          // anime film does not resolve to a same-named TV series (or vice versa).
+          const mediaHint = movie.isAnime
+            ? isTvShow(movie)
+              ? 'tv'
+              : 'movie'
+            : undefined
+          const match = await fetchTmdbMatch(queryParam, isTitle, mediaHint)
           const streamMovie: Movie = {
             ...movie,
             tmdbId: match.tmdbId,
@@ -1430,6 +1872,16 @@ function App() {
     [removeContinueMovie, removeSavedMovie],
   )
 
+  const mapAniListToMovie = useCallback((anime: any, rank = 1): Movie => {
+    return mapAniListToMovieStandalone(anime, rank)
+  }, [])
+
+  const handleClearSearch = useCallback(() => {
+    setSearchResults([])
+    setSearchError('')
+    setSearchQuery('')
+  }, [])
+
   const performSearch = useCallback(async (query: string) => {
     const trimmedQuery = query.trim()
 
@@ -1437,26 +1889,69 @@ function App() {
       return
     }
 
-    setSearchQuery(trimmedQuery)
     setSearchLoading(true)
     setSearchError('')
 
     try {
-      const results = await searchMovies(trimmedQuery)
-      setSearchResults(results)
+      const localQuery = trimmedQuery.toLowerCase()
+      const localResults = [...movies, ...tvShows, ...anime].filter((m) =>
+        m.title.toLowerCase().includes(localQuery) ||
+        m.genres.some((g) => g.toLowerCase().includes(localQuery))
+      )
+      const seen = new Set<string>()
+      const uniqueLocalResults = localResults.filter((m) => {
+        if (seen.has(m.id)) return false
+        seen.add(m.id)
+        return true
+      })
 
-      if (results.length === 0) {
-        setSearchError('No movies found. Try another title.')
+      if (designMode === 'netflix') {
+        const animeData = await searchAnime(trimmedQuery).catch(() => ({ results: [] }))
+        const mappedAnimeResults = animeData.results.map((anime: any, i: number) => mapAniListToMovie(anime, i + 1))
+        
+        const combined = [...uniqueLocalResults, ...mappedAnimeResults]
+        const finalSeen = new Set<string>()
+        const finalResults = combined.filter((m) => {
+          if (finalSeen.has(m.id)) return false
+          finalSeen.add(m.id)
+          return true
+        })
+
+        setSearchResults(finalResults)
+
+        if (finalResults.length === 0) {
+          setSearchError('No results found. Try another title.')
+        }
+      } else {
+        const [movieResults, animeData] = await Promise.all([
+          searchMovies(trimmedQuery).catch(() => []),
+          searchAnime(trimmedQuery).catch(() => ({ results: [] })),
+        ])
+
+        const mappedAnimeResults = animeData.results.map((anime: any, i: number) => mapAniListToMovie(anime, i + 1))
+        const combined = [...uniqueLocalResults, ...mappedAnimeResults, ...movieResults]
+        const finalSeen = new Set<string>()
+        const finalResults = combined.filter((m) => {
+          if (finalSeen.has(m.id)) return false
+          finalSeen.add(m.id)
+          return true
+        })
+
+        setSearchResults(finalResults)
+
+        if (finalResults.length === 0) {
+          setSearchError('No titles found. Try another title.')
+        }
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Could not search OMDb.'
+        error instanceof Error ? error.message : 'Could not search.'
       setSearchError(message)
       setSearchResults([])
     } finally {
       setSearchLoading(false)
     }
-  }, [])
+  }, [mapAniListToMovie, designMode, movies, tvShows, anime])
 
   useEffect(() => {
     if (
@@ -1546,12 +2041,24 @@ function App() {
     >
       {screen === 'home' && featuredMovie && (
         <HomeScreen
-          featuredMovie={featuredMovie}
-          movies={movies}
-          tvShows={tvShows}
-          movieCollection={movieCollection}
-          tvShowCollection={tvShowCollection}
-          tmdbHomeRails={tmdbHomeRails}
+          screen={screen}
+          featuredMovie={designMode === 'netflix' ? (animeHeroMovie ?? featuredMovie) : featuredMovie}
+          movies={designMode === 'netflix' ? anime : movies}
+          tvShows={designMode === 'netflix' ? anime : tvShows}
+          movieCollection={designMode === 'netflix'
+            ? (animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection)
+            : movieCollection}
+          tvShowCollection={designMode === 'netflix'
+            ? (animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection)
+            : tvShowCollection}
+          tmdbHomeRails={designMode === 'netflix' ? {
+            featuredMovies: anime.slice(0, 6),
+            featuredTvShows: (animeExtras.tvCollection.top.length ? animeExtras.tvCollection.top : anime).slice(0, 6),
+            movieCollection: animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection,
+            newReleases: animeExtras.newReleases.length ? animeExtras.newReleases : (animeCollection.top || []),
+            trendingNow: animeExtras.trending.length ? animeExtras.trending : (animeCollection.adventure || []),
+            tvShowCollection: animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection,
+          } : tmdbHomeRails}
           continueMovies={continueWatching}
           savedMovies={savedMovies}
           onOpenDetail={openDetail}
@@ -1564,18 +2071,67 @@ function App() {
           onRemoveWatchlist={removeWatchlistMovie}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
+          onSelectProfile={switchToProfile}
+          onManageProfiles={openManageProfiles}
+          onTransferProfile={openManageProfiles}
+          onAccount={openProfileOrLogin}
+          onHelp={openHelpCenter}
+          onSignOut={signOut}
           profiles={profiles}
           designMode={designMode}
         />
+      )}
+
+      {screen === 'drama' && (featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime)) && (
+        <HomeScreen
+          screen={screen}
+          featuredMovie={(featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime))!}
+          movies={dramaList}
+          tvShows={dramaList}
+          movieCollection={dramaCollection}
+          tvShowCollection={dramaCollection}
+          tmdbHomeRails={{
+            featuredMovies: dramaList.slice(0, 6),
+            featuredTvShows: dramaList.slice(0, 6),
+            movieCollection: dramaCollection,
+            newReleases: dramaCollection.top || [],
+            trendingNow: dramaCollection.adventure || [],
+            tvShowCollection: dramaCollection,
+          }}
+          continueMovies={continueWatching}
+          savedMovies={savedMovies}
+          onOpenDetail={openDetail}
+          onPlay={openWatch}
+          onSave={toggleSaved}
+          onSearch={() => setScreen('search')}
+          onSelectHero={setDramaHeroMovie}
+          onMarkWatched={markWatchedMovie}
+          onRemoveContinue={removeContinueMovie}
+          onRemoveWatchlist={removeWatchlistMovie}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          onSelectProfile={switchToProfile}
+          onManageProfiles={openManageProfiles}
+          onTransferProfile={openManageProfiles}
+          onAccount={openProfileOrLogin}
+          onHelp={openHelpCenter}
+          onSignOut={signOut}
+          profiles={profiles}
+          designMode={designMode}
+        />
+      )}
+
+      {screen === 'livetv' && (
+        <LiveTvScreen onSearch={() => setScreen('search')} currentUser={currentUser} onProfile={openProfileOrLogin} profiles={profiles} />
       )}
 
       {(screen === 'movies' || screen === 'tv' || screen === 'anime') && (
         <BrowseScreen
           key={screen}
           mode={screen}
-          movies={screen === 'anime' ? anime : screen === 'tv' ? tvShows : movies}
-          collection={screen === 'anime' ? animeCollection : screen === 'tv' ? tvShowCollection : movieCollection}
-          featuredMovie={screen === 'anime' ? anime[0] : screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0]}
+          movies={designMode === 'netflix' ? anime : (screen === 'anime' ? anime : screen === 'tv' ? tvShows : movies)}
+          collection={designMode === 'netflix' ? animeCollection : (screen === 'anime' ? animeCollection : screen === 'tv' ? tvShowCollection : movieCollection)}
+          featuredMovie={designMode === 'netflix' ? (anime[0] || featuredMovie) : (screen === 'anime' ? anime[0] : screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0])}
           savedMovies={savedMovies}
           onOpenDetail={openDetail}
           onPlay={openWatch}
@@ -1618,6 +2174,7 @@ function App() {
           onSave={() => toggleSaved(selectedMovie)}
           onShare={shareSelectedMovie}
           onOpenPoster={openSelectedPoster}
+          designMode={designMode}
         />
       )}
 
@@ -1638,6 +2195,7 @@ function App() {
           onStartWatching={markContinueWatching}
           onStreamSandboxChange={setStreamSandboxEnabled}
           onStreamProviderChange={setStreamProvider}
+          designMode={designMode}
         />
       )}
 
@@ -1650,16 +2208,14 @@ function App() {
           error={searchError}
           onQueryChange={setSearchQuery}
           onSearch={performSearch}
-          onClear={() => {
-            setSearchResults([])
-            setSearchError('')
-            setSearchQuery('')
-          }}
+          onClear={handleClearSearch}
           onOpenDetail={openDetail}
           onClose={() => setScreen('home')}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
           profiles={profiles}
+          designMode={designMode}
+          searchRecommendations={searchRecommendations}
         />
       )}
 
@@ -1686,15 +2242,12 @@ function App() {
             setScreen('login')
           }}
           onBack={() => setScreen(loginBackScreen)}
-          savedMoviesCount={savedList.length}
-          watchHistoryCount={Object.keys(watchHistory).length}
           onSwitchProfile={() => {
             setTempUser(currentUser)
             setScreen('profiles')
           }}
           profiles={profiles}
           designMode={designMode}
-          onToggleDesignMode={toggleDesignMode}
         />
       )}
 
@@ -1715,6 +2268,10 @@ function App() {
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
           onDeleteProfile={handleDeleteProfile}
+          backdrops={[...tvShows, ...movies, ...anime]
+            .map((m) => m.poster || m.still || m.hero)
+            .filter((src): src is string => Boolean(src && src.startsWith('http')))
+            .slice(0, 12)}
           onBack={() => {
             setScreen('login')
             setTempUser(null)
@@ -1722,14 +2279,29 @@ function App() {
         />
       )}
 
-      {screen !== 'search' && screen !== 'login' && screen !== 'profiles' && (
+      {((designMode === 'netflix' && (screen === 'home' || screen === 'drama' || screen === 'livetv' || screen === 'search' || screen === 'library')) ||
+        (designMode === 'apple' && screen !== 'search' && screen !== 'login' && screen !== 'profiles')) && (
         <BottomNav
           active={activeTab}
           onHome={() => setScreen('home')}
           onMovies={() => setScreen('movies')}
           onTvShows={() => setScreen('tv')}
-          onAnime={() => setScreen('anime')}
           onLibrary={() => setScreen('library')}
+          onDrama={() => setScreen('drama')}
+          onLiveTv={() => setScreen('livetv')}
+          onGoLumen={() => {
+            setScreen('home')
+            if (designMode !== 'apple') {
+              toggleDesignMode()
+            }
+          }}
+          onGoAnime={() => {
+            setScreen('home')
+            if (designMode !== 'netflix') {
+              toggleDesignMode()
+            }
+          }}
+          designMode={designMode}
         />
       )}
       {screen !== 'detail' && screen !== 'watch' && screen !== 'login' && screen !== 'profiles' && (
@@ -1738,16 +2310,117 @@ function App() {
           onHome={() => setScreen('home')}
           onMovies={() => setScreen('movies')}
           onTvShows={() => setScreen('tv')}
-          onAnime={() => setScreen('anime')}
           onSearch={() => setScreen('search')}
           onLibrary={() => setScreen('library')}
+          onDrama={() => setScreen('drama')}
+          onLiveTv={() => setScreen('livetv')}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
+          onSelectProfile={switchToProfile}
+          onManageProfiles={openManageProfiles}
+          onTransferProfile={openManageProfiles}
+          onHelp={openHelpCenter}
+          onGoAnime={() => {
+            setScreen('home')
+            if (designMode !== 'netflix') {
+              toggleDesignMode()
+            }
+          }}
+          onGoLumen={() => {
+            setScreen('home')
+            if (designMode !== 'apple') {
+              toggleDesignMode()
+            }
+          }}
+          onSignOut={signOut}
           profiles={profiles}
           designMode={designMode}
         />
       )}
     </main>
+  )
+}
+
+function HeroTrailerPreview({ movie }: { movie: Movie }) {
+  const [youtubeId, setYoutubeId] = useState<string | null>(null)
+  const [visible, setVisible] = useState(false)
+
+  // Resolve the trailer: anime use their AniList id directly, movies/TV are
+  // looked up through KinoCheck (by TMDB/IMDb id).
+  useEffect(() => {
+    let active = true
+    setYoutubeId(null)
+    setVisible(false)
+
+    void fetchTrailerYoutubeId(movie).then((id) => {
+      if (active) {
+        setYoutubeId(id)
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [movie.id, movie.tmdbId])
+
+  // Show the poster first, then reveal a muted ~15s trailer preview.
+  useEffect(() => {
+    if (!youtubeId) {
+      return
+    }
+
+    const startTimer = window.setTimeout(() => setVisible(true), 900)
+    const hideTimer = window.setTimeout(() => setVisible(false), 15000)
+
+    return () => {
+      window.clearTimeout(startTimer)
+      window.clearTimeout(hideTimer)
+    }
+  }, [youtubeId])
+
+  if (!youtubeId || !visible) {
+    return null
+  }
+
+  const src =
+    `https://www.youtube-nocookie.com/embed/${youtubeId}` +
+    `?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0&loop=1&playlist=${youtubeId}&start=8`
+
+  return (
+    <div className="hero-trailer-preview" aria-hidden="true">
+      <iframe
+        src={src}
+        title="Trailer preview"
+        allow="autoplay; encrypted-media"
+        frameBorder="0"
+      />
+    </div>
+  )
+}
+
+function HeroSynopsis({ text, netflix }: { text: string; netflix?: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (!netflix) {
+    return <p className="hero-description">{text}</p>
+  }
+
+  return (
+    <div className={`netflix-hero-desc-wrap${expanded ? ' expanded' : ''}`}>
+      <p className="hero-description netflix-hero-description">{text}</p>
+      <button
+        className="hero-desc-toggle"
+        type="button"
+        aria-label={expanded ? 'Show less' : 'Show full description'}
+        aria-expanded={expanded}
+        onClick={(event) => {
+          event.stopPropagation()
+          setExpanded((value) => !value)
+        }}
+      >
+        {expanded ? 'Show less' : '…'}
+      </button>
+    </div>
   )
 }
 
@@ -1770,8 +2443,15 @@ type HomeScreenProps = {
   onRemoveWatchlist: (movie: Movie) => void
   currentUser: UserInfo | null
   onProfile: () => void
+  onSelectProfile?: (name: string) => void
+  onManageProfiles?: () => void
+  onTransferProfile?: () => void
+  onAccount?: () => void
+  onHelp?: () => void
+  onSignOut?: () => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
+  screen?: Screen
 }
 
 function HomeScreen({
@@ -1793,9 +2473,67 @@ function HomeScreen({
   onRemoveWatchlist,
   currentUser,
   onProfile,
+  onSelectProfile,
+  onManageProfiles,
+  onTransferProfile,
+  onAccount,
+  onHelp,
+  onSignOut,
   profiles,
   designMode,
+  screen,
 }: HomeScreenProps) {
+  const isDramaMode = screen === 'drama'
+  const isNetflixMode = designMode === 'netflix'
+
+  const top10MoviesTitle = isNetflixMode
+    ? isDramaMode
+      ? 'Top 10 Drama Movies'
+      : 'Trending Anime'
+    : 'Top 10 Movies'
+
+  const top10TvTitle = isNetflixMode
+    ? isDramaMode
+      ? 'Popular Drama Shows'
+      : 'Popular Anime This Season'
+    : 'Top 10 TV Shows'
+
+  const newReleasesTitle = isNetflixMode
+    ? isDramaMode
+      ? 'New Drama Releases'
+      : 'Fresh Anime Releases'
+    : 'New Releases'
+
+  const thrillersTitle = isNetflixMode
+    ? isDramaMode
+      ? 'Thrilling Dramas'
+      : 'Action & Shonen Anime'
+    : 'Psychological Thrillers'
+
+  const trendingTitle = isNetflixMode
+    ? isDramaMode
+      ? 'Trending Dramas'
+      : 'Highly Recommended Anime'
+    : 'Trending Now'
+
+  const adventureTitle = isNetflixMode
+    ? isDramaMode
+      ? 'Adventure Dramas'
+      : 'Sci-Fi & Fantasy Anime'
+    : 'Adventure Movies'
+
+  const familyTitle = isNetflixMode
+    ? isDramaMode
+      ? 'Family Dramas'
+      : 'Comedy Anime'
+    : 'Family Night'
+
+  const bingeWorthyTitle = isNetflixMode
+    ? isDramaMode
+      ? 'Binge-Worthy Dramas'
+      : 'Binge-Worthy Anime'
+    : 'Binge-Worthy TV'
+
   const heroMovies = useMemo(() => movies.slice(0, 6), [movies])
   const movieTopTenMovies = useMemo(
     () => buildRail(movieCollection.top, movies),
@@ -1915,28 +2653,97 @@ function HomeScreen({
             event.currentTarget.src = heroImageFor(featuredMovie)
           }}
         />
-        <header className="home-header">
-          <h1>Home</h1>
-          <div className="header-actions">
-            <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
-              <Search />
-            </button>
-            <button className="mute-button" type="button" title="Muted">
-              <VolumeX />
-            </button>
-            <button 
-              className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
-              type="button" 
-              title="Profile"
-              onClick={onProfile}
-            >
-              {renderProfileAvatarMini(currentUser, profiles)}
-            </button>
-          </div>
-        </header>
+        <HeroTrailerPreview key={featuredMovie.id} movie={featuredMovie} />
+        {designMode === 'netflix' ? (
+          <header className="netflix-mobile-header">
+            <div className="netflix-mobile-header-top">
+              <span className="netflix-user-greeting">For {currentUser?.name || 'Avnish'}</span>
+              <div className="netflix-mobile-header-icons">
+                <button className="netflix-icon-btn" type="button" title="Search" onClick={onSearch}>
+                  <Search size={22} />
+                </button>
+                {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
+                  <ProfileMenu
+                    currentUser={currentUser}
+                    profiles={profiles}
+                    variant="netflix"
+                    onSelectProfile={onSelectProfile}
+                    onManageProfiles={onManageProfiles}
+                    onTransferProfile={onTransferProfile}
+                    onAccount={onAccount}
+                    onHelp={onHelp}
+                    onSignOut={onSignOut}
+                  />
+                ) : (
+                  <button
+                    className="netflix-icon-btn netflix-header-avatar-btn"
+                    type="button"
+                    title="Profile"
+                    onClick={onProfile}
+                  >
+                    {renderProfileAvatarMini(currentUser, profiles)}
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="netflix-mobile-header-pills">
+              <button className="netflix-pill" type="button" onClick={onSearch}>Shows</button>
+              <button className="netflix-pill" type="button" onClick={onSearch}>Movies</button>
+              <button className="netflix-pill categories-pill" type="button">
+                <span>Categories</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
+          </header>
+        ) : (
+          <header className="home-header">
+            <h1>Home</h1>
+            <div className="header-actions">
+              <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
+                <Search />
+              </button>
+              <button className="mute-button" type="button" title="Muted">
+                <VolumeX />
+              </button>
+              {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
+                <ProfileMenu
+                  currentUser={currentUser}
+                  profiles={profiles}
+                  variant="apple"
+                  onSelectProfile={onSelectProfile}
+                  onManageProfiles={onManageProfiles}
+                  onTransferProfile={onTransferProfile}
+                  onAccount={onAccount}
+                  onHelp={onHelp}
+                  onSignOut={onSignOut}
+                />
+              ) : (
+                <button
+                  className={`avatar-button ${currentUser ? 'has-avatar' : ''}`}
+                  type="button"
+                  title="Profile"
+                  onClick={onProfile}
+                >
+                  {renderProfileAvatarMini(currentUser, profiles)}
+                </button>
+              )}
+            </div>
+          </header>
+        )}
 
         <div className="hero-copy">
-          <span className="floating-label">{featuredMovie.label}</span>
+          {designMode === 'netflix' ? (
+            <span className="netflix-series-badge">
+              <svg viewBox="0 0 100 100" width="14" height="18" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                <path d="M20,10 L35,10 L35,90 L20,90 Z" fill="#b81d24" />
+                <path d="M65,10 L80,10 L80,90 L65,90 Z" fill="#b81d24" />
+                <path d="M20,10 L35,10 L80,90 L65,90 Z" fill="#e50914" />
+              </svg>
+              <span className="series-text">S E R I E S</span>
+            </span>
+          ) : (
+            <span className="floating-label">{featuredMovie.label}</span>
+          )}
           <pre className="logo-title">{featuredMovie.logoTitle}</pre>
           <p className="meta-line">
             <span className="provider-badge hero-provider">tv</span>
@@ -1945,7 +2752,7 @@ function HomeScreen({
             <span>{featuredMovie.genres[1] ?? featuredMovie.year}</span>
             <span className="rating-chip">{featuredMovie.maturity}</span>
           </p>
-          <p className="hero-description">{featuredMovie.synopsis}</p>
+          <HeroSynopsis text={featuredMovie.synopsis} netflix={designMode === 'netflix'} />
 
           <div className="hero-actions">
             <button
@@ -1992,7 +2799,7 @@ function HomeScreen({
           {designMode === 'apple' && (
             <button className="hero-search" type="button" onClick={onSearch}>
               <Search />
-              <span>Search Apple TV</span>
+              <span>Search Lumen</span>
             </button>
           )}
         </div>
@@ -2033,52 +2840,76 @@ function HomeScreen({
       />
 
       <MovieRail
-        title="Top 10 Movies"
+        title={top10MoviesTitle}
         movies={movieTopTenMovies}
+        landscape={isNetflixMode}
         onOpenDetail={onOpenDetail}
       />
 
       <MovieRail
-        title="Top 10 TV Shows"
+        title={top10TvTitle}
         movies={tvTopTenMovies}
+        landscape={isNetflixMode}
         onOpenDetail={onOpenDetail}
       />
 
       <MovieRail
-        title="New Releases"
+        title={newReleasesTitle}
         movies={newReleaseItems}
+        landscape={isNetflixMode}
         onOpenDetail={onOpenDetail}
       />
 
-      <FeatureRail
-        title="Psychological Thrillers"
-        movies={psychologicalThrillers}
-        onOpenDetail={onOpenDetail}
-      />
+      {isNetflixMode ? (
+        <MovieRail
+          title={thrillersTitle}
+          movies={psychologicalThrillers}
+          landscape
+          onOpenDetail={onOpenDetail}
+        />
+      ) : (
+        <FeatureRail
+          title={thrillersTitle}
+          movies={psychologicalThrillers}
+          onOpenDetail={onOpenDetail}
+        />
+      )}
 
       <MovieRail
-        title="Trending Now"
+        title={trendingTitle}
         movies={trendingNowItems}
+        landscape={isNetflixMode}
         onOpenDetail={onOpenDetail}
       />
 
       <MovieRail
-        title="Adventure Movies"
+        title={adventureTitle}
         movies={adventureMovies}
+        landscape={isNetflixMode}
         onOpenDetail={onOpenDetail}
       />
 
       <MovieRail
-        title="Family Night"
+        title={familyTitle}
         movies={familyMovies}
+        landscape={isNetflixMode}
         onOpenDetail={onOpenDetail}
       />
 
-      <FeatureRail
-        title="Binge-Worthy TV"
-        movies={bingeWorthyTvShows}
-        onOpenDetail={onOpenDetail}
-      />
+      {isNetflixMode ? (
+        <MovieRail
+          title={bingeWorthyTitle}
+          movies={bingeWorthyTvShows}
+          landscape
+          onOpenDetail={onOpenDetail}
+        />
+      ) : (
+        <FeatureRail
+          title={bingeWorthyTitle}
+          movies={bingeWorthyTvShows}
+          onOpenDetail={onOpenDetail}
+        />
+      )}
     </section>
   )
 }
@@ -2275,7 +3106,18 @@ function BrowseScreen({
           </header>
 
           <div className="hero-copy">
-            <span className="floating-label">{heroMovie.label}</span>
+            {designMode === 'netflix' ? (
+              <span className="netflix-series-badge">
+                <svg viewBox="0 0 100 100" width="14" height="18" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                  <path d="M20,10 L35,10 L35,90 L20,90 Z" fill="#b81d24" />
+                  <path d="M65,10 L80,10 L80,90 L65,90 Z" fill="#b81d24" />
+                  <path d="M20,10 L35,10 L80,90 L65,90 Z" fill="#e50914" />
+                </svg>
+                <span className="series-text">S E R I E S</span>
+              </span>
+            ) : (
+              <span className="floating-label">{heroMovie.label}</span>
+            )}
             <pre className="logo-title">{heroMovie.logoTitle}</pre>
             <p className="meta-line">
               <span className="provider-badge hero-provider">tv</span>
@@ -2406,6 +3248,7 @@ type DetailScreenProps = {
   onSave: () => void
   onShare: () => void
   onOpenPoster: () => void
+  designMode: 'apple' | 'netflix'
 }
 
 function DetailScreen({
@@ -2421,7 +3264,13 @@ function DetailScreen({
   onSave,
   onShare,
   onOpenPoster,
+  designMode,
 }: DetailScreenProps) {
+  const isNetflix = designMode === 'netflix'
+  const similarsRef = useRef<HTMLDivElement | null>(null)
+  const [detailTab, setDetailTab] = useState<'episodes' | 'collection' | 'more'>(
+    'episodes',
+  )
   const relatedItems = useMemo(
     () =>
       buildRail(
@@ -2573,7 +3422,10 @@ function DetailScreen({
         )}
       >
         <picture className="detail-hero-picture">
-          <source media="(max-width: 899px)" srcSet={posterImageFor(movie)} />
+          <source
+            media="(max-width: 899px)"
+            srcSet={isNetflix ? (movie.still || heroImageFor(movie)) : posterImageFor(movie)}
+          />
           <img
             className="detail-hero-art"
             src={heroImageFor(movie)}
@@ -2588,102 +3440,260 @@ function DetailScreen({
           onShare={onShare}
         />
 
-        <div className="detail-copy apple-detail-copy">
+        <div
+          className={`detail-copy ${
+            isNetflix ? 'netflix-detail-copy' : 'apple-detail-copy'
+          }`}
+        >
           <pre className="logo-title detail-title">{movie.logoTitle}</pre>
-          <p className="detail-meta apple-detail-meta">
-            <span className="provider-badge hero-provider">tv</span>
-            <span>{movie.type}</span>
-            {movie.genres.slice(0, 3).map((genre) => (
-              <span key={genre}>{genre}</span>
-            ))}
-          </p>
 
-          <p className="synopsis apple-detail-synopsis">
-            {movie.synopsis}
-            <span className="more-chip">MORE</span>
-          </p>
-
-          <div className="detail-hero-facts" aria-label="Movie facts">
-            <span>{movie.year}</span>
-            <span>{compactRuntime(movie.runtime)}</span>
-            {visibleMediaBadges(movie.badges)
-              .slice(0, 5)
-              .map((badge) => (
-                <span className="outline-badge" key={badge}>
-                  {badge}
+          {isNetflix ? (
+            <p className="detail-meta netflix-detail-meta">
+              <span>{movie.year}</span>
+              <span className="netflix-meta-badge">{movie.maturity && movie.maturity !== 'N/A' ? movie.maturity : 'NR'}</span>
+              {isTvShow(movie) && (
+                <span>
+                  {seasonsFor(movie).length} Season{seasonsFor(movie).length > 1 ? 's' : ''}
                 </span>
+              )}
+              <span className="netflix-meta-badge">HD</span>
+            </p>
+          ) : (
+            <p className="detail-meta apple-detail-meta">
+              <span className="provider-badge hero-provider">tv</span>
+              <span>{movie.type}</span>
+              {movie.genres.slice(0, 3).map((genre) => (
+                <span key={genre}>{genre}</span>
               ))}
-          </div>
+            </p>
+          )}
 
-          <div className="detail-actions apple-detail-actions">
-            <button
-              className="primary-play detail-play"
-              type="button"
-              onClick={() => onPlay()}
-            >
-              <Play fill="currentColor" strokeWidth={0} />
-              <span className="detail-play-label">Play</span>
-              <span className="detail-play-progress" aria-hidden="true">
-                <span style={{ width: `${continueProgressFor(movie)}%` }} />
-              </span>
-              <strong className="detail-play-runtime">
-                {compactRuntime(movie.runtime)}
-              </strong>
-            </button>
-            <button
-              className="detail-download-button"
-              type="button"
-              onClick={onOpenPoster}
-            >
-              <Download />
-              <span>Download</span>
-            </button>
-            <button
-              className="circle-action"
-              type="button"
-              onClick={onSave}
-              title={isSaved ? 'Saved' : 'Add to library'}
-            >
-              {isSaved ? <Check /> : <Plus />}
-            </button>
+          <p
+            className={`synopsis ${
+              isNetflix ? 'netflix-detail-synopsis' : 'apple-detail-synopsis'
+            }`}
+          >
+            {movie.synopsis}
+            {!isNetflix && <span className="more-chip">MORE</span>}
+          </p>
+
+          {!isNetflix && (
+            <div className="detail-hero-facts" aria-label="Movie facts">
+              <span>{movie.year}</span>
+              <span>{compactRuntime(movie.runtime)}</span>
+              {visibleMediaBadges(movie.badges)
+                .slice(0, 5)
+                .map((badge) => (
+                  <span className="outline-badge" key={badge}>
+                    {badge}
+                  </span>
+                ))}
+            </div>
+          )}
+
+          <div
+            className={`detail-actions ${
+              isNetflix ? 'netflix-detail-actions' : 'apple-detail-actions'
+            }`}
+          >
+            {isNetflix ? (
+              <>
+                <button
+                  className="primary-play netflix-detail-play"
+                  type="button"
+                  onClick={() => onPlay()}
+                >
+                  <Play fill="currentColor" strokeWidth={0} />
+                  <span>Play</span>
+                </button>
+                <button
+                  className="detail-pill-button netflix-download-btn"
+                  type="button"
+                  onClick={onOpenPoster}
+                >
+                  <Download />
+                  <span>Download</span>
+                </button>
+                <div className="netflix-detail-iconrow">
+                  <button type="button" className="netflix-icon-action" title="Set Reminders">
+                    <Bell />
+                    <span>Remind Me</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`netflix-icon-action${isSaved ? ' active' : ''}`}
+                    onClick={onSave}
+                    title={isSaved ? 'Saved' : 'Add to My List'}
+                  >
+                    {isSaved ? <Check /> : <Plus />}
+                    <span>My List</span>
+                  </button>
+                  <button type="button" className="netflix-icon-action" title="Rate">
+                    <ThumbsUp />
+                    <span>Rate</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="netflix-icon-action"
+                    onClick={onShare}
+                    title="Share"
+                  >
+                    <Share />
+                    <span>Share</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  className="primary-play detail-play"
+                  type="button"
+                  onClick={() => onPlay()}
+                >
+                  <Play fill="currentColor" strokeWidth={0} />
+                  <span className="detail-play-label">Play</span>
+                  <span className="detail-play-progress" aria-hidden="true">
+                    <span style={{ width: `${continueProgressFor(movie)}%` }} />
+                  </span>
+                  <strong className="detail-play-runtime">
+                    {compactRuntime(movie.runtime)}
+                  </strong>
+                </button>
+                <button
+                  className="detail-download-button"
+                  type="button"
+                  onClick={onOpenPoster}
+                >
+                  <Download />
+                  <span>Download</span>
+                </button>
+                <button
+                  className="circle-action"
+                  type="button"
+                  onClick={onSave}
+                  title={isSaved ? 'Saved' : 'Add to library'}
+                >
+                  {isSaved ? <Check /> : <Plus />}
+                </button>
+              </>
+            )}
           </div>
 
           {error && <InlineAlert message={error} />}
           {isLoading && <LoadingStrip label="Loading full details" />}
         </div>
 
-        <p className="detail-starring">
-          Starring {movie.cast.slice(0, 3).join(', ')}
-        </p>
+        {!isNetflix && (
+          <p className="detail-starring">
+            Starring {movie.cast.slice(0, 3).join(', ')}
+          </p>
+        )}
       </div>
 
       <div className="detail-page-body">
-        {isTvShow(movie) && (
-          <SeasonEpisodeSection
-            key={movie.id}
-            movie={movie}
-            onPlayEpisode={onPlayEpisode}
-          />
+        {isNetflix ? (
+          <>
+            <nav className="netflix-detail-tabs" aria-label="Detail sections">
+              <button
+                type="button"
+                className={detailTab === 'episodes' ? 'active' : ''}
+                onClick={() => setDetailTab('episodes')}
+              >
+                Episodes
+              </button>
+              <button
+                type="button"
+                className={detailTab === 'collection' ? 'active' : ''}
+                onClick={() => setDetailTab('collection')}
+              >
+                Collection
+              </button>
+              <button
+                type="button"
+                className={detailTab === 'more' ? 'active' : ''}
+                onClick={() => setDetailTab('more')}
+              >
+                More Like This
+              </button>
+            </nav>
+
+            {detailTab === 'episodes' &&
+              (isTvShow(movie) ? (
+                <SeasonEpisodeSection
+                  key={movie.id}
+                  movie={movie}
+                  onPlayEpisode={onPlayEpisode}
+                />
+              ) : (
+                <DetailLandscapeRail
+                  title="Trailers"
+                  items={trailerCards}
+                  onOpenDetail={onOpenDetail}
+                />
+              ))}
+
+            {detailTab === 'collection' && (
+              <DetailLandscapeRail
+                title="Trailers"
+                items={trailerCards}
+                onOpenDetail={onOpenDetail}
+              />
+            )}
+
+            {detailTab === 'more' && (
+              <div ref={similarsRef}>
+                <DetailPosterRail
+                  title="Similars"
+                  movies={relatedItems}
+                  onOpenDetail={onOpenDetail}
+                />
+              </div>
+            )}
+
+            <CastCrewRail
+              members={castCrewMembers}
+              movie={movie}
+              heading="Actors"
+              netflix
+            />
+            <WhereToWatch
+              availability={watchAvailability}
+              isLoading={isWatchAvailabilityLoading}
+            />
+            <MovieFacts movie={movie} />
+          </>
+        ) : (
+          <>
+            {isTvShow(movie) && (
+              <SeasonEpisodeSection
+                key={movie.id}
+                movie={movie}
+                onPlayEpisode={onPlayEpisode}
+              />
+            )}
+
+            <DetailLandscapeRail
+              title="Trailers"
+              items={trailerCards}
+              onOpenDetail={onOpenDetail}
+            />
+
+            <div ref={similarsRef}>
+              <DetailPosterRail
+                title="Related"
+                movies={relatedItems}
+                onOpenDetail={onOpenDetail}
+              />
+            </div>
+
+            <WhereToWatch
+              availability={watchAvailability}
+              isLoading={isWatchAvailabilityLoading}
+            />
+            <CastCrewRail members={castCrewMembers} movie={movie} />
+            <MovieFacts movie={movie} />
+          </>
         )}
-
-        <DetailLandscapeRail
-          title="Trailers"
-          items={trailerCards}
-          onOpenDetail={onOpenDetail}
-        />
-
-        <DetailPosterRail
-          title="Related"
-          movies={relatedItems}
-          onOpenDetail={onOpenDetail}
-        />
-
-        <WhereToWatch
-          availability={watchAvailability}
-          isLoading={isWatchAvailabilityLoading}
-        />
-        <CastCrewRail members={castCrewMembers} movie={movie} />
-        <MovieFacts movie={movie} />
       </div>
     </section>
   )
@@ -2735,6 +3745,26 @@ function SeasonEpisodeSection({
   const seasons = useMemo(() => seasonsFor(movie), [movie])
   const initialSeason = movie.streamSeason ?? seasons[0]?.season ?? 1
   const [selectedSeason, setSelectedSeason] = useState(() => initialSeason)
+  const [tmdbEpisodes, setTmdbEpisodes] = useState<SeasonEpisode[]>([])
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  // Load real per-episode covers/titles from TMDB when we have a tv id.
+  useEffect(() => {
+    let active = true
+    setTmdbEpisodes([])
+
+    if (movie.tmdbId && (movie.tmdbType === 'tv' || isTvShow(movie))) {
+      void fetchSeasonEpisodes(movie.tmdbId, selectedSeason).then((episodes) => {
+        if (active) {
+          setTmdbEpisodes(episodes)
+        }
+      })
+    }
+
+    return () => {
+      active = false
+    }
+  }, [movie.tmdbId, movie.tmdbType, selectedSeason])
 
   const activeSeason =
     seasons.find((season) => season.season === selectedSeason) ?? seasons[0]
@@ -2743,10 +3773,16 @@ function SeasonEpisodeSection({
     return null
   }
 
-  const episodes = Array.from(
-    { length: activeSeason.episodeCount },
-    (_, index) => index + 1,
-  )
+  const episodeCount =
+    tmdbEpisodes.length > 0 ? tmdbEpisodes.length : activeSeason.episodeCount
+  const episodes = Array.from({ length: episodeCount }, (_, index) => index + 1)
+
+  const scrollRow = (direction: 1 | -1) => {
+    const row = rowRef.current
+    if (row) {
+      row.scrollBy({ left: direction * row.clientWidth * 0.86, behavior: 'smooth' })
+    }
+  }
 
   return (
     <section className="detail-section season-section">
@@ -2766,35 +3802,69 @@ function SeasonEpisodeSection({
         <ChevronsUpDown />
       </label>
 
-      <div className="episode-row">
-        {episodes.map((episode) => (
-          <button
-            className="episode-card"
-            type="button"
-            key={`${selectedSeason}-${episode}`}
-            onClick={() => onPlayEpisode(selectedSeason, episode)}
-          >
-            <img
-              src={movie.still || movie.hero || movie.poster}
-              alt=""
-              onError={(event) => {
-                event.currentTarget.src = fallbackPosterForRank(movie.rank)
-              }}
-            />
-            <span className="episode-card-copy">
-              <small>EPISODE {episode}</small>
-              <strong>{episodeTitle(selectedSeason, episode)}</strong>
-              <em>{episodeSynopsis(movie, selectedSeason, episode)}</em>
-            </span>
-            <span className="episode-card-footer">
-              <span>
-                <RefreshCcw />
-                {episodeRuntime(movie, selectedSeason, episode)}
-              </span>
-              <MoreHorizontal />
-            </span>
-          </button>
-        ))}
+      <div className="episode-viewport">
+        <button
+          className="rail-arrow rail-arrow-prev episode-arrow"
+          type="button"
+          aria-label="Previous episodes"
+          onClick={() => scrollRow(-1)}
+        >
+          <ChevronLeft />
+        </button>
+
+        <div ref={rowRef} className="episode-row episode-row-v2">
+          {episodes.map((episode) => {
+            const data = tmdbEpisodes.find((item) => item.number === episode)
+            const cover =
+              data?.still || movie.still || movie.hero || movie.poster
+            const name = data?.name || episodeTitle(selectedSeason, episode)
+            const overview =
+              data?.overview || episodeSynopsis(movie, selectedSeason, episode)
+            const runtime =
+              data?.runtime || episodeRuntime(movie, selectedSeason, episode)
+
+            return (
+              <button
+                className="episode-card-v2"
+                type="button"
+                key={`${selectedSeason}-${episode}`}
+                onClick={() => onPlayEpisode(selectedSeason, episode)}
+              >
+                <span className="episode-thumb">
+                  <img
+                    src={cover}
+                    alt=""
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.src = movie.still || movie.hero || movie.poster || fallbackPosterForRank(movie.rank)
+                    }}
+                  />
+                </span>
+                <span className="episode-body">
+                  <small className="episode-eyebrow">EPISODE {episode}</small>
+                  <strong className="episode-name">{name}</strong>
+                  <em className="episode-desc">{overview}</em>
+                  <span className="episode-foot">
+                    <span className="episode-time">
+                      <RefreshCcw />
+                      {runtime}
+                    </span>
+                    <MoreHorizontal />
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <button
+          className="rail-arrow rail-arrow-next episode-arrow"
+          type="button"
+          aria-label="Next episodes"
+          onClick={() => scrollRow(1)}
+        >
+          <ChevronRight />
+        </button>
       </div>
     </section>
   )
@@ -2900,13 +3970,7 @@ function DetailPosterRail({
             aria-label={`Open ${item.title}`}
             onClick={() => onOpenDetail(item)}
           >
-            <img
-              src={item.poster || fallbackPosterForRank(item.rank)}
-              alt=""
-              onError={(event) => {
-                event.currentTarget.src = fallbackPosterForRank(item.rank)
-              }}
-            />
+            <PosterImage movie={item} fallback={posterImageFor(item)} />
           </button>
         ))}
       </div>
@@ -3017,9 +4081,13 @@ function initialsFor(name: string) {
 function CastCrewRail({
   members,
   movie,
+  heading = 'Cast & Crew',
+  netflix = false,
 }: {
   members: CastCrewMember[]
   movie: Movie
+  heading?: string
+  netflix?: boolean
 }) {
   const roles = [
     'Present',
@@ -3049,8 +4117,12 @@ function CastCrewRail({
   }
 
   return (
-    <section className="detail-section detail-cast-section">
-      <DetailSectionHeading title="Cast & Crew" />
+    <section
+      className={`detail-section detail-cast-section${
+        netflix ? ' netflix-actors-section' : ''
+      }`}
+    >
+      <DetailSectionHeading title={heading} />
       <div className="detail-cast-row">
         {people.map((person, index) => (
           <button className="cast-person-card" key={person.id} type="button">
@@ -3100,6 +4172,7 @@ type WatchScreenProps = {
   onStartWatching: (movie: Movie) => void
   onStreamSandboxChange: (enabled: boolean) => void
   onStreamProviderChange: (provider: StreamProvider) => void
+  designMode: 'apple' | 'netflix'
 }
 
 function WatchScreen({
@@ -3114,13 +4187,73 @@ function WatchScreen({
   onStartWatching,
   onStreamSandboxChange,
   onStreamProviderChange,
+  designMode,
 }: WatchScreenProps) {
-  const streamUrl = buildStreamUrl(movie, streamProvider)
+  const isAnimeMovie = movie.isAnime || movie.type === 'Anime' || movie.genres.includes('Anime') || movie.genres.includes('Animation') || designMode === 'netflix'
+
+  const animeProviderIds: StreamProvider[] = ['megaplay', 'animeplay']
+
+  const activeProviderId = isAnimeMovie && !animeProviderIds.includes(streamProvider)
+    ? 'megaplay'
+    : streamProvider
+
+  const streamUrl = buildStreamUrl(movie, activeProviderId)
   const currentProvider =
-    streamProviderOptions.find((provider) => provider.id === streamProvider) ??
+    streamProviderOptions.find((provider) => provider.id === activeProviderId) ??
     streamProviderOptions[0]
   const opensExternally =
-    streamProvider === 'multiembed' || streamProvider === 'multiembed-vip'
+    activeProviderId === 'multiembed' || activeProviderId === 'multiembed-vip'
+
+  // MegaPlay / AnimePlay post playback events to the parent window. Use the
+  // first time/watching-log event to flag the title as "continue watching".
+  useEffect(() => {
+    if (activeProviderId !== 'megaplay' && activeProviderId !== 'animeplay') {
+      return
+    }
+
+    let started = false
+
+    const handleMessage = (event: MessageEvent) => {
+      if (
+        typeof event.origin === 'string' &&
+        !event.origin.includes('megaplay.buzz') &&
+        !event.origin.includes('animeplay.cfd')
+      ) {
+        return
+      }
+
+      let payload: unknown = event.data
+
+      if (typeof payload === 'string') {
+        try {
+          payload = JSON.parse(payload)
+        } catch {
+          return
+        }
+      }
+
+      const message = payload as
+        | { channel?: string; type?: string; event?: string }
+        | null
+
+      const isPlaybackEvent =
+        message?.event === 'time' ||
+        message?.event === 'complete' ||
+        message?.type === 'watching-log'
+
+      if (!started && isPlaybackEvent) {
+        started = true
+        onStartWatching(movie)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [activeProviderId, movie, onStartWatching])
+
   const openCurrentStream = () => {
     if (!streamUrl) {
       return
@@ -3255,27 +4388,34 @@ function WatchScreen({
           role="radiogroup"
           aria-label="Streaming server"
         >
-          {streamProviderOptions.map((provider) => {
-            const isActive = provider.id === streamProvider
+          {(() => {
+            const filteredOptions = streamProviderOptions.filter((provider) => {
+              const isAnimeProvider = animeProviderIds.includes(provider.id)
+              return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
+            })
 
-            return (
-              <button
-                key={provider.id}
-                className={`server-option${isActive ? ' active' : ''}`}
-                type="button"
-                role="radio"
-                aria-checked={isActive}
-                onClick={() => onStreamProviderChange(provider.id)}
-              >
-                <span className="provider-logo">{provider.logo}</span>
-                <span className="server-copy">
-                  <strong>{provider.name}</strong>
-                  <small>{provider.description}</small>
-                </span>
-                {isActive ? <Check /> : <ChevronRight />}
-              </button>
-            )
-          })}
+            return filteredOptions.map((provider) => {
+              const isActive = provider.id === activeProviderId
+
+              return (
+                <button
+                  key={provider.id}
+                  className={`server-option${isActive ? ' active' : ''}`}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  onClick={() => onStreamProviderChange(provider.id)}
+                >
+                  <span className="provider-logo">{provider.logo}</span>
+                  <span className="server-copy">
+                    <strong>{provider.name}</strong>
+                    <small>{provider.description}</small>
+                  </span>
+                  {isActive ? <Check /> : <ChevronRight />}
+                </button>
+              )
+            })
+          })()}
         </div>
         <a
           className="subscription-card"
@@ -3286,12 +4426,12 @@ function WatchScreen({
           <span className="provider-logo">{currentProvider.logo}</span>
           <span>
             <strong>
-              {streamUrl ? `Open ${currentProvider.name}` : 'Waiting for TMDB'}
+              {streamUrl ? `Open ${currentProvider.name}` : (isAnimeMovie ? 'Resolving anime stream' : 'Waiting for TMDB')}
             </strong>
             <small>
               {streamUrl
-                ? `${currentProvider.description} / TMDB ${movie.tmdbId}`
-                : 'Resolving movie id'}
+                ? `${currentProvider.description} / ${isAnimeMovie ? `AniList ${movie.anilistId || 'ID'}` : `TMDB ${movie.tmdbId || 'ID'}`}`
+                : (isAnimeMovie ? 'Resolving AniList info' : 'Resolving movie id')}
             </small>
           </span>
           <button
@@ -3326,6 +4466,8 @@ type SearchScreenProps = {
   currentUser: UserInfo | null
   onProfile: () => void
   profiles: UserProfile[]
+  designMode: 'apple' | 'netflix'
+  searchRecommendations: Movie[]
 }
 
 function SearchScreen({
@@ -3342,116 +4484,220 @@ function SearchScreen({
   currentUser,
   onProfile,
   profiles,
+  designMode,
+  searchRecommendations,
 }: SearchScreenProps) {
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!trimmed) {
+      onClear()
+      return
+    }
+
+    const timer = setTimeout(() => {
+      onSearch(trimmed)
+    }, 400)
+
+    return () => clearTimeout(timer)
+  }, [query, onSearch, onClear])
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     onSearch(query)
   }
 
+
+
+  const renderNetflixSearchItem = (movie: Movie) => {
+    return (
+      <div key={movie.id} className="netflix-search-item" onClick={() => onOpenDetail(movie)}>
+        <div className="netflix-search-poster-wrapper">
+          <img
+            src={movie.still || movie.poster}
+            alt={movie.title}
+            className="netflix-search-poster-img"
+            onError={(e) => {
+              e.currentTarget.src = movie.poster;
+            }}
+          />
+          {movie.badges?.includes('TOP 10') && (
+            <div className="netflix-search-top10-tag">
+              <span className="netflix-top-text">TOP</span>
+              <span className="netflix-10-text">10</span>
+            </div>
+          )}
+          {movie.label && (
+            <div className="netflix-search-poster-badge">
+              {movie.label}
+            </div>
+          )}
+        </div>
+        <span className="netflix-search-item-title">{movie.title}</span>
+        {movie.year && movie.year !== 'N/A' && (
+          <span className="netflix-search-item-year">{movie.year}</span>
+        )}
+      </div>
+    )
+  }
+
   return (
     <section className="screen search-screen">
-      <header className="search-header">
-        <h1>Search</h1>
-        <button 
-          className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
-          type="button" 
-          title="Profile"
-          onClick={onProfile}
-        >
-          {renderProfileAvatarMini(currentUser, profiles)}
-        </button>
-      </header>
+      {designMode === 'netflix' ? (
+        <div className="netflix-search-bar-container">
+          <button className="netflix-search-back-btn" type="button" onClick={onClose}>
+            <ChevronLeft size={28} />
+          </button>
+          <div className="netflix-search-input-wrapper">
+            <Search className="netflix-search-input-icon" size={20} />
+            <input
+              className="netflix-search-input"
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Search shows, movies, games..."
+              aria-label="Search shows, movies, games..."
+            />
+            <button className="netflix-mic-btn" type="button" title="Voice search">
+              <Mic size={20} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <header className="search-header">
+          <h1>Search</h1>
+          <button 
+            className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
+            type="button" 
+            title="Profile"
+            onClick={onProfile}
+          >
+            {renderProfileAvatarMini(currentUser, profiles)}
+          </button>
+        </header>
+      )}
 
-      <section className="search-content visual-search">
-        {loading && <LoadingStrip label="Searching Apple TV" />}
-        {error && <InlineAlert message={error} />}
+      {designMode === 'netflix' ? (
+        <section className="search-content visual-search netflix-search-content">
+          {loading && <LoadingStrip label="Searching Netflix" />}
+          {error && <InlineAlert message={error} />}
 
-        {results.length > 0 ? (
-          <div className="recent-panel">
-            <div className="recent-heading">
-              <h2>Recently Searched</h2>
-              <button type="button" onClick={onClear}>
-                Clear
-              </button>
+          {!query && (
+            <div className="netflix-recommended-panel">
+              <h2 className="netflix-recommended-title">Recommended Shows & Movies</h2>
+              <div className="netflix-search-list">
+                {searchRecommendations.map(renderNetflixSearchItem)}
+              </div>
             </div>
-            <div className="recent-list">
-              {results.slice(0, 8).map((movie) => (
+          )}
+
+          {query && results.length > 0 && (
+            <div className="netflix-recommended-panel">
+              <h2 className="netflix-recommended-title">Search Results</h2>
+              <div className="netflix-search-list">
+                {results.map(renderNetflixSearchItem)}
+              </div>
+            </div>
+          )}
+
+          {query && !loading && results.length === 0 && (
+            <div className="netflix-no-results">
+              <p>No results found for "{query}".</p>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="search-content visual-search">
+          {loading && <LoadingStrip label="Searching Lumen" />}
+          {error && <InlineAlert message={error} />}
+
+          {results.length > 0 ? (
+            <div className="recent-panel">
+              <div className="recent-heading">
+                <h2>Recently Searched</h2>
+                <button type="button" onClick={onClear}>
+                  Clear
+                </button>
+              </div>
+              <div className="recent-list">
+                {results.slice(0, 8).map((movie) => (
+                  <button
+                    key={movie.id}
+                    className="recent-item"
+                    type="button"
+                    onClick={() => onOpenDetail(movie)}
+                  >
+                    <img
+                      src={movie.poster}
+                      alt=""
+                      onError={(event) => {
+                        event.currentTarget.src = fallbackPosterForRank(movie.rank)
+                      }}
+                    />
+                    <span>
+                      <strong>{movie.title}</strong>
+                      <small>
+                        {movie.type} / {movie.genres[0] ?? movie.year} / {movie.year}
+                      </small>
+                    </span>
+                    <MoreHorizontal />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="category-grid">
+              {categoryTiles.map((category, index) => (
                 <button
-                  key={movie.id}
-                  className="recent-item"
+                  key={category.label}
+                  className={`category-card category-${(index % 12) + 1}${
+                    category.image ? ' has-art' : ''
+                  }`}
+                  style={
+                    category.image
+                      ? ({
+                          '--category-art': `url(${category.image})`,
+                        } as CSSProperties)
+                      : undefined
+                  }
                   type="button"
-                  onClick={() => onOpenDetail(movie)}
+                  onClick={() => {
+                    onQueryChange(category.label)
+                    onSearch(category.label)
+                  }}
                 >
-                  <img
-                    src={movie.poster}
-                    alt=""
-                    onError={(event) => {
-                      event.currentTarget.src = fallbackPosterForRank(movie.rank)
-                    }}
-                  />
-                  <span>
-                    <strong>{movie.title}</strong>
-                    <small>
-                      {movie.type} / {movie.genres[0] ?? movie.year} / {movie.year}
-                    </small>
-                  </span>
-                  <MoreHorizontal />
+                  <span>{category.label}</span>
                 </button>
               ))}
             </div>
-          </div>
-        ) : (
-          <div className="category-grid">
-            {categoryTiles.map((category, index) => (
-              <button
-                key={category.label}
-                className={`category-card category-${(index % 12) + 1}${
-                  category.image ? ' has-art' : ''
-                }`}
-                style={
-                  category.image
-                    ? ({
-                        '--category-art': `url(${category.image})`,
-                      } as CSSProperties)
-                    : undefined
-                }
-                type="button"
-                onClick={() => {
-                  onQueryChange(category.label)
-                  onSearch(category.label)
-                }}
-              >
-                <span>{category.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
 
-      <div className="search-bottom">
-        <button
-          className="close-search icon-close search-library-bubble"
-          type="button"
-          onClick={onClose}
-          aria-label="Close search"
-        >
-          <Library />
-        </button>
-        <form className="search-form" onSubmit={submitSearch}>
-          <Search />
-          <input
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Movie"
-            aria-label="Search movie"
-          />
-          <button className="mic-button" type="button" title="Voice search">
-            <Mic />
+      {designMode !== 'netflix' && (
+        <div className="search-bottom">
+          <button
+            className="close-search icon-close search-library-bubble"
+            type="button"
+            onClick={onClose}
+            aria-label="Close search"
+          >
+            <Library />
           </button>
-        </form>
-      </div>
+          <form className="search-form" onSubmit={submitSearch}>
+            <Search />
+            <input
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Movie"
+              aria-label="Search movie"
+            />
+            <button className="mic-button" type="button" title="Voice search">
+              <Mic />
+            </button>
+          </form>
+        </div>
+      )}
 
-      {query && results.length > 0 && (
+      {designMode !== 'netflix' && query && results.length > 0 && (
         <div className="floating-clear">
           <button type="button" onClick={onClear}>
             Clear Results
@@ -3467,12 +4713,9 @@ type LoginScreenProps = {
   onLogin: (user: UserInfo) => void
   onLogout: () => void
   onBack: () => void
-  savedMoviesCount: number
-  watchHistoryCount: number
   onSwitchProfile: () => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
-  onToggleDesignMode: () => void
 }
 
 function LoginScreen({
@@ -3480,12 +4723,9 @@ function LoginScreen({
   onLogin,
   onLogout,
   onBack,
-  savedMoviesCount,
-  watchHistoryCount,
   onSwitchProfile,
   profiles,
   designMode,
-  onToggleDesignMode,
 }: LoginScreenProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -3551,78 +4791,104 @@ function LoginScreen({
   }
 
   if (currentUser) {
+    const designName = designMode === 'netflix' ? 'Anime' : 'Lumen'
+    const planName = designMode === 'netflix' ? 'Anime Premium 4K' : 'Lumen Premium 4K'
+
     return (
-      <section className="screen login-screen profile-mode">
-        <div className="login-background">
-          <div className="blob blob-purple"></div>
-          <div className="blob blob-blue"></div>
-          <div className="blob blob-cyan"></div>
-        </div>
-        
-        <header className="login-header">
-          <button className="round-nav" type="button" onClick={onBack} title="Back">
-            <ChevronLeft />
-          </button>
-          <h1>Account</h1>
-          <div className="placeholder-right" />
-        </header>
+      <section className="screen account-screen">
+        <div className="account-shell">
+          <aside className="account-sidebar">
+            <button className="account-back" type="button" onClick={onBack}>
+              <ChevronLeft size={18} />
+              <span>Back to {designName}</span>
+            </button>
 
-        <section className="login-content">
-          <div className="glass-card profile-card">
-            <div className={`profile-avatar-large ${currentUser.avatarColor ? 'has-avatar-img' : ''}`}>
-              {renderProfileAvatarLarge(currentUser, profiles)}
-            </div>
-            
-            <h2 className="user-name">{currentUser.name}</h2>
-            <p className="user-email">{currentUser.email}</p>
-            
-            <div className="membership-tag">
-              <span className="premium-badge">Apple One Premier</span>
-            </div>
-
-            <hr className="card-divider" />
-
-            <div className="stats-grid">
-              <div className="stat-item">
-                <span className="stat-num">{watchHistoryCount}</span>
-                <span className="stat-label">Watched</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-num">{savedMoviesCount}</span>
-                <span className="stat-label">Library</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-num">4K HDR</span>
-                <span className="stat-label">Quality</span>
-              </div>
-            </div>
-
-            <div className="profile-actions">
-              <button className="secondary-play full-width-btn" type="button" onClick={onBack}>
-                Continue Watching
+            <nav className="account-nav" aria-label="Account sections">
+              <button className="account-nav-item active" type="button">
+                <Home size={18} />
+                <span>Overview</span>
               </button>
-              <button 
-                className="secondary-play full-width-btn" 
-                type="button" 
+              <button className="account-nav-item" type="button" onClick={onSwitchProfile}>
+                <CircleUserRound size={18} />
+                <span>Membership</span>
+              </button>
+              <button className="account-nav-item" type="button">
+                <Eye size={18} />
+                <span>Security</span>
+              </button>
+              <button className="account-nav-item" type="button">
+                <Tv size={18} />
+                <span>Devices</span>
+              </button>
+              <button className="account-nav-item" type="button" onClick={onSwitchProfile}>
+                <UserCog size={18} />
+                <span>Profiles</span>
+              </button>
+            </nav>
+          </aside>
+
+          <main className="account-main">
+            <h1 className="account-title">Account</h1>
+            <p className="account-subtitle">Membership details</p>
+
+            <div className="account-card">
+              <span className="account-badge">Member since 2025</span>
+              <h2 className="account-plan">{planName}</h2>
+              <p className="account-plan-sub">Next payment: 4 August 2026</p>
+              <p className="account-plan-email">
+                <span className="account-email-avatar">
+                  {renderProfileAvatarMini(currentUser, profiles)}
+                </span>
+                {currentUser.email}
+              </p>
+
+              <button
+                className="account-row account-card-row"
+                type="button"
                 onClick={onSwitchProfile}
-                style={{ marginTop: '8px', background: 'rgba(255, 255, 255, 0.08)', color: '#fff', border: '1px solid rgba(255, 255, 255, 0.1)' }}
               >
-                Switch Profile
-              </button>
-              <button 
-                className="secondary-play full-width-btn" 
-                type="button" 
-                onClick={onToggleDesignMode}
-                style={{ marginTop: '8px', background: '#E50914', color: '#fff', border: 'none', fontWeight: 'bold' }}
-              >
-                {designMode === 'netflix' ? 'Switch to Apple TV Design' : 'Switch to Netflix Design'}
-              </button>
-              <button className="destructive-btn full-width-btn" type="button" onClick={onLogout} style={{ marginTop: '8px' }}>
-                Sign Out
+                <span className="account-row-label">Manage membership</span>
+                <ChevronRight size={18} />
               </button>
             </div>
-          </div>
-        </section>
+
+            <p className="account-links-title">Quick links</p>
+            <div className="account-links">
+              <button className="account-row" type="button" onClick={onSwitchProfile}>
+                <span className="account-row-left">
+                  <UserCog size={18} />
+                  <span>Manage profiles</span>
+                </span>
+                <ChevronRight size={18} />
+              </button>
+              <button className="account-row" type="button">
+                <span className="account-row-left">
+                  <Download size={18} />
+                  <span>Manage payment method</span>
+                </span>
+                <ChevronRight size={18} />
+              </button>
+              <button className="account-row" type="button">
+                <span className="account-row-left">
+                  <Tv size={18} />
+                  <span>Manage access and devices</span>
+                </span>
+                <ChevronRight size={18} />
+              </button>
+              <button
+                className="account-row account-signout"
+                type="button"
+                onClick={onLogout}
+              >
+                <span className="account-row-left">
+                  <LogOut size={18} />
+                  <span>Sign out</span>
+                </span>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </main>
+        </div>
       </section>
     )
   }
@@ -3642,8 +4908,8 @@ function LoginScreen({
       <section className="login-content">
         <div className="glass-card login-card">
           <div className="logo-container">
-            <div className="apple-tv-logo-symbol">tv</div>
-            <h2>Apple TV</h2>
+            <div className="apple-tv-logo-symbol">L</div>
+            <h2>Lumen</h2>
           </div>
 
           {error && <div className="login-error-msg">{error}</div>}
@@ -3795,49 +5061,6 @@ function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserPro
   )
 }
 
-function renderProfileAvatarLarge(currentUser: UserInfo | null, profiles: UserProfile[]) {
-  if (!currentUser) return '👤'
-  const matched = profiles.find((p) => p.name.toLowerCase() === currentUser.name.toLowerCase())
-  const avatarColor = currentUser.avatarColor ?? matched?.avatarColor
-  
-  if (!avatarColor) {
-    return getInitials(currentUser.name)
-  }
-
-  if (avatarColor === 'kids') {
-    return (
-      <div 
-        className="profile-avatar avatar-kids large-avatar" 
-        style={{ 
-          width: '100%', 
-          height: '100%', 
-          borderRadius: '16px', 
-          overflow: 'hidden', 
-          position: 'relative',
-          display: 'block'
-        }}
-      >
-        <div className="kids-bg" style={{ transform: 'scale(1.2)', width: '100%', height: '100%' }}>
-          <div className="stripe red"></div>
-          <div className="stripe orange"></div>
-          <div className="stripe yellow"></div>
-          <div className="stripe green"></div>
-          <div className="stripe blue"></div>
-        </div>
-        <span className="kids-text large" style={{ fontSize: '24px', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 800 }}>kids</span>
-      </div>
-    )
-  }
-
-  return (
-    <img 
-      src={getAvatarSrc(avatarColor)} 
-      alt={currentUser.name} 
-      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '16px' }}
-    />
-  )
-}
-
 type ProfilesScreenProps = {
   profiles: UserProfile[]
   onSelectProfile: (profileName: string) => void
@@ -3845,6 +5068,7 @@ type ProfilesScreenProps = {
   onEditProfile: (oldName: string, newName: string, avatarColor: string) => void
   onDeleteProfile: (name: string) => void
   onBack: () => void
+  backdrops?: string[]
 }
 
 function ProfilesScreen({
@@ -3853,8 +5077,23 @@ function ProfilesScreen({
   onAddProfile,
   onEditProfile,
   onDeleteProfile,
-  onBack
+  onBack,
+  backdrops = [],
 }: ProfilesScreenProps) {
+  // Rotating TV/movie key-art behind the profile chooser (changes every 5s).
+  const [backdropIndex, setBackdropIndex] = useState(0)
+
+  useEffect(() => {
+    if (backdrops.length < 2) {
+      return
+    }
+    const timer = window.setInterval(() => {
+      setBackdropIndex((current) => (current + 1) % backdrops.length)
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [backdrops.length])
+
+  const activeBackdrop = backdrops[backdropIndex] ?? backdrops[0]
   const [isAdding, setIsAdding] = useState(false)
   const [isChoosingIcon, setIsChoosingIcon] = useState(false)
   const [newName, setNewName] = useState('')
@@ -4563,7 +5802,21 @@ function ProfilesScreen({
   }
 
   return (
-    <section className="screen profiles-screen">
+    <section className="screen profiles-screen profiles-screen-hero">
+      {activeBackdrop && (
+        <div className="profiles-backdrop" aria-hidden="true">
+          {backdrops.map((src, index) => (
+            <img
+              key={src}
+              src={src}
+              alt=""
+              className={index === backdropIndex ? 'active' : ''}
+            />
+          ))}
+          <div className="profiles-backdrop-fade" />
+        </div>
+      )}
+
       <header className="profiles-header">
         <button className="round-nav" type="button" onClick={onBack} title="Back">
           <ChevronLeft />
@@ -4572,7 +5825,7 @@ function ProfilesScreen({
       </header>
 
       <div className="profiles-container">
-        <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : "Who's watching?"}</h1>
+        <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : 'Choose your profile'}</h1>
         
         <div className="profiles-grid">
           {profiles.map((profile) => (
@@ -4626,17 +5879,20 @@ function ProfilesScreen({
             <div className="profile-avatar avatar-add">
               <Plus size={32} />
             </div>
-            <span className="profile-name">Add Profile</span>
+            <span className="profile-name">Add</span>
+          </button>
+
+          <button
+            className="profile-item"
+            type="button"
+            onClick={() => setIsManaging((value) => !value)}
+          >
+            <div className={`profile-avatar avatar-add${isManaging ? ' avatar-edit-active' : ''}`}>
+              <Pencil size={30} />
+            </div>
+            <span className="profile-name">{isManaging ? 'Done' : 'Edit'}</span>
           </button>
         </div>
-
-        <button 
-          className={`manage-profiles-btn ${isManaging ? 'active-done' : ''}`} 
-          type="button"
-          onClick={() => setIsManaging(!isManaging)}
-        >
-          {isManaging ? 'Done' : 'Manage Profiles'}
-        </button>
       </div>
     </section>
   )
@@ -4719,10 +5975,40 @@ type MovieRailProps = {
   title: string
   movies: Movie[]
   compact?: boolean
+  landscape?: boolean
   onOpenDetail: (movie: Movie) => void
 }
 
-function MovieRail({ title, movies, compact, onOpenDetail }: MovieRailProps) {
+function LandscapePosterCard({
+  movie,
+  onOpenDetail,
+}: {
+  movie: Movie
+  onOpenDetail: (movie: Movie) => void
+}) {
+  const image = heroImageFor(movie) || posterImageFor(movie)
+
+  return (
+    <button
+      className="landscape-poster-card"
+      type="button"
+      aria-label={`Open ${movie.title}`}
+      onClick={() => onOpenDetail(movie)}
+    >
+      <img
+        src={image}
+        alt=""
+        loading="lazy"
+        onError={(event) => {
+          event.currentTarget.src = posterImageFor(movie)
+        }}
+      />
+      <span className="landscape-poster-title">{movie.title}</span>
+    </button>
+  )
+}
+
+function MovieRail({ title, movies, compact, landscape, onOpenDetail }: MovieRailProps) {
   const rowRef = useRef<HTMLDivElement | null>(null)
 
   if (movies.length === 0) {
@@ -4734,6 +6020,58 @@ function MovieRail({ title, movies, compact, onOpenDetail }: MovieRailProps) {
       left: rowRef.current.clientWidth * 0.86,
       behavior: 'smooth',
     })
+  }
+
+  const scrollRowBack = () => {
+    rowRef.current?.scrollBy({
+      left: -(rowRef.current.clientWidth * 0.86),
+      behavior: 'smooth',
+    })
+  }
+
+  if (landscape) {
+    return (
+      <section className="movie-rail landscape-rail">
+        <div className="rail-header">
+          <button
+            className="rail-heading"
+            type="button"
+            aria-label={`Scroll ${title}`}
+            onClick={scrollRow}
+          >
+            <span>{title}</span>
+            <ChevronRight />
+          </button>
+        </div>
+        <div className="rail-viewport">
+          <button
+            className="rail-arrow rail-arrow-prev"
+            type="button"
+            aria-label={`Scroll ${title} left`}
+            onClick={scrollRowBack}
+          >
+            <ChevronLeft />
+          </button>
+          <div ref={rowRef} className="landscape-row">
+            {movies.map((movie) => (
+              <LandscapePosterCard
+                key={movie.id}
+                movie={movie}
+                onOpenDetail={onOpenDetail}
+              />
+            ))}
+          </div>
+          <button
+            className="rail-arrow rail-arrow-next"
+            type="button"
+            aria-label={`Scroll ${title} right`}
+            onClick={scrollRow}
+          >
+            <ChevronRight />
+          </button>
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -5127,13 +6465,54 @@ function FeatureRail({ title, movies, onOpenDetail }: MovieRailProps) {
                 <span>{featureGenres[0] ?? movie.year}</span>
               </span>
               <span className="feature-wide-rankline">
-                #{index + 1} in {rankedGenre} on Apple TV
+                #{index + 1} in {rankedGenre} on Lumen
               </span>
             </button>
           )
         })}
       </div>
     </section>
+  )
+}
+
+function PosterImage({
+  movie,
+  fallback,
+  className,
+  alt = '',
+}: {
+  movie: Movie
+  fallback: string
+  className?: string
+  alt?: string
+}) {
+  // Prefer the Top-Posters API; rotate through the key pool on failure and
+  // fall back to the original artwork once every key is exhausted.
+  const [keyIndex, setKeyIndex] = useState(0)
+  const [exhausted, setExhausted] = useState(() => !hasTopPoster(movie))
+
+  useEffect(() => {
+    setKeyIndex(0)
+    setExhausted(!hasTopPoster(movie))
+  }, [movie.id, movie.tmdbId])
+
+  const primary = exhausted ? '' : topPosterUrl(movie, keyIndex)
+  const src = primary || fallback || fallbackPosterForRank(movie.rank)
+
+  return (
+    <img
+      className={className}
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => {
+        if (!exhausted && keyIndex < TOP_POSTER_KEYS.length - 1) {
+          setKeyIndex((index) => index + 1)
+        } else {
+          setExhausted(true)
+        }
+      }}
+    />
   )
 }
 
@@ -5151,13 +6530,7 @@ function PosterCard({
       aria-label={`Open ${movie.title}`}
       onClick={() => onOpenDetail(movie)}
     >
-      <img
-        src={movie.poster}
-        alt=""
-        onError={(event) => {
-          event.currentTarget.src = fallbackPosterForRank(movie.rank)
-        }}
-      />
+      <PosterImage movie={movie} fallback={posterImageFor(movie)} />
       <span className="rank">{movie.rank}</span>
     </button>
   )
@@ -5325,25 +6698,421 @@ function LoadingStrip({ label }: { label: string }) {
   )
 }
 
+function LiveTvPlayer({ channel }: { channel: LiveChannel }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const video = videoRef.current
+
+    if (!video || !channel.url) {
+      return
+    }
+
+    let cancelled = false
+    let hls: { destroy: () => void } | null = null
+
+    setLoading(true)
+    setError('')
+
+    const start = () => {
+      video.play().catch(() => {
+        // Autoplay may be blocked until the user interacts; controls are shown.
+      })
+    }
+
+    async function setup() {
+      // Safari / iOS play HLS natively without hls.js.
+      if (video!.canPlayType('application/vnd.apple.mpegurl')) {
+        video!.src = channel.url
+        setLoading(false)
+        start()
+        return
+      }
+
+      try {
+        const Hls = await loadHlsJs()
+
+        if (cancelled) {
+          return
+        }
+
+        if (Hls && Hls.isSupported()) {
+          hls = new Hls({ enableWorker: true, lowLatencyMode: true })
+          const instance = hls as unknown as {
+            loadSource: (u: string) => void
+            attachMedia: (v: HTMLVideoElement) => void
+            on: (event: string, cb: (e: unknown, data: { fatal?: boolean }) => void) => void
+          }
+          instance.loadSource(channel.url)
+          instance.attachMedia(video!)
+          instance.on(Hls.Events.MANIFEST_PARSED, () => {
+            setLoading(false)
+            start()
+          })
+          instance.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean }) => {
+            if (data.fatal) {
+              setError('This channel is offline or blocked in your region.')
+              setLoading(false)
+            }
+          })
+        } else {
+          // Last resort: let the browser try the URL directly.
+          video!.src = channel.url
+          setLoading(false)
+          start()
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Could not load the live TV player.')
+          setLoading(false)
+        }
+      }
+    }
+
+    void setup()
+
+    return () => {
+      cancelled = true
+      if (hls) {
+        hls.destroy()
+      }
+      video.removeAttribute('src')
+      video.load()
+    }
+  }, [channel.url])
+
+  return (
+    <div className="livetv-player-frame">
+      <video
+        ref={videoRef}
+        className="livetv-video"
+        controls
+        autoPlay
+        muted
+        playsInline
+      />
+      {loading && !error && (
+        <div className="livetv-player-overlay">
+          <LoaderCircle className="spin-icon" />
+          <p>Tuning in to {channel.name}…</p>
+        </div>
+      )}
+      {error && (
+        <div className="livetv-player-overlay">
+          <AlertCircle />
+          <p>{error}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+type LiveTvScreenProps = {
+  onSearch: () => void
+  currentUser: UserInfo | null
+  onProfile: () => void
+  profiles: UserProfile[]
+}
+
+const LIVE_TV_RESULT_LIMIT = 200
+
+function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScreenProps) {
+  const [channels, setChannels] = useState<LiveChannel[]>([])
+  const [categoryNames, setCategoryNames] = useState<Map<string, string>>(new Map())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [activeCategory, setActiveCategory] = useState('all')
+  const [activeCountry, setActiveCountry] = useState('all')
+  const [selected, setSelected] = useState<LiveChannel | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    setLoading(true)
+    setError('')
+
+    Promise.all([fetchLiveChannels(), fetchLiveCategories()])
+      .then(([list, categories]) => {
+        if (cancelled) {
+          return
+        }
+        setChannels(list)
+        setCategoryNames(categories)
+        setSelected((current) => current ?? list[0] ?? null)
+        setLoading(false)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) {
+          return
+        }
+        setError(err instanceof Error ? err.message : 'Could not load live channels.')
+        setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const countries = useMemo(() => {
+    const map = new Map<string, { name: string; flag: string; count: number }>()
+    for (const channel of channels) {
+      if (!channel.country) continue
+      const existing = map.get(channel.country)
+      if (existing) {
+        existing.count += 1
+      } else {
+        map.set(channel.country, { name: channel.countryName, flag: channel.flag, count: 1 })
+      }
+    }
+    return Array.from(map.entries())
+      .map(([code, info]) => ({ code, ...info }))
+      .sort((a, b) => b.count - a.count)
+  }, [channels])
+
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const channel of channels) {
+      for (const category of channel.categories) {
+        counts.set(category, (counts.get(category) ?? 0) + 1)
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([id, count]) => ({ id, name: categoryNames.get(id) ?? id, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 14)
+  }, [channels, categoryNames])
+
+  const filtered = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+
+    return channels.filter((channel) => {
+      if (activeCountry !== 'all' && channel.country !== activeCountry) {
+        return false
+      }
+      if (activeCategory !== 'all' && !channel.categories.includes(activeCategory)) {
+        return false
+      }
+      if (normalizedQuery && !channel.name.toLowerCase().includes(normalizedQuery)) {
+        return false
+      }
+      return true
+    })
+  }, [channels, activeCategory, activeCountry, query])
+
+  const visible = filtered.slice(0, LIVE_TV_RESULT_LIMIT)
+
+  const pickChannel = (channel: LiveChannel) => {
+    setSelected(channel)
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    })
+  }
+
+  return (
+    <section className="screen livetv-screen">
+      <header className="livetv-header">
+        <div className="livetv-header-title">
+          <Radio />
+          <h1>Live TV</h1>
+        </div>
+        <div className="livetv-header-actions">
+          <button className="netflix-icon-btn" type="button" title="Search" onClick={onSearch}>
+            <Search size={22} />
+          </button>
+          <button className="netflix-sidebar-avatar livetv-avatar" type="button" onClick={onProfile} title="Profile">
+            {renderProfileAvatarMini(currentUser, profiles)}
+          </button>
+        </div>
+      </header>
+
+      {selected && !loading && !error && (
+        <div className="livetv-now-playing">
+          <LiveTvPlayer key={selected.id} channel={selected} />
+          <div className="livetv-now-meta">
+            <span className="livetv-live-badge">● LIVE</span>
+            <h2>
+              <span className="livetv-flag">{selected.flag}</span> {selected.name}
+            </h2>
+            <p>
+              {selected.countryName}
+              {selected.quality ? ` · ${selected.quality}` : ''}
+              {selected.categories.length > 0
+                ? ` · ${selected.categories
+                    .map((id) => categoryNames.get(id) ?? id)
+                    .slice(0, 3)
+                    .join(', ')}`
+                : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="livetv-controls">
+        <label className="livetv-search">
+          <Search size={18} />
+          <input
+            type="search"
+            value={query}
+            placeholder="Search channels"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <select
+          className="livetv-country-select"
+          value={activeCountry}
+          onChange={(event) => setActiveCountry(event.target.value)}
+          aria-label="Filter by country"
+        >
+          <option value="all">All countries</option>
+          {countries.map((country) => (
+            <option key={country.code} value={country.code}>
+              {country.flag} {country.name} ({country.count})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="livetv-category-chips">
+        <button
+          type="button"
+          className={activeCategory === 'all' ? 'active' : ''}
+          onClick={() => setActiveCategory('all')}
+        >
+          All
+        </button>
+        {categories.map((category) => (
+          <button
+            key={category.id}
+            type="button"
+            className={activeCategory === category.id ? 'active' : ''}
+            onClick={() => setActiveCategory(category.id)}
+          >
+            {category.name}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="livetv-status">
+          <LoaderCircle className="spin-icon" />
+          <p>Loading live channels from iptv-org…</p>
+        </div>
+      ) : error ? (
+        <div className="livetv-status">
+          <AlertCircle />
+          <p>{error}</p>
+        </div>
+      ) : (
+        <>
+          <div className="livetv-result-count">
+            {filtered.length} channel{filtered.length === 1 ? '' : 's'}
+            {filtered.length > visible.length ? ` · showing first ${visible.length}` : ''}
+          </div>
+          <div className="livetv-grid">
+            {visible.map((channel) => (
+              <button
+                key={channel.id}
+                type="button"
+                className={`livetv-card${selected?.id === channel.id ? ' active' : ''}`}
+                onClick={() => pickChannel(channel)}
+                title={channel.name}
+              >
+                <span className="livetv-card-flag">{channel.flag}</span>
+                <span className="livetv-card-name">{channel.name}</span>
+                <span className="livetv-card-meta">{channel.countryName}</span>
+              </button>
+            ))}
+          </div>
+          {visible.length === 0 && (
+            <div className="livetv-status">
+              <p>No channels match your filters.</p>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 function BottomNav({
   active,
   onHome,
   onMovies,
   onTvShows,
-  onAnime,
   onLibrary,
+  onDrama,
+  onLiveTv,
+  onGoLumen,
+  onGoAnime,
+  designMode,
 }: {
   active: PrimaryTab
   onHome: () => void
   onMovies: () => void
   onTvShows: () => void
-  onAnime: () => void
   onLibrary: () => void
+  onDrama?: () => void
+  onLiveTv?: () => void
+  onGoLumen?: () => void
+  onGoAnime?: () => void
+  designMode: 'apple' | 'netflix'
 }) {
   const magneticEvents = {
     onPointerLeave: resetMagneticNavOffset,
     onPointerMove: setMagneticNavOffset,
     onPointerUp: resetMagneticNavOffset,
+  }
+
+  if (designMode === 'netflix') {
+    return (
+      <div className="bottom-ui netflix-bottom-ui">
+        <nav className="netflix-tab-bar" aria-label="Primary">
+          <button
+            className={`netflix-tab${active === 'Anime' ? ' active' : ''}`}
+            type="button"
+            onClick={onHome}
+            aria-current={active === 'Anime' ? 'page' : undefined}
+            title="Home"
+          >
+            <Home fill={active === 'Anime' ? 'currentColor' : 'none'} />
+            <span>Home</span>
+          </button>
+          <button
+            className={`netflix-tab${active === 'Drama' ? ' active' : ''}`}
+            type="button"
+            onClick={onDrama}
+            aria-current={active === 'Drama' ? 'page' : undefined}
+            title="Drama"
+          >
+            <Tv />
+            <span>Drama</span>
+          </button>
+          <button
+            className={`netflix-tab${active === 'Live TV' ? ' active' : ''}`}
+            type="button"
+            onClick={onLiveTv}
+            aria-current={active === 'Live TV' ? 'page' : undefined}
+            title="Live TV"
+          >
+            <Radio />
+            <span>Live TV</span>
+          </button>
+          <button
+            className="netflix-tab netflix-tab-lumen"
+            type="button"
+            onClick={onGoLumen}
+            title="Switch to Lumen"
+          >
+            <ArrowLeftRight />
+            <span>Lumen</span>
+          </button>
+        </nav>
+      </div>
+    )
   }
 
   return (
@@ -5384,17 +7153,6 @@ function BottomNav({
         </button>
         <button
           {...magneticEvents}
-          className={active === 'Anime' ? 'active' : ''}
-          type="button"
-          onClick={onAnime}
-          aria-current={active === 'Anime' ? 'page' : undefined}
-          title="Anime"
-        >
-          <Sparkles />
-          <span>Anime</span>
-        </button>
-        <button
-          {...magneticEvents}
           className={active === 'Library' ? 'active' : ''}
           type="button"
           onClick={onLibrary}
@@ -5405,6 +7163,185 @@ function BottomNav({
           <span>Library</span>
         </button>
       </nav>
+      <button
+        {...magneticEvents}
+        className="search-float round-nav anime-float"
+        type="button"
+        onClick={onGoAnime}
+        title="Switch to Anime"
+        aria-label="Switch to Anime"
+      >
+        <span className="anime-float-mark">A</span>
+      </button>
+    </div>
+  )
+}
+
+type ProfileMenuProps = {
+  currentUser: UserInfo | null
+  profiles: UserProfile[]
+  variant: 'apple' | 'netflix'
+  onSelectProfile: (name: string) => void
+  onManageProfiles: () => void
+  onTransferProfile: () => void
+  onAccount: () => void
+  onHelp: () => void
+  onSignOut: () => void
+}
+
+function ProfileMenu({
+  currentUser,
+  profiles,
+  variant,
+  onSelectProfile,
+  onManageProfiles,
+  onTransferProfile,
+  onAccount,
+  onHelp,
+  onSignOut,
+}: ProfileMenuProps) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const handlePointer = (event: Event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointer)
+    document.addEventListener('keydown', handleKey)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointer)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [open])
+
+  const otherProfiles = profiles.filter(
+    (profile) => profile.name.toLowerCase() !== (currentUser?.name ?? '').toLowerCase(),
+  )
+
+  const runAndClose = (action: () => void) => () => {
+    setOpen(false)
+    action()
+  }
+
+  const triggerClass =
+    variant === 'apple'
+      ? `apple-nav-profile ${currentUser ? 'has-avatar' : ''}`
+      : 'netflix-sidebar-avatar'
+
+  return (
+    <div className={`profile-menu profile-menu-${variant}`} ref={rootRef}>
+      <button
+        className={triggerClass}
+        type="button"
+        title="Profile"
+        aria-label="Profile"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {renderProfileAvatarMini(currentUser, profiles)}
+      </button>
+
+      {open && (
+        <div className="profile-menu-dropdown" role="menu">
+          {currentUser && (
+            <button
+              className="profile-menu-item profile-menu-current"
+              type="button"
+              role="menuitem"
+              onClick={runAndClose(onAccount)}
+            >
+              <span className="profile-menu-avatar">
+                {renderProfileAvatarMini(currentUser, profiles)}
+              </span>
+              <span className="profile-menu-name">{currentUser.name}</span>
+            </button>
+          )}
+
+          {otherProfiles.map((profile) => (
+            <button
+              key={profile.name}
+              className="profile-menu-item"
+              type="button"
+              role="menuitem"
+              onClick={runAndClose(() => onSelectProfile(profile.name))}
+            >
+              <span className="profile-menu-avatar">
+                {renderProfileAvatarMini(
+                  { name: profile.name, email: '', avatarColor: profile.avatarColor },
+                  profiles,
+                )}
+              </span>
+              <span className="profile-menu-name">{profile.name}</span>
+            </button>
+          ))}
+
+          <div className="profile-menu-sep" />
+
+          <button
+            className="profile-menu-item profile-menu-action"
+            type="button"
+            role="menuitem"
+            onClick={runAndClose(onManageProfiles)}
+          >
+            <UserCog size={18} />
+            <span>Manage Profiles</span>
+          </button>
+          <button
+            className="profile-menu-item profile-menu-action"
+            type="button"
+            role="menuitem"
+            onClick={runAndClose(onTransferProfile)}
+          >
+            <ArrowLeftRight size={18} />
+            <span>Transfer Profile</span>
+          </button>
+          <button
+            className="profile-menu-item profile-menu-action"
+            type="button"
+            role="menuitem"
+            onClick={runAndClose(onAccount)}
+          >
+            <CircleUserRound size={18} />
+            <span>Account</span>
+          </button>
+          <button
+            className="profile-menu-item profile-menu-action"
+            type="button"
+            role="menuitem"
+            onClick={runAndClose(onHelp)}
+          >
+            <CircleHelp size={18} />
+            <span>Help Center</span>
+          </button>
+
+          <div className="profile-menu-sep" />
+
+          <button
+            className="profile-menu-item profile-menu-signout"
+            type="button"
+            role="menuitem"
+            onClick={runAndClose(onSignOut)}
+          >
+            <LogOut size={18} />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -5414,11 +7351,19 @@ function DesktopNav({
   onHome,
   onMovies,
   onTvShows,
-  onAnime,
   onSearch,
   onLibrary,
+  onDrama,
+  onLiveTv,
   currentUser,
   onProfile,
+  onSelectProfile,
+  onManageProfiles,
+  onTransferProfile,
+  onHelp,
+  onGoAnime,
+  onGoLumen,
+  onSignOut,
   profiles,
   designMode,
 }: {
@@ -5426,124 +7371,166 @@ function DesktopNav({
   onHome: () => void
   onMovies: () => void
   onTvShows: () => void
-  onAnime: () => void
   onSearch: () => void
   onLibrary: () => void
+  onDrama: () => void
+  onLiveTv: () => void
   currentUser: UserInfo | null
   onProfile: () => void
+  onSelectProfile: (name: string) => void
+  onManageProfiles: () => void
+  onTransferProfile: () => void
+  onHelp: () => void
+  onGoAnime: () => void
+  onGoLumen: () => void
+  onSignOut: () => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
 }) {
-  const magneticEvents = {
-    onPointerLeave: resetMagneticNavOffset,
-    onPointerMove: setMagneticNavOffset,
-    onPointerUp: resetMagneticNavOffset,
+  const profileMenuProps = {
+    currentUser,
+    profiles,
+    onSelectProfile,
+    onManageProfiles,
+    onTransferProfile,
+    onAccount: onProfile,
+    onHelp,
+    onSignOut,
   }
 
   return (
-    <header className="desktop-nav">
+    <header className={designMode === 'netflix' ? 'desktop-nav' : 'desktop-nav apple-desktop-nav'}>
       {designMode === 'netflix' ? (
-        <>
-          <button className="desktop-brand netflix-logo-btn" type="button" onClick={onHome}>
-            NETFLIX
+        <div className="netflix-sidebar">
+          {/* Top: "A" logo — switches back to the Lumen UI */}
+          <button
+            className="netflix-sidebar-logo anime-logo-btn"
+            type="button"
+            onClick={onGoLumen}
+            aria-label="Switch to Lumen"
+            title="Switch to Lumen"
+          >
+            <span className="anime-logo-mark">A</span>
           </button>
-          <nav aria-label="Website" className="netflix-desktop-links">
-            <button className={active === 'Home' ? 'active' : ''} type="button" onClick={onHome}>Home</button>
-            <button className={active === 'TV Shows' ? 'active' : ''} type="button" onClick={onTvShows}>Shows</button>
-            <button className={active === 'Movies' ? 'active' : ''} type="button" onClick={onMovies}>Movies</button>
-            <button type="button">Games</button>
-            <button type="button">New & Popular</button>
-            <button className={active === 'Library' ? 'active' : ''} type="button" onClick={onLibrary}>My List</button>
-            <button type="button">Browse by Languages</button>
-          </nav>
-          <div className="desktop-actions netflix-actions">
-            <button className="netflix-action-btn search-btn" type="button" onClick={onSearch} title="Search">
-              <Search size={20} />
+
+          {/* Middle navigation links/icons */}
+          <nav className="netflix-sidebar-nav" aria-label="Main Navigation">
+            {/* Anime (Home) icon */}
+            <button
+              className={`netflix-sidebar-btn ${active === 'Home' ? 'active' : ''}`}
+              type="button"
+              onClick={onHome}
+              title="Anime (Home)"
+            >
+              <Home size={22} strokeWidth={2.2} />
             </button>
-            <button className="netflix-action-btn bell-btn" type="button" title="Notifications">
-              <Bell size={20} />
+
+            {/* Drama icon */}
+            <button
+              className={`netflix-sidebar-btn ${active === 'Drama' ? 'active' : ''}`}
+              type="button"
+              onClick={onDrama}
+              title="Drama"
+            >
+              <Tv size={22} strokeWidth={2.2} />
+            </button>
+
+            {/* Live TV icon */}
+            <button
+              className={`netflix-sidebar-btn ${active === 'Live TV' ? 'active' : ''}`}
+              type="button"
+              onClick={onLiveTv}
+              title="Live TV"
+            >
+              <Radio size={22} strokeWidth={2.2} />
+            </button>
+
+            {/* Search icon */}
+            <button
+              className={`netflix-sidebar-btn ${active === 'Search' ? 'active' : ''}`}
+              type="button"
+              onClick={onSearch}
+              title="Search"
+            >
+              <Search size={22} strokeWidth={2.2} />
+            </button>
+
+            {/* Library (Plus) icon */}
+            <button
+              className={`netflix-sidebar-btn ${active === 'Library' ? 'active' : ''}`}
+              type="button"
+              onClick={onLibrary}
+              title="Library"
+            >
+              <Plus size={22} strokeWidth={2.2} />
+            </button>
+          </nav>
+
+          {/* Bottom Actions: Notifications & Profile */}
+          <div className="netflix-sidebar-bottom">
+            <button className="netflix-sidebar-btn bell-btn" type="button" title="Notifications">
+              <Bell size={22} strokeWidth={2.2} />
               <span className="bell-badge">7</span>
             </button>
-            <button className="avatar-button desktop-avatar netflix-avatar" type="button" onClick={onProfile} title="Profile">
-              {renderProfileAvatarMini(currentUser, profiles)}
-            </button>
+            <ProfileMenu variant="netflix" {...profileMenuProps} />
           </div>
-        </>
+        </div>
       ) : (
         <>
           <button
-            {...magneticEvents}
-            className="desktop-brand"
+            className="apple-nav-anime"
             type="button"
-            onClick={onHome}
+            title="Anime"
+            aria-label="Go to Anime"
+            onClick={onGoAnime}
           >
-            <Home fill="currentColor" />
-            <span>Home</span>
+            <span className="anime-logo-mark">A</span>
           </button>
-          <nav aria-label="Website" {...magneticEvents}>
+          <div
+            className="apple-floating-nav"
+            role="navigation"
+            aria-label="Primary"
+          >
             <button
-              className={active === 'Home' ? 'active' : ''}
+              className={`apple-nav-link${active === 'Home' ? ' apple-nav-link-active' : ''}`}
               type="button"
               onClick={onHome}
             >
-              <Home fill="currentColor" />
-              <span>Home</span>
+              Home
             </button>
             <button
-              className={active === 'Movies' ? 'active' : ''}
+              className={`apple-nav-link${active === 'Movies' ? ' apple-nav-link-active' : ''}`}
               type="button"
               onClick={onMovies}
             >
-              <Clapperboard />
-              <span>Movies</span>
+              Movies
             </button>
             <button
-              className={active === 'TV Shows' ? 'active' : ''}
+              className={`apple-nav-link${active === 'TV Shows' ? ' apple-nav-link-active' : ''}`}
               type="button"
               onClick={onTvShows}
             >
-              <Tv />
-              <span>TV Shows</span>
+              TV
             </button>
             <button
-              className={active === 'Anime' ? 'active' : ''}
-              type="button"
-              onClick={onAnime}
-            >
-              <Sparkles />
-              <span>Anime</span>
-            </button>
-            <button
-              className={active === 'Library' ? 'active' : ''}
+              className={`apple-nav-link${active === 'Library' ? ' apple-nav-link-active' : ''}`}
               type="button"
               onClick={onLibrary}
             >
-              <Library />
-              <span>Library</span>
+              Library
             </button>
-          </nav>
-          <div className="desktop-actions">
+            <span className="apple-nav-divider" aria-hidden="true" />
             <button
-              {...magneticEvents}
-              className={
-                active === 'Search' ? 'desktop-search active' : 'desktop-search'
-              }
+              className="apple-nav-icon-btn"
               type="button"
+              title="Search"
+              aria-label="Search"
               onClick={onSearch}
             >
-              <Search />
-              <span>Search</span>
-            </button>
-            <button
-              {...magneticEvents}
-              className={`avatar-button desktop-avatar ${currentUser ? 'has-avatar' : ''}`}
-              type="button"
-              title="Profile"
-              onClick={onProfile}
-            >
-              {renderProfileAvatarMini(currentUser, profiles)}
+              <Search size={18} />
             </button>
           </div>
+          <ProfileMenu variant="apple" {...profileMenuProps} />
         </>
       )}
     </header>

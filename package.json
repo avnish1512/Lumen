@@ -16,6 +16,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@consumet/extensions": "^1.8.8",
     "@expo/metro-runtime": "~6.1.2",
     "expo": "~54.0.35",
     "lucide-react": "^1.17.0",

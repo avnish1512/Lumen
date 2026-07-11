@@ -38,7 +38,7 @@ function LoadingView() {
   return (
     <View style={styles.centered}>
       <ActivityIndicator color="#f5f5f7" size="large" />
-      <Text style={styles.title}>Loading Apple Clone</Text>
+      <Text style={styles.title}>Loading Lumen</Text>
       <Text style={styles.url}>{webAppUrl}</Text>
     </View>
   )
