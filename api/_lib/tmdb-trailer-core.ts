@@ -1,4 +1,6 @@
-const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
+// api.tmdb.org is an official alias that stays reachable on networks that
+// block api.themoviedb.org (e.g. some IN ISPs). Same API + token.
+const TMDB_BASE_URL = 'https://api.tmdb.org/3'
 
 type TmdbMediaType = 'movie' | 'tv'
 
@@ -129,7 +131,8 @@ function applyTmdbAuth(url: URL, auth: TmdbAuth) {
 }
 
 async function requestTmdb<T>(auth: TmdbAuth, path: string) {
-  const url = new URL(path, TMDB_BASE_URL)
+  // Concatenate so the "/3" API version isn't dropped by an absolute path.
+  const url = new URL(`${TMDB_BASE_URL}${path}`)
   const response = await fetch(url, applyTmdbAuth(url, auth))
   const body = (await response.json()) as T
 
@@ -264,4 +267,32 @@ export function fallbackTrailerSearchClips(movie: { imdbId: string; title: strin
       url: `https://www.youtube.com/results?${searchParams}`,
     },
   ]
+}
+
+// Resolves the single best YouTube trailer key for a movie/TV title, used by
+// the hero trailer preview. Accepts a TMDB id directly, or resolves one from
+// an IMDb id via the TMDB /find endpoint.
+export async function fetchTmdbTrailerYoutubeId(
+  authChain: TmdbAuth[],
+  opts: { tmdbId?: number; imdbId?: string; type?: TmdbMediaType },
+): Promise<string | null> {
+  let mediaType: TmdbMediaType = opts.type === 'tv' ? 'tv' : 'movie'
+  let tmdbId = opts.tmdbId
+
+  if (!tmdbId && opts.imdbId) {
+    const match = await resolveTmdbMatch(authChain, opts.imdbId)
+    tmdbId = match.tmdbId
+    mediaType = match.mediaType
+  }
+
+  if (!tmdbId) {
+    return null
+  }
+
+  const videos = await fetchVideos(authChain, mediaType, tmdbId)
+  const best = videos
+    .filter((video) => video.site.toLowerCase() === 'youtube' && video.key)
+    .sort((left, right) => trailerRank(right) - trailerRank(left))[0]
+
+  return best?.key ?? null
 }

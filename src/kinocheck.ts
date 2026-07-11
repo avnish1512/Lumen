@@ -1,6 +1,6 @@
 // Resolves a YouTube trailer id for a title, used for the hero preview.
 // Anime carry their AniList trailer id directly; movies/shows are looked up
-// through our /api/kinocheck proxy (KinoCheck by TMDB/IMDb id).
+// through our /api/tmdb-trailer proxy (TMDB videos by TMDB/IMDb id).
 
 import type { Movie } from './omdb'
 
@@ -13,10 +13,10 @@ export async function fetchTrailerYoutubeId(movie: Movie): Promise<string | null
   }
 
   const params = new URLSearchParams()
-  if (movie.id && /^tt\d+/.test(movie.id)) {
-    params.set('imdbId', movie.id)
-  } else if (movie.tmdbId) {
+  if (movie.tmdbId) {
     params.set('tmdbId', String(movie.tmdbId))
+  } else if (movie.id && /^tt\d+/.test(movie.id)) {
+    params.set('imdbId', movie.id)
   } else {
     return null
   }
@@ -27,12 +27,26 @@ export async function fetchTrailerYoutubeId(movie: Movie): Promise<string | null
     return cache.get(cacheKey) ?? null
   }
 
+  const query = params.toString()
+
+  // TMDB is the primary trailer source. Some networks block api.themoviedb.org
+  // (e.g. certain ISPs), so if TMDB returns nothing we fall back to KinoCheck.
+  const youtubeId =
+    (await lookupTrailer(`/api/tmdb-trailer?${query}`)) ??
+    (await lookupTrailer(`/api/kinocheck?${query}`))
+
+  cache.set(cacheKey, youtubeId)
+  return youtubeId
+}
+
+async function lookupTrailer(url: string): Promise<string | null> {
   try {
-    const response = await fetch(`/api/kinocheck?${params}`)
+    const response = await fetch(url)
+    if (!response.ok) {
+      return null
+    }
     const body = (await response.json()) as { youtubeId?: string | null }
-    const youtubeId = body?.youtubeId ?? null
-    cache.set(cacheKey, youtubeId)
-    return youtubeId
+    return body?.youtubeId ?? null
   } catch {
     return null
   }

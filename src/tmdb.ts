@@ -448,18 +448,39 @@ export async function fetchSeasonEpisodes(
   }
 }
 
-export async function fetchKoreanChineseDramas(): Promise<Movie[]> {
+export type DramaRails = {
+  kDrama: Movie[]
+  cDrama: Movie[]
+  newReleases: Movie[]
+  romCom: Movie[]
+}
+
+const emptyDramaRails: DramaRails = {
+  kDrama: [],
+  cDrama: [],
+  newReleases: [],
+  romCom: [],
+}
+
+export async function fetchKoreanChineseDramas(): Promise<{
+  list: Movie[]
+  rails: DramaRails
+}> {
   try {
     const response = await fetch('/api/tmdb-drama')
-    const body = (await response.json()) as { Response?: string; results?: Movie[] }
-
-    if (!response.ok || body.Response === 'False') {
-      return []
+    const body = (await response.json()) as {
+      Response?: string
+      results?: Movie[]
+      rails?: DramaRails
     }
 
-    return body.results ?? []
+    if (!response.ok || body.Response === 'False') {
+      return { list: [], rails: emptyDramaRails }
+    }
+
+    return { list: body.results ?? [], rails: body.rails ?? emptyDramaRails }
   } catch {
-    return []
+    return { list: [], rails: emptyDramaRails }
   }
 }
 

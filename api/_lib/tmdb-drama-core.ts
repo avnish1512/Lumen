@@ -1,6 +1,9 @@
 import { type TmdbAuth } from './tmdb-watch-core.js'
 
-const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
+// Use the api.tmdb.org alias — some ISPs (notably in IN) block
+// api.themoviedb.org at the network level, which leaves the drama rails empty.
+// The alias serves the identical API/token and stays reachable.
+const TMDB_BASE_URL = 'https://api.tmdb.org/3'
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p'
 
 type TmdbTvResult = {
@@ -64,7 +67,9 @@ function applyTmdbAuth(url: URL, auth: TmdbAuth) {
 }
 
 async function requestTmdb(auth: TmdbAuth, path: string, params: Record<string, string>) {
-  const url = new URL(path, TMDB_BASE_URL)
+  // Note: concatenate (not new URL(path, base)) so the "/3" API version in the
+  // base URL is preserved — an absolute `path` would otherwise replace it.
+  const url = new URL(`${TMDB_BASE_URL}${path}`)
   Object.entries(params).forEach(([key, value]) => {
     if (value) {
       url.searchParams.set(key, value)
@@ -192,4 +197,67 @@ export async function fetchKoreanChineseDramas(authChain: TmdbAuth[]): Promise<D
   }
 
   return merged.map((item, index) => ({ ...item, rank: index + 1 }))
+}
+
+// Distinct, category-specific drama rails (each rail is a different query so
+// they don't repeat the same titles): K-Drama, C-Drama, New Releases, Rom-Com.
+export type DramaRails = {
+  kDrama: DramaItem[]
+  cDrama: DramaItem[]
+  newReleases: DramaItem[]
+  romCom: DramaItem[]
+}
+
+async function fetchDiscover(
+  authChain: TmdbAuth[],
+  opts: { country: string; genres: string; sortBy: string; label: string },
+) {
+  const response = await requestFirstOk(authChain, '/discover/tv', {
+    with_origin_country: opts.country,
+    with_genres: opts.genres,
+    sort_by: opts.sortBy,
+    include_adult: 'false',
+    'vote_count.gte': '20',
+    language: 'en-US',
+    page: '1',
+  })
+
+  return (response.results ?? [])
+    .map((item, index) => mapToDrama(item, opts.label, index + 1, 'tv'))
+    .filter((item): item is DramaItem => Boolean(item))
+    .slice(0, 20)
+}
+
+function interleave(a: DramaItem[], b: DramaItem[]) {
+  const merged: DramaItem[] = []
+  const max = Math.max(a.length, b.length)
+  for (let index = 0; index < max; index += 1) {
+    if (a[index]) merged.push(a[index])
+    if (b[index]) merged.push(b[index])
+  }
+  return merged
+}
+
+export async function fetchDramaRails(authChain: TmdbAuth[]): Promise<DramaRails> {
+  if (authChain.length === 0) {
+    return { kDrama: [], cDrama: [], newReleases: [], romCom: [] }
+  }
+
+  const [kDrama, cDrama, krNew, cnNew, krRom, cnRom] = await Promise.all([
+    fetchDiscover(authChain, { country: 'KR', genres: '18', sortBy: 'popularity.desc', label: 'Korean' }).catch(() => []),
+    fetchDiscover(authChain, { country: 'CN', genres: '18', sortBy: 'popularity.desc', label: 'Chinese' }).catch(() => []),
+    fetchDiscover(authChain, { country: 'KR', genres: '18', sortBy: 'first_air_date.desc', label: 'Korean' }).catch(() => []),
+    fetchDiscover(authChain, { country: 'CN', genres: '18', sortBy: 'first_air_date.desc', label: 'Chinese' }).catch(() => []),
+    fetchDiscover(authChain, { country: 'KR', genres: '18,10749', sortBy: 'popularity.desc', label: 'Korean' }).catch(() => []),
+    fetchDiscover(authChain, { country: 'CN', genres: '18,10749', sortBy: 'popularity.desc', label: 'Chinese' }).catch(() => []),
+  ])
+
+  const rerank = (list: DramaItem[]) => list.map((item, index) => ({ ...item, rank: index + 1 }))
+
+  return {
+    kDrama: rerank(kDrama),
+    cDrama: rerank(cDrama),
+    newReleases: rerank(interleave(krNew, cnNew)),
+    romCom: rerank(interleave(krRom, cnRom)),
+  }
 }

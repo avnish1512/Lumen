@@ -63,6 +63,7 @@ import {
   fetchWatchmodeCastCrew,
   fetchKoreanChineseDramas,
   fetchSeasonEpisodes,
+  type DramaRails,
   type SeasonEpisode,
   streamProviderOptions,
   type CastCrewMember,
@@ -73,12 +74,16 @@ import {
 } from './tmdb'
 import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds } from './anilist'
 import {
+  fetchAccountProfiles as fetchRemoteProfiles,
+  saveAccountProfiles as saveRemoteProfiles,
+} from './profiles-api'
+import {
   fetchLiveChannels,
   fetchLiveCategories,
   loadHlsJs,
   type LiveChannel,
 } from './livetv'
-import { TOP_POSTER_KEYS, topPosterUrl, hasTopPoster } from './posters'
+import { topPosterUrl, hasTopPoster } from './posters'
 import { fetchTrailerYoutubeId } from './kinocheck'
 import './App.css'
 
@@ -933,6 +938,10 @@ function App() {
     const nextMode = designMode === 'apple' ? 'netflix' : 'apple'
     setDesignMode(nextMode)
     window.localStorage.setItem('omdb.apple-tv-style.designMode', nextMode)
+    // Clear the shared hero pick so each mode starts on its own default hero
+    // instead of briefly showing the other mode's carried-over hero/rails.
+    setHomeHeroMovie(null)
+    setDramaHeroMovie(null)
   }
 
   const handleAddProfile = (name: string, avatarColor: string) => {
@@ -942,7 +951,11 @@ function App() {
     }
     const updated = [...profiles, newProfile]
     setProfiles(updated)
-    window.localStorage.setItem(profilesKeyFor(currentUser ?? tempUser), JSON.stringify(updated))
+    const account = currentUser ?? tempUser
+    window.localStorage.setItem(profilesKeyFor(account), JSON.stringify(updated))
+    if (account?.email) {
+      void saveRemoteProfiles(account.email, updated)
+    }
   }
 
   const handleEditProfile = (oldName: string, newName: string, avatarColor: string) => {
@@ -953,7 +966,11 @@ function App() {
       return p
     })
     setProfiles(updated)
-    window.localStorage.setItem(profilesKeyFor(currentUser ?? tempUser), JSON.stringify(updated))
+    const editAccount = currentUser ?? tempUser
+    window.localStorage.setItem(profilesKeyFor(editAccount), JSON.stringify(updated))
+    if (editAccount?.email) {
+      void saveRemoteProfiles(editAccount.email, updated)
+    }
 
     if (oldName !== newName) {
       const oldSaved = window.localStorage.getItem(`${savedMoviesKey}.${oldName}`)
@@ -979,7 +996,11 @@ function App() {
       updated = [{ name: 'Children', avatarColor: 'kids' }]
     }
     setProfiles(updated)
-    window.localStorage.setItem(profilesKeyFor(currentUser ?? tempUser), JSON.stringify(updated))
+    const delAccount = currentUser ?? tempUser
+    window.localStorage.setItem(profilesKeyFor(delAccount), JSON.stringify(updated))
+    if (delAccount?.email) {
+      void saveRemoteProfiles(delAccount.email, updated)
+    }
 
     window.localStorage.removeItem(`${savedMoviesKey}.${name}`)
     window.localStorage.removeItem(`${watchHistoryKey}.${name}`)
@@ -996,6 +1017,34 @@ function App() {
     setProfiles(readProfilesFor(currentUser ?? tempUser))
   }, [currentUser, tempUser])
 
+  // Pull the account's profiles from the backend (Supabase) so they follow the
+  // account across devices. Local storage is used as an offline cache; when the
+  // backend returns a list it becomes the source of truth.
+  useEffect(() => {
+    const account = currentUser ?? tempUser
+    const email = account?.email
+    if (!email) {
+      return
+    }
+
+    let active = true
+    void fetchRemoteProfiles(email).then((remote) => {
+      if (!active || !remote || remote.length === 0) {
+        return
+      }
+      setProfiles(remote)
+      try {
+        window.localStorage.setItem(profilesKeyFor(account), JSON.stringify(remote))
+      } catch {
+        // ignore quota / serialization errors
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [currentUser, tempUser])
+
   const initialCache = useMemo(() => readHomeCache(), [])
 
   const [movies, setMovies] = useState<Movie[]>(() => initialCache?.movies ?? [])
@@ -1009,6 +1058,12 @@ function App() {
     useState<MediaCollection>(() => initialCache?.animeCollection ?? emptyMediaCollection)
   const [animeExtras, setAnimeExtras] = useState<AnimeHomeExtras>(emptyAnimeExtras)
   const [kcDramas, setKcDramas] = useState<Movie[]>([])
+  const [dramaRails, setDramaRails] = useState<DramaRails>({
+    kDrama: [],
+    cDrama: [],
+    newReleases: [],
+    romCom: [],
+  })
   const [tmdbHomeRails, setTmdbHomeRails] =
     useState<TmdbHomeRails>(() => initialCache?.tmdbHomeRails ?? emptyTmdbHomeRails)
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
@@ -1136,16 +1191,38 @@ function App() {
     }
   }, [dramaList])
 
+  // Distinct drama rails from TMDB: K-Drama / C-Drama / New Releases / Rom-Com.
+  // The "movies" collection top = K-Drama, "tv" collection top = C-Drama, so the
+  // two Top rails don't repeat; new releases + rom-com fill the other two rails.
+  const dramaMovieCollection = useMemo<MediaCollection>(
+    () => ({
+      top: dramaRails.kDrama.length ? dramaRails.kDrama : dramaCollection.top,
+      thrilling: dramaRails.romCom.length ? dramaRails.romCom : dramaCollection.thrilling,
+      adventure: dramaRails.newReleases.length ? dramaRails.newReleases : dramaCollection.adventure,
+      kidsFamily: dramaRails.cDrama.length ? dramaRails.cDrama : dramaCollection.kidsFamily,
+    }),
+    [dramaRails, dramaCollection],
+  )
+
+  const dramaTvCollection = useMemo<MediaCollection>(
+    () => ({
+      top: dramaRails.cDrama.length ? dramaRails.cDrama : dramaCollection.top,
+      thrilling: dramaRails.romCom.length ? dramaRails.romCom : dramaCollection.thrilling,
+      adventure: dramaRails.newReleases.length ? dramaRails.newReleases : dramaCollection.adventure,
+      kidsFamily: dramaRails.kDrama.length ? dramaRails.kDrama : dramaCollection.kidsFamily,
+    }),
+    [dramaRails, dramaCollection],
+  )
+
   const featuredDramaMovie = useMemo(() => {
-    const preferred = dramaList.find(
-      (m) =>
-        m.title === 'Chernobyl' ||
-        m.title === 'Better Call Saul' ||
-        m.title === 'Ozark' ||
-        m.title === 'Breaking Bad',
+    return (
+      dramaHeroMovie ||
+      dramaRails.kDrama[0] ||
+      dramaRails.cDrama[0] ||
+      dramaList[0] ||
+      null
     )
-    return dramaHeroMovie || preferred || dramaList[0] || null
-  }, [dramaList, dramaHeroMovie])
+  }, [dramaList, dramaHeroMovie, dramaRails])
 
   const relatedMedia = selectedMovie?.isAnime
     ? anime
@@ -1240,9 +1317,10 @@ function App() {
       }
     })
 
-    void fetchKoreanChineseDramas().then((dramas) => {
+    void fetchKoreanChineseDramas().then((drama) => {
       if (active) {
-        setKcDramas(dramas)
+        setKcDramas(drama.list)
+        setDramaRails(drama.rails)
       }
     })
 
@@ -2088,15 +2166,15 @@ function App() {
           featuredMovie={(featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime))!}
           movies={dramaList}
           tvShows={dramaList}
-          movieCollection={dramaCollection}
-          tvShowCollection={dramaCollection}
+          movieCollection={dramaMovieCollection}
+          tvShowCollection={dramaTvCollection}
           tmdbHomeRails={{
-            featuredMovies: dramaList.slice(0, 6),
-            featuredTvShows: dramaList.slice(0, 6),
-            movieCollection: dramaCollection,
-            newReleases: dramaCollection.top || [],
-            trendingNow: dramaCollection.adventure || [],
-            tvShowCollection: dramaCollection,
+            featuredMovies: (dramaRails.kDrama.length ? dramaRails.kDrama : dramaList).slice(0, 6),
+            featuredTvShows: (dramaRails.cDrama.length ? dramaRails.cDrama : dramaList).slice(0, 6),
+            movieCollection: dramaMovieCollection,
+            newReleases: dramaRails.newReleases.length ? dramaRails.newReleases : (dramaCollection.top || []),
+            trendingNow: dramaRails.romCom.length ? dramaRails.romCom : (dramaCollection.adventure || []),
+            tvShowCollection: dramaTvCollection,
           }}
           continueMovies={continueWatching}
           savedMovies={savedMovies}
@@ -2488,13 +2566,13 @@ function HomeScreen({
 
   const top10MoviesTitle = isNetflixMode
     ? isDramaMode
-      ? 'Top 10 Drama Movies'
+      ? 'K-Dramas'
       : 'Trending Anime'
     : 'Top 10 Movies'
 
   const top10TvTitle = isNetflixMode
     ? isDramaMode
-      ? 'Popular Drama Shows'
+      ? 'C-Dramas'
       : 'Popular Anime This Season'
     : 'Top 10 TV Shows'
 
@@ -2512,7 +2590,7 @@ function HomeScreen({
 
   const trendingTitle = isNetflixMode
     ? isDramaMode
-      ? 'Trending Dramas'
+      ? 'Rom-Com Dramas'
       : 'Highly Recommended Anime'
     : 'Trending Now'
 
@@ -6486,17 +6564,15 @@ function PosterImage({
   className?: string
   alt?: string
 }) {
-  // Prefer the Top-Posters API; rotate through the key pool on failure and
-  // fall back to the original artwork once every key is exhausted.
-  const [keyIndex, setKeyIndex] = useState(0)
-  const [exhausted, setExhausted] = useState(() => !hasTopPoster(movie))
+  // Prefer the Top-Posters proxy (keys live server-side); fall back to the
+  // original artwork if the proxy has no poster for this title.
+  const [failed, setFailed] = useState(() => !hasTopPoster(movie))
 
   useEffect(() => {
-    setKeyIndex(0)
-    setExhausted(!hasTopPoster(movie))
+    setFailed(!hasTopPoster(movie))
   }, [movie.id, movie.tmdbId])
 
-  const primary = exhausted ? '' : topPosterUrl(movie, keyIndex)
+  const primary = failed ? '' : topPosterUrl(movie)
   const src = primary || fallback || fallbackPosterForRank(movie.rank)
 
   return (
@@ -6505,13 +6581,7 @@ function PosterImage({
       src={src}
       alt={alt}
       loading="lazy"
-      onError={() => {
-        if (!exhausted && keyIndex < TOP_POSTER_KEYS.length - 1) {
-          setKeyIndex((index) => index + 1)
-        } else {
-          setExhausted(true)
-        }
-      }}
+      onError={() => setFailed(true)}
     />
   )
 }
@@ -7477,15 +7547,6 @@ function DesktopNav({
         </div>
       ) : (
         <>
-          <button
-            className="apple-nav-anime"
-            type="button"
-            title="Anime"
-            aria-label="Go to Anime"
-            onClick={onGoAnime}
-          >
-            <span className="anime-logo-mark">A</span>
-          </button>
           <div
             className="apple-floating-nav"
             role="navigation"
@@ -7528,6 +7589,15 @@ function DesktopNav({
               onClick={onSearch}
             >
               <Search size={18} />
+            </button>
+            <button
+              className="apple-nav-icon-btn apple-nav-anime-inline"
+              type="button"
+              title="Anime"
+              aria-label="Go to Anime"
+              onClick={onGoAnime}
+            >
+              <span className="anime-logo-mark">A</span>
             </button>
           </div>
           <ProfileMenu variant="apple" {...profileMenuProps} />

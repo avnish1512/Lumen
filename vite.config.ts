@@ -15,6 +15,7 @@ import {
   createTmdbTrailerAuthChain,
   fallbackTrailerSearchClips,
   fetchTmdbTrailerClips,
+  fetchTmdbTrailerYoutubeId,
   type TmdbAuth as TmdbTrailerAuth,
 } from './api/_lib/tmdb-trailer-core'
 import {
@@ -35,9 +36,16 @@ import {
   superEmbedOptionsFromParams,
 } from './api/_lib/superembed-core'
 import { fetchAnikotoRecent, fetchAnikotoSeries } from './api/_lib/anikoto-core'
-import { fetchKoreanChineseDramas } from './api/_lib/tmdb-drama-core'
+import { fetchDramaRails, fetchKoreanChineseDramas } from './api/_lib/tmdb-drama-core'
 import { fetchKinocheckTrailer } from './api/_lib/kinocheck-core'
 import { fetchTmdbSeasonEpisodes } from './api/_lib/tmdb-episodes-core'
+import {
+  fetchAccountProfiles,
+  saveAccountProfiles,
+  supabaseConfigFromEnv,
+  type StoredProfile,
+} from './api/_lib/supabase-core'
+import { fetchPosterImage, posterKeysFromEnv } from './api/_lib/poster-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -836,8 +844,11 @@ function tmdbDramaDevProxy(authChain: TmdbWatchAuth[]): Plugin {
         }
 
         try {
-          const results = await fetchKoreanChineseDramas(authChain)
-          sendJson(res, 200, { Response: 'True', results })
+          const [results, rails] = await Promise.all([
+            fetchKoreanChineseDramas(authChain),
+            fetchDramaRails(authChain),
+          ])
+          sendJson(res, 200, { Response: 'True', results, rails })
         } catch (error) {
           const message =
             error instanceof Error ? error.message : 'Could not reach TMDB.'
@@ -875,6 +886,124 @@ function kinocheckDevProxy(apiKey?: string): Plugin {
           const message =
             error instanceof Error ? error.message : 'Could not reach KinoCheck.'
           sendJson(res, 502, { youtubeId: null, error: message })
+        }
+      })
+    },
+  }
+}
+
+function tmdbTrailerDevProxy(authChain: TmdbTrailerAuth[]): Plugin {
+  return {
+    name: 'tmdb-trailer-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/tmdb-trailer', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { youtubeId: null, error: 'Method not allowed.' })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const tmdbIdRaw = requestUrl.searchParams.get('tmdbId')
+        const imdbId = requestUrl.searchParams.get('imdbId')
+        const type = requestUrl.searchParams.get('type') === 'tv' ? 'tv' : 'movie'
+
+        try {
+          const youtubeId = await fetchTmdbTrailerYoutubeId(authChain, {
+            tmdbId: tmdbIdRaw ? Number(tmdbIdRaw) : undefined,
+            imdbId: imdbId ?? undefined,
+            type,
+          })
+          sendJson(res, 200, { youtubeId })
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Could not reach TMDB.'
+          sendJson(res, 502, { youtubeId: null, error: message })
+        }
+      })
+    },
+  }
+}
+
+function posterDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'poster-dev-proxy',
+    configureServer(server) {
+      const keys = posterKeysFromEnv(env)
+      server.middlewares.use('/api/poster', async (req: IncomingMessage, res) => {
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const kind = requestUrl.searchParams.get('kind') === 'thumbnail' ? 'thumbnail' : 'poster'
+
+        const image = await fetchPosterImage(keys, {
+          imdbId: requestUrl.searchParams.get('imdb') ?? undefined,
+          tmdbId: requestUrl.searchParams.get('tmdb') ?? undefined,
+          kind,
+        })
+
+        if (!image) {
+          res.statusCode = 404
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Poster unavailable.' }))
+          return
+        }
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', image.contentType)
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        res.end(Buffer.from(image.body))
+      })
+    },
+  }
+}
+
+function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'profiles-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/profiles', async (req: IncomingMessage, res) => {
+        const config = supabaseConfigFromEnv(env)
+
+        if (!config) {
+          sendJson(res, 200, { ok: false, configured: false, profiles: null })
+          return
+        }
+
+        try {
+          if (req.method === 'GET') {
+            const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+            const email = (requestUrl.searchParams.get('email') ?? '').trim().toLowerCase()
+            if (!email) {
+              sendJson(res, 400, { ok: false, error: 'email is required.', profiles: null })
+              return
+            }
+            const profiles = await fetchAccountProfiles(config, email)
+            sendJson(res, 200, { ok: true, configured: true, profiles })
+            return
+          }
+
+          if (req.method === 'POST' || req.method === 'PUT') {
+            const chunks: Buffer[] = []
+            for await (const chunk of req) {
+              chunks.push(chunk as Buffer)
+            }
+            const raw = Buffer.concat(chunks).toString('utf8')
+            const body = raw ? (JSON.parse(raw) as { email?: string; profiles?: StoredProfile[] }) : {}
+            const email = String(body.email ?? '').trim().toLowerCase()
+            const profiles = body.profiles
+
+            if (!email || !Array.isArray(profiles)) {
+              sendJson(res, 400, { ok: false, error: 'email and profiles[] are required.' })
+              return
+            }
+
+            await saveAccountProfiles(config, email, profiles)
+            sendJson(res, 200, { ok: true, configured: true })
+            return
+          }
+
+          sendJson(res, 405, { ok: false, error: 'Method not allowed.' })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Supabase request failed.'
+          sendJson(res, 502, { ok: false, error: message })
         }
       })
     },
@@ -1011,6 +1140,9 @@ export default defineConfig(({ mode }) => {
       superEmbedPlayerDevProxy(),
       anikotoDevProxy(),
       kinocheckDevProxy(env.KINOCHECK_API_KEY),
+      tmdbTrailerDevProxy(createTmdbTrailerAuthChain(env)),
+      profilesDevProxy(env),
+      posterDevProxy(env),
       tmdbDramaDevProxy(createTmdbWatchAuthChain(env)),
       tmdbEpisodesDevProxy(createTmdbWatchAuthChain(env)),
       movieGluDevProxy(

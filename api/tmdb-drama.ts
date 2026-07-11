@@ -1,4 +1,4 @@
-import { fetchKoreanChineseDramas } from './_lib/tmdb-drama-core.js'
+import { fetchDramaRails, fetchKoreanChineseDramas } from './_lib/tmdb-drama-core.js'
 import { createTmdbWatchAuthChain } from './_lib/tmdb-watch-core.js'
 
 type ApiRequest = {
@@ -23,8 +23,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const authChain = createTmdbWatchAuthChain(
       process.env as Record<string, string | undefined>,
     )
-    const results = await fetchKoreanChineseDramas(authChain)
-    res.status(200).json({ Response: 'True', results })
+    const [results, rails] = await Promise.all([
+      fetchKoreanChineseDramas(authChain),
+      fetchDramaRails(authChain),
+    ])
+    res.status(200).json({ Response: 'True', results, rails })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Could not reach TMDB.'
     res.status(502).json({ Response: 'False', Error: message, results: [] })

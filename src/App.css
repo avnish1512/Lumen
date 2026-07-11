@@ -8237,8 +8237,7 @@ a.watch-option-card {
   display: flex;
   flex-direction: column;
   color: #f5f5f7;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   background-color: #000;
   z-index: 9999;
 }
@@ -11706,14 +11705,22 @@ a.watch-option-card {
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 9px;
-  background: linear-gradient(145deg, #e50914, #b1060f);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.32);
   color: #fff;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 900;
   line-height: 1;
-  box-shadow: 0 4px 14px rgba(229, 9, 20, 0.5);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2);
   transition: transform 0.2s ease;
+}
+
+/* Inline anime button inside the Lumen desktop nav (next to Search). */
+.apple-nav-anime-inline .anime-logo-mark {
+  width: 30px;
+  height: 30px;
+  font-size: 17px;
 }
 
 .netflix-theme .anime-logo-btn:hover .anime-logo-mark {
@@ -12042,6 +12049,11 @@ a.watch-option-card {
     align-items: center;
   }
 
+  .netflix-theme .netflix-mobile-header-icons .profile-menu-netflix {
+    position: relative;
+    z-index: 4000;
+  }
+
   .netflix-theme .netflix-mobile-header-icons .netflix-sidebar-avatar,
   .netflix-theme .netflix-mobile-header-icons .netflix-header-avatar-btn {
     width: 30px;
@@ -12069,6 +12081,11 @@ a.watch-option-card {
     top: calc(100% + 12px) !important;
     min-width: 230px;
     max-width: calc(100vw - 24px);
+    background: #16161a !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    z-index: 4000 !important;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7) !important;
   }
 
   /* Issue 1 — compact hero copy, left-aligned and anchored bottom-left. */
@@ -12380,13 +12397,14 @@ a.watch-option-card {
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
-  background: linear-gradient(145deg, #e50914, #b1060f);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.32);
   color: #fff;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 900;
   line-height: 1;
-  box-shadow: 0 4px 14px rgba(229, 9, 20, 0.5);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2);
 }
 
 /* ==========================================================================
@@ -12398,6 +12416,7 @@ a.watch-option-card {
     position: relative;
     display: inline-flex;
     align-items: center;
+    z-index: 4000;
   }
 
   .apple-theme .home-header .header-actions .apple-nav-profile {
@@ -12429,6 +12448,13 @@ a.watch-option-card {
     left: auto !important;
     min-width: 230px;
     max-width: calc(100vw - 24px);
+    /* Fully opaque so the hero title/rails behind can't bleed through, and
+       lifted above the hero copy (which is z-index 3-4). */
+    background: #16161a !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    z-index: 4000 !important;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7) !important;
   }
 }
 
