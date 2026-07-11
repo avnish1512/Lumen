@@ -497,8 +497,9 @@ export function buildStreamUrl(
     }
 
     const ep = movie.streamEpisode ?? 1
+    const language = movie.streamLanguage === 'dub' ? 'dub' : 'sub'
     const host = provider === 'animeplay' ? 'animeplay.cfd' : 'megaplay.buzz'
-    return `https://${host}/stream/ani/${movie.anilistId}/${ep}/sub`
+    return `https://${host}/stream/ani/${movie.anilistId}/${ep}/${language}`
   }
 
   if (!movie.tmdbId) {

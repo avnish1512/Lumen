@@ -12642,6 +12642,15 @@ a.watch-option-card {
   .netflix-theme .detail-screen,
   .netflix-theme .watch-screen {
     padding-left: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Keep the season/episode section within the page width so the horizontal
+     rail scroll never drags the whole screen sideways. */
+  .netflix-theme .detail-screen .season-section,
+  .netflix-theme .detail-screen .detail-page-body {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
   }
 }
 
@@ -12945,4 +12954,463 @@ a.watch-option-card {
 .account-manage-remove {
   background: rgba(229, 9, 20, 0.2);
   color: #ff6b6b;
+}
+
+/* ==========================================================================
+   Watch screen: season/episode steppers, SUB/DUB toggle, My List button.
+   ========================================================================== */
+.watch-episode-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.watch-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.watch-stepper-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 0 2px;
+}
+
+.watch-stepper button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.watch-stepper input {
+  width: 46px;
+  height: 30px;
+  text-align: center;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.watch-stepper input::-webkit-outer-spin-button,
+.watch-stepper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.watch-lang-toggle {
+  display: inline-flex;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.watch-lang-toggle button {
+  padding: 8px 18px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.watch-lang-toggle button.active {
+  background: #fff;
+  color: #000;
+}
+
+.watch-mylist-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.watch-mylist-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Season header row with the episode finder next to the season dropdown. */
+.season-section .season-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.episode-finder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.episode-finder input {
+  width: 96px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.episode-finder input::-webkit-outer-spin-button,
+.episode-finder input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.episode-finder button {
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  color: #000;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Episode found via the finder — clean ring + glow that follows the card's
+   14px corners (box-shadow, not outline, so it hugs the rounded shape). */
+.episode-card-v2.episode-highlighted {
+  box-shadow:
+    0 0 0 2px #e50914,
+    0 0 22px 3px rgba(229, 9, 20, 0.5) !important;
+}
+
+/* ==========================================================================
+   Watch screen redesign: top row (Watch | Title | SUB/DUB) + two columns
+   (info/servers on the left, season + episode list panel on the right).
+   ========================================================================== */
+.watch-screen .watch-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px clamp(28px, 6vw, 96px) 8px;
+}
+
+.watch-screen .watch-topbar .watch-play {
+  margin: 0;
+  flex: 0 0 auto;
+  min-width: 190px !important;
+  height: 60px !important;
+  padding: 0 30px !important;
+  font-size: 22px !important;
+  border-radius: 999px !important;
+}
+
+.watch-screen .watch-topbar .watch-play svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.watch-title-block {
+  flex: 1 1 auto;
+  text-align: center;
+  min-width: 0;
+}
+
+.watch-title-main {
+  margin: 0;
+  font-size: clamp(34px, 5vw, 60px);
+  font-weight: 900;
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+}
+
+.watch-title-genre {
+  margin: 6px 0 0;
+  font-size: clamp(16px, 1.6vw, 22px);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.watch-topbar-spacer {
+  flex: 0 0 auto;
+  width: clamp(120px, 12vw, 176px);
+}
+
+.watch-screen .watch-topbar .watch-lang-toggle {
+  flex: 0 0 auto;
+}
+
+.watch-screen .watch-topbar .watch-lang-toggle button {
+  padding: 12px 28px;
+  font-size: 16px;
+}
+
+.watch-lower {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  padding: 16px 28px 60px;
+}
+
+.watch-lower-left {
+  min-width: 0;
+}
+
+/* Right-side episode panel. */
+.watch-episode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.watch-season-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.watch-season-select select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.watch-season-select svg {
+  width: 16px;
+  height: 16px;
+}
+
+.watch-episode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.watch-episode-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.watch-episode-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.watch-episode-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+
+.watch-episode-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.watch-episode-item {
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.watch-episode-item:hover,
+.watch-episode-item:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.watch-episode-item.active {
+  background: #e50914;
+  color: #fff;
+  font-weight: 800;
+}
+
+/* Desktop: two columns with the episode panel on the right. */
+@media (min-width: 900px) {
+  .watch-lower {
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 400px);
+    align-items: start;
+  }
+
+  .watch-episode-list {
+    max-height: 420px;
+  }
+}
+
+/* ==========================================================================
+   Watch screen — server cards side by side, and a mobile top row that stacks
+   the title above the Watch + SUB/DUB controls (fixes the overlap on phones).
+   ========================================================================== */
+.watch-screen .server-selector {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 899px) {
+  .watch-screen .watch-topbar {
+    flex-wrap: wrap;
+    padding: 16px 16px 6px;
+    gap: 12px;
+  }
+
+  .watch-screen .watch-topbar .watch-title-block {
+    order: -1;
+    flex-basis: 100%;
+  }
+
+  .watch-screen .watch-topbar .watch-play {
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0 !important;
+    height: 54px !important;
+    font-size: 19px !important;
+  }
+
+  .watch-screen .watch-topbar .watch-lang-toggle {
+    order: 2;
+    flex: 0 0 auto;
+  }
+
+  .watch-screen .watch-topbar .watch-topbar-spacer {
+    display: none;
+  }
+
+  .watch-title-main {
+    font-size: clamp(30px, 8vw, 44px);
+  }
+}
+
+/* ==========================================================================
+   Custom Season dropdown — dark, rounded, blurred menu with large text,
+   consistent on desktop and mobile (replaces the native <select>).
+   ========================================================================== */
+.season-dd {
+  position: relative;
+  display: inline-block;
+  z-index: 20;
+}
+
+.season-dd-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.season-dd-trigger svg {
+  width: 16px;
+  height: 16px;
+  opacity: 0.8;
+}
+
+.season-dd-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  min-width: max(220px, 100%);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
+  background: rgba(38, 38, 40, 0.82);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 200;
+  animation: seasonDdIn 0.14s ease-out;
+}
+
+@keyframes seasonDdIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.season-dd-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.season-dd-option:hover,
+.season-dd-option:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.season-dd-option.active {
+  font-weight: 800;
+}
+
+/* Open the watch panel's dropdown menu right-aligned so it stays on screen. */
+.watch-episode-panel .season-dd-menu {
+  left: 0;
+  right: auto;
 }

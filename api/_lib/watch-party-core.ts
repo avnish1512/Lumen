@@ -39,12 +39,12 @@ export type WatchParty = {
   updated_at: string
 }
 
-/** All account emails we know about (used to build the friends list). */
+/** All real sign-in accounts (used to build the friends list). Reads the
+ * `accounts` table so newly added accounts appear and removed ones disappear. */
 export async function listAccountEmails(config: SupabaseConfig): Promise<string[]> {
-  const response = await fetch(
-    `${config.url}/rest/v1/account_profiles?select=email`,
-    { headers: headers(config) },
-  )
+  const response = await fetch(`${config.url}/rest/v1/accounts?select=email`, {
+    headers: headers(config),
+  })
   if (!response.ok) {
     return []
   }

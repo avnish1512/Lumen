@@ -58,6 +58,7 @@ export type Movie = {
   tmdbType?: 'movie' | 'tv'
   streamSeason?: number
   streamEpisode?: number
+  streamLanguage?: 'sub' | 'dub'
   anilistId?: number
   malId?: number
   isAnime?: boolean

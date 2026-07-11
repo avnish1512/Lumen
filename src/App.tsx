@@ -81,6 +81,7 @@ import {
 } from './profiles-api'
 import {
   acceptInvite,
+  endParty,
   fetchFriends,
   fetchIncomingInvites,
   sendInvite,
@@ -145,6 +146,16 @@ const streamSandboxKey = 'omdb.apple-tv-style.stream-sandbox'
 const homeCacheKey = 'omdb.apple-tv-style.home-cache-v3'
 const currentUserKey = 'omdb.apple-tv-style.current-user'
 const profilesListKey = 'omdb.apple-tv-style.profiles-list'
+const selectedMovieKey = 'omdb.apple-tv-style.selected-movie'
+
+function readSelectedMovie(): Movie | null {
+  try {
+    const saved = window.sessionStorage.getItem(selectedMovieKey)
+    return saved ? (JSON.parse(saved) as Movie) : null
+  } catch {
+    return null
+  }
+}
 
 type UserInfo = {
   name: string
@@ -165,12 +176,10 @@ function readProfilesFor(user: UserInfo | null): UserProfile[] {
   const fallback: UserProfile[] = [{ name: 'Children', avatarColor: 'kids' }]
   try {
     const key = profilesKeyFor(user)
-    let saved = window.localStorage.getItem(key)
-
-    // One-time migration: seed a new account from any pre-existing global list.
-    if (!saved && user) {
-      saved = window.localStorage.getItem(profilesListKey)
-    }
+    // Each account keeps its own list. A brand-new account starts empty (only
+    // the default Kids profile) rather than inheriting another account's
+    // profiles that happen to live in this device's storage.
+    const saved = window.localStorage.getItem(key)
 
     return saved ? (JSON.parse(saved) as UserProfile[]) : fallback
   } catch {
@@ -1090,7 +1099,9 @@ function App() {
   })
   const [tmdbHomeRails, setTmdbHomeRails] =
     useState<TmdbHomeRails>(() => initialCache?.tmdbHomeRails ?? emptyTmdbHomeRails)
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(
+    () => readSelectedMovie() ?? initialCache?.homeHeroMovie ?? null,
+  )
   const [homeHeroMovie, setHomeHeroMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
   const [dramaHeroMovie, setDramaHeroMovie] = useState<Movie | null>(null)
   const [detailBackScreen, setDetailBackScreen] = useState<Screen>('home')
@@ -1546,6 +1557,20 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(streamProviderKey, streamProvider)
   }, [streamProvider])
+
+  // Persist the currently open title so a page refresh on a detail/watch screen
+  // restores that title instead of falling back to the cached home hero.
+  useEffect(() => {
+    try {
+      if (selectedMovie) {
+        window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(selectedMovie))
+      } else {
+        window.sessionStorage.removeItem(selectedMovieKey)
+      }
+    } catch {
+      // ignore storage quota / serialization errors
+    }
+  }, [selectedMovie])
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -2566,7 +2591,14 @@ function App() {
             <button className="bff-invite-accept" type="button" onClick={() => void acceptIncomingInvite()}>
               Join
             </button>
-            <button className="bff-invite-dismiss" type="button" onClick={() => setIncomingInvite(null)}>
+            <button
+              className="bff-invite-dismiss"
+              type="button"
+              onClick={() => {
+                if (incomingInvite) void endParty(incomingInvite.id)
+                setIncomingInvite(null)
+              }}
+            >
               Dismiss
             </button>
           </div>
@@ -4010,6 +4042,75 @@ function trailerSearchUrl(title: string) {
   return `https://www.youtube.com/results?${params}`
 }
 
+function SeasonDropdown({
+  seasons,
+  value,
+  onChange,
+}: {
+  seasons: number[]
+  value: number
+  onChange: (season: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    const handlePointer = (event: Event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handlePointer)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handlePointer)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [open])
+
+  return (
+    <div className={`season-dd${open ? ' open' : ''}`} ref={rootRef}>
+      <button
+        type="button"
+        className="season-dd-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>Season {value}</span>
+        <ChevronsUpDown />
+      </button>
+      {open && (
+        <div className="season-dd-menu" role="listbox">
+          {seasons.map((season) => (
+            <button
+              key={season}
+              type="button"
+              role="option"
+              aria-selected={season === value}
+              className={`season-dd-option${season === value ? ' active' : ''}`}
+              onClick={() => {
+                onChange(season)
+                setOpen(false)
+              }}
+            >
+              Season {season}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SeasonEpisodeSection({
   movie,
   onPlayEpisode,
@@ -4021,6 +4122,8 @@ function SeasonEpisodeSection({
   const initialSeason = movie.streamSeason ?? seasons[0]?.season ?? 1
   const [selectedSeason, setSelectedSeason] = useState(() => initialSeason)
   const [tmdbEpisodes, setTmdbEpisodes] = useState<SeasonEpisode[]>([])
+  const [findEpisode, setFindEpisode] = useState('')
+  const [highlightedEpisode, setHighlightedEpisode] = useState<number | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
 
   // Load real per-episode covers/titles from TMDB when we have a tv id.
@@ -4061,21 +4164,49 @@ function SeasonEpisodeSection({
 
   return (
     <section className="detail-section season-section">
-      <label className="season-dropdown">
-        <select
+      <div className="season-header">
+        <SeasonDropdown
+          seasons={seasons.map((s) => s.season)}
           value={selectedSeason}
-          aria-label="Choose season"
-          onChange={(event) => setSelectedSeason(Number(event.target.value))}
+          onChange={setSelectedSeason}
+        />
+
+        <form
+          className="episode-finder"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const max = activeSeason.episodeCount
+            const number = Math.min(max, Math.max(1, Number(findEpisode) || 0))
+            if (!number) {
+              return
+            }
+            setHighlightedEpisode(number)
+            // Reveal the episode by scrolling ONLY the rail (not the page) so
+            // the whole screen doesn't shift.
+            window.requestAnimationFrame(() => {
+              const row = rowRef.current
+              const card = row?.querySelector<HTMLElement>(`[data-episode="${number}"]`)
+              if (row && card) {
+                const rowRect = row.getBoundingClientRect()
+                const cardRect = card.getBoundingClientRect()
+                const delta =
+                  cardRect.left - rowRect.left - (rowRect.width - cardRect.width) / 2
+                row.scrollBy({ left: delta, behavior: 'smooth' })
+              }
+            })
+          }}
         >
-          {seasons.map((season) => (
-            <option key={season.season} value={season.season}>
-              Season {season.season}
-            </option>
-          ))}
-        </select>
-        <span>Season {selectedSeason}</span>
-        <ChevronsUpDown />
-      </label>
+          <input
+            type="number"
+            min={1}
+            value={findEpisode}
+            onChange={(event) => setFindEpisode(event.target.value)}
+            placeholder="Episode #"
+            aria-label="Find episode by number"
+          />
+          <button type="submit">Go</button>
+        </form>
+      </div>
 
       <div className="episode-viewport">
         <button
@@ -4100,9 +4231,10 @@ function SeasonEpisodeSection({
 
             return (
               <button
-                className="episode-card-v2"
+                className={`episode-card-v2${episode === highlightedEpisode ? ' episode-highlighted' : ''}`}
                 type="button"
                 key={`${selectedSeason}-${episode}`}
+                data-episode={episode}
                 onClick={() => onPlayEpisode(selectedSeason, episode)}
               >
                 <span className="episode-thumb">
@@ -4472,12 +4604,37 @@ function WatchScreen({
     ? 'megaplay'
     : streamProvider
 
-  const streamUrl = buildStreamUrl(movie, activeProviderId)
+  const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
+  const [episode, setEpisode] = useState(movie.streamEpisode ?? 1)
+  const [season, setSeason] = useState(movie.streamSeason ?? 1)
+  const [language, setLanguage] = useState<'sub' | 'dub'>(movie.streamLanguage ?? 'sub')
+
+  useEffect(() => {
+    setEpisode(movie.streamEpisode ?? 1)
+    setSeason(movie.streamSeason ?? 1)
+    setLanguage(movie.streamLanguage ?? 'sub')
+  }, [movie.id, movie.streamEpisode, movie.streamSeason, movie.streamLanguage])
+
+  const streamMovie: Movie = {
+    ...movie,
+    streamEpisode: episode,
+    streamSeason: season,
+    streamLanguage: language,
+  }
+
+  const streamUrl = buildStreamUrl(streamMovie, activeProviderId)
   const currentProvider =
     streamProviderOptions.find((provider) => provider.id === activeProviderId) ??
     streamProviderOptions[0]
   const opensExternally =
     activeProviderId === 'multiembed' || activeProviderId === 'multiembed-vip'
+
+  const watchSeasons = useMemo(() => seasonsFor(movie), [movie])
+  const activeWatchSeason =
+    watchSeasons.find((entry) => entry.season === season) ?? watchSeasons[0]
+  const episodeNumbers = activeWatchSeason
+    ? Array.from({ length: activeWatchSeason.episodeCount }, (_, index) => index + 1)
+    : []
 
   // MegaPlay / AnimePlay post playback events to the parent window. Use the
   // first time/watching-log event to flag the title as "continue watching".
@@ -4540,11 +4697,7 @@ function WatchScreen({
 
   return (
     <section className="screen watch-screen">
-      <DetailTopBar
-        onBack={onBack}
-        onShare={() => window.open(imdbUrl(movie), '_blank', 'noopener,noreferrer')}
-        dark
-      />
+      <DetailTopBar onBack={onBack} dark />
 
       <section className="stream-player-section">
         {streamUrl && !opensExternally ? (
@@ -4603,25 +4756,13 @@ function WatchScreen({
         )}
       </section>
 
-      <section className="watch-copy">
-        <p className="watch-kicker">{movie.title}</p>
-        <h2>{movie.genres[0] ?? 'Movie'}</h2>
-        <p className="watch-provider">
-          {movie.genres.slice(1).join(' / ') || movie.year}
-          <span className="provider-badge">db</span>
-          <ChevronRight />
-        </p>
-
+      <div className="watch-topbar">
         <button
           className="watch-play"
           type="button"
           disabled={!streamUrl || streamLoading}
           onClick={openCurrentStream}
-          title={
-            streamUrl
-              ? `Open ${currentProvider.name}`
-              : 'Waiting for TMDB stream id'
-          }
+          title={streamUrl ? `Open ${currentProvider.name}` : 'Waiting for stream id'}
           aria-label={
             streamUrl
               ? `Open ${currentProvider.name} stream for ${movie.title}`
@@ -4632,97 +4773,113 @@ function WatchScreen({
           <span>Watch</span>
         </button>
 
-        <p className="watch-synopsis">
-          <strong>{movie.year}:</strong> {movie.synopsis}
-        </p>
-        <Metadata movie={movie} />
-      </section>
-
-      <section className="content-section watch-card-section">
-        <h2 className="visually-hidden">Streaming servers</h2>
-        <label className="stream-sandbox-toggle">
-          <span>
-            <strong>Sandbox</strong>
-            <small>
-              {streamSandboxEnabled
-                ? 'Blocks popups and redirects'
-                : 'Allows full player behavior'}
-            </small>
-          </span>
-          <input
-            type="checkbox"
-            checked={streamSandboxEnabled}
-            onChange={(event) => onStreamSandboxChange(event.target.checked)}
-          />
-          <span aria-hidden="true" className="toggle-track">
-            <span />
-          </span>
-        </label>
-        <div
-          className="server-selector"
-          role="radiogroup"
-          aria-label="Streaming server"
-        >
-          {(() => {
-            const filteredOptions = streamProviderOptions.filter((provider) => {
-              const isAnimeProvider = animeProviderIds.includes(provider.id)
-              return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
-            })
-
-            return filteredOptions.map((provider) => {
-              const isActive = provider.id === activeProviderId
-
-              return (
-                <button
-                  key={provider.id}
-                  className={`server-option${isActive ? ' active' : ''}`}
-                  type="button"
-                  role="radio"
-                  aria-checked={isActive}
-                  onClick={() => onStreamProviderChange(provider.id)}
-                >
-                  <span className="provider-logo">{provider.logo}</span>
-                  <span className="server-copy">
-                    <strong>{provider.name}</strong>
-                    <small>{provider.description}</small>
-                  </span>
-                  {isActive ? <Check /> : <ChevronRight />}
-                </button>
-              )
-            })
-          })()}
+        <div className="watch-title-block">
+          <h2 className="watch-title-main">{movie.title}</h2>
+          <p className="watch-title-genre">{movie.genres[0] ?? 'Movie'}</p>
         </div>
-        <a
-          className="subscription-card"
-          href={streamUrl || imdbUrl(movie)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <span className="provider-logo">{currentProvider.logo}</span>
-          <span>
-            <strong>
-              {streamUrl ? `Open ${currentProvider.name}` : (isAnimeMovie ? 'Resolving anime stream' : 'Waiting for TMDB')}
-            </strong>
-            <small>
-              {streamUrl
-                ? `${currentProvider.description} / ${isAnimeMovie ? `AniList ${movie.anilistId || 'ID'}` : `TMDB ${movie.tmdbId || 'ID'}`}`
-                : (isAnimeMovie ? 'Resolving AniList info' : 'Resolving movie id')}
-            </small>
-          </span>
+
+        {isAnimeMovie ? (
+          <div className="watch-lang-toggle" role="group" aria-label="Audio language">
+            <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
+              SUB
+            </button>
+            <button type="button" className={language === 'dub' ? 'active' : ''} onClick={() => setLanguage('dub')}>
+              DUB
+            </button>
+          </div>
+        ) : (
+          <span className="watch-topbar-spacer" aria-hidden="true" />
+        )}
+      </div>
+
+      <div className="watch-lower">
+        <div className="watch-lower-left">
+          <p className="watch-synopsis">
+            <strong>{movie.year}:</strong> {movie.synopsis}
+          </p>
+          <Metadata movie={movie} />
+
           <button
-            className="mini-save"
             type="button"
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              onSave()
-            }}
-            title={isSaved ? 'Saved' : 'Add to library'}
+            className="watch-mylist-btn"
+            onClick={onSave}
+            title={isSaved ? 'Saved to My List' : 'Add to My List'}
           >
             {isSaved ? <Check /> : <Plus />}
+            <span>{isSaved ? 'Saved' : 'My List'}</span>
           </button>
-        </a>
-      </section>
+
+          <label className="stream-sandbox-toggle">
+            <span>
+              <strong>Sandbox</strong>
+              <small>
+                {streamSandboxEnabled ? 'Blocks popups and redirects' : 'Allows full player behavior'}
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={streamSandboxEnabled}
+              onChange={(event) => onStreamSandboxChange(event.target.checked)}
+            />
+            <span aria-hidden="true" className="toggle-track">
+              <span />
+            </span>
+          </label>
+
+          <div className="server-selector" role="radiogroup" aria-label="Streaming server">
+            {(() => {
+              const filteredOptions = streamProviderOptions.filter((provider) => {
+                const isAnimeProvider = animeProviderIds.includes(provider.id)
+                return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
+              })
+
+              return filteredOptions.map((provider) => {
+                const isActive = provider.id === activeProviderId
+                return (
+                  <button
+                    key={provider.id}
+                    className={`server-option${isActive ? ' active' : ''}`}
+                    type="button"
+                    role="radio"
+                    aria-checked={isActive}
+                    onClick={() => onStreamProviderChange(provider.id)}
+                  >
+                    <span className="provider-logo">{provider.logo}</span>
+                    <span className="server-copy">
+                      <strong>{provider.name}</strong>
+                      <small>{provider.description}</small>
+                    </span>
+                    {isActive ? <Check /> : <ChevronRight />}
+                  </button>
+                )
+              })
+            })()}
+          </div>
+        </div>
+
+        {isSeries && (
+          <aside className="watch-episode-panel" aria-label="Episodes">
+            <SeasonDropdown
+              seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
+              value={season}
+              onChange={setSeason}
+            />
+
+            <div className="watch-episode-list">
+              {episodeNumbers.map((number) => (
+                <button
+                  key={number}
+                  type="button"
+                  className={`watch-episode-item${number === episode ? ' active' : ''}`}
+                  onClick={() => setEpisode(number)}
+                >
+                  Episode {number}
+                </button>
+              ))}
+            </div>
+          </aside>
+        )}
+      </div>
     </section>
   )
 }
@@ -5075,11 +5232,6 @@ function LoginScreen({
     e.preventDefault()
     setError('')
 
-    const allowedEmails = [
-      'avnishpc00@gmail.com',
-      'appclone@gmail.com',
-      'netflixclone@gmail.com',
-    ]
     const requiredPassword = 'Avnish@00'
 
     const trimmedEmail = email.trim().toLowerCase()
@@ -5095,11 +5247,13 @@ function LoginScreen({
       return
     }
 
+    // Only the main admin account keeps a built-in password. Every other
+    // account must exist in the `accounts` table, so a deleted account can no
+    // longer sign in.
     const hardcodedOk =
-      allowedEmails.includes(trimmedEmail) && trimmedPassword === requiredPassword
+      isMainAccount(trimmedEmail) && trimmedPassword === requiredPassword
 
     setLoading(true)
-    // Accept the built-in accounts, or any account added via the admin panel.
     const ok = hardcodedOk || (await verifyCredentials(trimmedEmail, trimmedPassword))
     setLoading(false)
 
@@ -6962,7 +7116,7 @@ function DetailTopBar({
   dark,
 }: {
   onBack: () => void
-  onShare: () => void
+  onShare?: () => void
   onBff?: () => void
   dark?: boolean
 }) {
@@ -6971,17 +7125,19 @@ function DetailTopBar({
       <button className="round-nav" type="button" onClick={onBack} title="Back">
         <ChevronLeft />
       </button>
-      <div className="action-pill">
-        {onBff ? (
-          <button type="button" title="Watch together (BFF)" onClick={onBff}>
-            <Users />
-          </button>
-        ) : (
-          <button type="button" title="Share IMDb link" onClick={onShare}>
-            <Share />
-          </button>
-        )}
-      </div>
+      {(onBff || onShare) && (
+        <div className="action-pill">
+          {onBff ? (
+            <button type="button" title="Watch together (BFF)" onClick={onBff}>
+              <Users />
+            </button>
+          ) : (
+            <button type="button" title="Share IMDb link" onClick={onShare}>
+              <Share />
+            </button>
+          )}
+        </div>
+      )}
     </nav>
   )
 }
