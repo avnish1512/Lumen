@@ -33,7 +33,9 @@ import {
   Share,
   Trash2,
   Tv,
+  Users,
   VolumeX,
+  X,
   Eye,
   EyeOff,
   Pencil,
@@ -77,6 +79,21 @@ import {
   fetchAccountProfiles as fetchRemoteProfiles,
   saveAccountProfiles as saveRemoteProfiles,
 } from './profiles-api'
+import {
+  acceptInvite,
+  fetchFriends,
+  fetchIncomingInvites,
+  sendInvite,
+  type WatchParty,
+} from './watch-party'
+import {
+  deleteAccount as deleteAccountApi,
+  isMainAccount,
+  listAccounts as listAccountsApi,
+  saveAccount as saveAccountApi,
+  verifyCredentials,
+  type Account,
+} from './accounts-api'
 import {
   fetchLiveChannels,
   fetchLiveCategories,
@@ -1057,6 +1074,13 @@ function App() {
   const [animeCollection, setAnimeCollection] =
     useState<MediaCollection>(() => initialCache?.animeCollection ?? emptyMediaCollection)
   const [animeExtras, setAnimeExtras] = useState<AnimeHomeExtras>(emptyAnimeExtras)
+  // BFF "watch together" state.
+  const [bffMovie, setBffMovie] = useState<Movie | null>(null)
+  const [bffFriends, setBffFriends] = useState<string[]>([])
+  const [bffStatus, setBffStatus] = useState('')
+  const [incomingInvite, setIncomingInvite] = useState<WatchParty | null>(null)
+  const [activeParty, setActiveParty] = useState<WatchParty | null>(null)
+
   const [kcDramas, setKcDramas] = useState<Movie[]>([])
   const [dramaRails, setDramaRails] = useState<DramaRails>({
     kDrama: [],
@@ -1671,6 +1695,10 @@ function App() {
     Record<string, Promise<Movie>>
   >({})
   const selectedMovieIdRef = useRef<string | null>(null)
+  // Movies we've already tried to resolve a TMDB stream id for — prevents an
+  // infinite re-hydrate loop (which made the Watch button blink) when a title
+  // has no TMDB match.
+  const streamHydrateAttemptedRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     selectedMovieIdRef.current = selectedMovie?.id ?? null
@@ -1878,6 +1906,73 @@ function App() {
     void hydrateStreamingMovie(movie)
   }
 
+  // --- BFF "watch together" ---
+  const openBff = (movie: Movie | null) => {
+    if (!movie || !currentUser?.email) {
+      return
+    }
+    setBffMovie(movie)
+    setBffStatus('')
+    setBffFriends([])
+    void fetchFriends(currentUser.email).then(setBffFriends)
+  }
+
+  const inviteFriend = async (friendEmail: string) => {
+    if (!bffMovie || !currentUser?.email) {
+      return
+    }
+    setBffStatus(`Inviting ${friendEmail}…`)
+    const party = await sendInvite(currentUser.email, friendEmail, bffMovie)
+    if (party) {
+      setActiveParty(party)
+      setBffStatus(`Invite sent to ${friendEmail}. Opening the movie…`)
+      const movieToPlay = bffMovie
+      window.setTimeout(() => {
+        setBffMovie(null)
+        openWatch(movieToPlay)
+      }, 900)
+    } else {
+      setBffStatus('Could not send the invite (is the backend configured?).')
+    }
+  }
+
+  const acceptIncomingInvite = async () => {
+    if (!incomingInvite) {
+      return
+    }
+    await acceptInvite(incomingInvite.id)
+    setActiveParty({ ...incomingInvite, status: 'accepted' })
+    const movie = incomingInvite.movie
+    setIncomingInvite(null)
+    openWatch(movie)
+  }
+
+  // Poll for incoming watch-party invites while signed in.
+  useEffect(() => {
+    const email = currentUser?.email
+    if (!email) {
+      return
+    }
+    let active = true
+    const check = () => {
+      void fetchIncomingInvites(email).then((invites) => {
+        if (!active) return
+        const pending = invites.find((invite) => invite.status === 'pending')
+        setIncomingInvite((current) => {
+          // Don't resurface an invite the user is already hosting/answering.
+          if (pending && activeParty && pending.id === activeParty.id) return current
+          return pending ?? null
+        })
+      })
+    }
+    check()
+    const timer = window.setInterval(check, 5000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [currentUser, activeParty])
+
   const toggleSaved = (movie: Movie) => {
     setSavedMovies((current) => {
       const matchingKey = findMatchingMovieKey(
@@ -2036,12 +2131,15 @@ function App() {
       screen !== 'watch' ||
       !selectedMovie ||
       selectedMovie.tmdbId ||
-      streamLoading
+      streamLoading ||
+      streamHydrateAttemptedRef.current.has(selectedMovie.id)
     ) {
       return
     }
 
+    const movieId = selectedMovie.id
     const timeout = window.setTimeout(() => {
+      streamHydrateAttemptedRef.current.add(movieId)
       void hydrateStreamingMovie(selectedMovie)
     }, 0)
 
@@ -2251,6 +2349,7 @@ function App() {
           }}
           onSave={() => toggleSaved(selectedMovie)}
           onShare={shareSelectedMovie}
+          onBff={() => openBff(selectedMovie)}
           onOpenPoster={openSelectedPoster}
           designMode={designMode}
         />
@@ -2414,6 +2513,84 @@ function App() {
           profiles={profiles}
           designMode={designMode}
         />
+      )}
+
+      {bffMovie && (
+        <div className="bff-overlay" role="dialog" aria-label="Watch together">
+          <div className="bff-modal">
+            <button
+              className="bff-close"
+              type="button"
+              aria-label="Close"
+              onClick={() => setBffMovie(null)}
+            >
+              <X size={20} />
+            </button>
+            <h2 className="bff-title">Watch together</h2>
+            <p className="bff-sub">
+              Invite a friend to watch <strong>{bffMovie.title}</strong>. When they
+              accept, it opens on their screen too.
+            </p>
+            <div className="bff-friends">
+              {bffFriends.length === 0 ? (
+                <p className="bff-empty">No other accounts found yet.</p>
+              ) : (
+                bffFriends.map((friend) => (
+                  <button
+                    key={friend}
+                    className="bff-friend"
+                    type="button"
+                    onClick={() => void inviteFriend(friend)}
+                  >
+                    <span className="bff-friend-avatar">
+                      {friend.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="bff-friend-name">{friend}</span>
+                    <span className="bff-friend-invite">Invite</span>
+                  </button>
+                ))
+              )}
+            </div>
+            {bffStatus && <p className="bff-status">{bffStatus}</p>}
+          </div>
+        </div>
+      )}
+
+      {incomingInvite && (
+        <div className="bff-invite-banner" role="alert">
+          <span className="bff-invite-text">
+            <strong>{incomingInvite.host_email}</strong> invited you to watch{' '}
+            <strong>{incomingInvite.movie?.title}</strong>
+          </span>
+          <div className="bff-invite-actions">
+            <button className="bff-invite-accept" type="button" onClick={() => void acceptIncomingInvite()}>
+              Join
+            </button>
+            <button className="bff-invite-dismiss" type="button" onClick={() => setIncomingInvite(null)}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeParty && (screen === 'watch' || screen === 'detail') && (
+        <div className="bff-party-chip">
+          <Users size={15} />
+          <span>
+            Watching with{' '}
+            {activeParty.host_email === currentUser?.email
+              ? activeParty.guest_email
+              : activeParty.host_email}
+          </span>
+          <button
+            type="button"
+            className="bff-party-leave"
+            onClick={() => setActiveParty(null)}
+            aria-label="Leave watch party"
+          >
+            <X size={13} />
+          </button>
+        </div>
       )}
     </main>
   )
@@ -3325,6 +3502,7 @@ type DetailScreenProps = {
   onPlayEpisode: (season: number, episode: number) => void
   onSave: () => void
   onShare: () => void
+  onBff?: () => void
   onOpenPoster: () => void
   designMode: 'apple' | 'netflix'
 }
@@ -3341,6 +3519,7 @@ function DetailScreen({
   onPlayEpisode,
   onSave,
   onShare,
+  onBff,
   onOpenPoster,
   designMode,
 }: DetailScreenProps) {
@@ -3349,6 +3528,18 @@ function DetailScreen({
   const [detailTab, setDetailTab] = useState<'episodes' | 'collection' | 'more'>(
     'episodes',
   )
+  // On desktop the anime detail shows every section stacked (no tabs / no
+  // secondary icon row); the tab UI + icon row are a mobile-only treatment.
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 900px)').matches,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 900px)')
+    const handler = () => setIsDesktop(mq.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
   const relatedItems = useMemo(
     () =>
       buildRail(
@@ -3513,9 +3704,11 @@ function DetailScreen({
             }}
           />
         </picture>
+        <HeroTrailerPreview key={movie.id} movie={movie} />
         <DetailTopBar
           onBack={onBack}
           onShare={onShare}
+          onBff={onBff}
         />
 
         <div
@@ -3592,34 +3785,36 @@ function DetailScreen({
                   <Download />
                   <span>Download</span>
                 </button>
-                <div className="netflix-detail-iconrow">
-                  <button type="button" className="netflix-icon-action" title="Set Reminders">
-                    <Bell />
-                    <span>Remind Me</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`netflix-icon-action${isSaved ? ' active' : ''}`}
-                    onClick={onSave}
-                    title={isSaved ? 'Saved' : 'Add to My List'}
-                  >
-                    {isSaved ? <Check /> : <Plus />}
-                    <span>My List</span>
-                  </button>
-                  <button type="button" className="netflix-icon-action" title="Rate">
-                    <ThumbsUp />
-                    <span>Rate</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="netflix-icon-action"
-                    onClick={onShare}
-                    title="Share"
-                  >
-                    <Share />
-                    <span>Share</span>
-                  </button>
-                </div>
+                {!isDesktop && (
+                  <div className="netflix-detail-iconrow">
+                    <button type="button" className="netflix-icon-action" title="Set Reminders">
+                      <Bell />
+                      <span>Remind Me</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`netflix-icon-action${isSaved ? ' active' : ''}`}
+                      onClick={onSave}
+                      title={isSaved ? 'Saved' : 'Add to My List'}
+                    >
+                      {isSaved ? <Check /> : <Plus />}
+                      <span>My List</span>
+                    </button>
+                    <button type="button" className="netflix-icon-action" title="Rate">
+                      <ThumbsUp />
+                      <span>Rate</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="netflix-icon-action"
+                      onClick={onShare}
+                      title="Share"
+                    >
+                      <Share />
+                      <span>Share</span>
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -3671,31 +3866,33 @@ function DetailScreen({
       <div className="detail-page-body">
         {isNetflix ? (
           <>
-            <nav className="netflix-detail-tabs" aria-label="Detail sections">
-              <button
-                type="button"
-                className={detailTab === 'episodes' ? 'active' : ''}
-                onClick={() => setDetailTab('episodes')}
-              >
-                Episodes
-              </button>
-              <button
-                type="button"
-                className={detailTab === 'collection' ? 'active' : ''}
-                onClick={() => setDetailTab('collection')}
-              >
-                Collection
-              </button>
-              <button
-                type="button"
-                className={detailTab === 'more' ? 'active' : ''}
-                onClick={() => setDetailTab('more')}
-              >
-                More Like This
-              </button>
-            </nav>
+            {!isDesktop && (
+              <nav className="netflix-detail-tabs" aria-label="Detail sections">
+                <button
+                  type="button"
+                  className={detailTab === 'episodes' ? 'active' : ''}
+                  onClick={() => setDetailTab('episodes')}
+                >
+                  Episodes
+                </button>
+                <button
+                  type="button"
+                  className={detailTab === 'collection' ? 'active' : ''}
+                  onClick={() => setDetailTab('collection')}
+                >
+                  Collection
+                </button>
+                <button
+                  type="button"
+                  className={detailTab === 'more' ? 'active' : ''}
+                  onClick={() => setDetailTab('more')}
+                >
+                  More Like This
+                </button>
+              </nav>
+            )}
 
-            {detailTab === 'episodes' &&
+            {(isDesktop || detailTab === 'episodes') &&
               (isTvShow(movie) ? (
                 <SeasonEpisodeSection
                   key={movie.id}
@@ -3710,7 +3907,7 @@ function DetailScreen({
                 />
               ))}
 
-            {detailTab === 'collection' && (
+            {(isDesktop || detailTab === 'collection') && isTvShow(movie) && (
               <DetailLandscapeRail
                 title="Trailers"
                 items={trailerCards}
@@ -3718,7 +3915,7 @@ function DetailScreen({
               />
             )}
 
-            {detailTab === 'more' && (
+            {(isDesktop || detailTab === 'more') && (
               <div ref={similarsRef}>
                 <DetailPosterRail
                   title="Similars"
@@ -4811,7 +5008,70 @@ function LoginScreen({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
+  // Admin "Manage Account" panel (main account only).
+  const [manageOpen, setManageOpen] = useState(false)
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [accEmail, setAccEmail] = useState('')
+  const [accPass, setAccPass] = useState('')
+  const [accEditing, setAccEditing] = useState<string | null>(null)
+  const [accError, setAccError] = useState('')
+  const [accBusy, setAccBusy] = useState(false)
+
+  const adminEmail = currentUser?.email ?? ''
+
+  const loadAccounts = async () => {
+    setAccounts(await listAccountsApi(adminEmail))
+  }
+
+  const openManageAccounts = () => {
+    setManageOpen(true)
+    setAccEmail('')
+    setAccPass('')
+    setAccEditing(null)
+    setAccError('')
+    void loadAccounts()
+  }
+
+  const submitAccount = async () => {
+    setAccError('')
+    setAccBusy(true)
+    const result = await saveAccountApi(
+      adminEmail,
+      accEmail.trim().toLowerCase(),
+      accPass,
+      accEditing ?? undefined,
+    )
+    setAccBusy(false)
+    if (!result.ok) {
+      setAccError(result.error ?? 'Could not save account.')
+      return
+    }
+    setAccEmail('')
+    setAccPass('')
+    setAccEditing(null)
+    void loadAccounts()
+  }
+
+  const startEditAccount = (account: Account) => {
+    setAccEditing(account.email)
+    setAccEmail(account.email)
+    setAccPass(account.password)
+    setAccError('')
+  }
+
+  const removeAccount = async (emailToRemove: string) => {
+    setAccError('')
+    setAccBusy(true)
+    const result = await deleteAccountApi(adminEmail, emailToRemove)
+    setAccBusy(false)
+    if (!result.ok) {
+      setAccError(result.error ?? 'Could not remove account.')
+      return
+    }
+    void loadAccounts()
+  }
+
+  const handleFormSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
 
@@ -4822,7 +5082,7 @@ function LoginScreen({
     ]
     const requiredPassword = 'Avnish@00'
 
-    const trimmedEmail = email.trim()
+    const trimmedEmail = email.trim().toLowerCase()
     const trimmedPassword = password.trim()
 
     if (!trimmedEmail || !trimmedEmail.includes('@')) {
@@ -4830,29 +5090,28 @@ function LoginScreen({
       return
     }
 
-    if (trimmedPassword.length < 6) {
-      setError('Password must be at least 6 characters.')
+    if (!trimmedPassword) {
+      setError('Please enter your password.')
       return
     }
 
-    const isAllowedEmail = allowedEmails.some(
-      (allowed) => allowed.toLowerCase() === trimmedEmail.toLowerCase()
-    )
+    const hardcodedOk =
+      allowedEmails.includes(trimmedEmail) && trimmedPassword === requiredPassword
 
-    if (!isAllowedEmail || trimmedPassword !== requiredPassword) {
+    setLoading(true)
+    // Accept the built-in accounts, or any account added via the admin panel.
+    const ok = hardcodedOk || (await verifyCredentials(trimmedEmail, trimmedPassword))
+    setLoading(false)
+
+    if (!ok) {
       setError('Invalid email or password.')
       return
     }
 
-    setLoading(true)
-
-    setTimeout(() => {
-      setLoading(false)
-      onLogin({
-        name: trimmedEmail.split('@')[0],
-        email: trimmedEmail,
-      })
-    }, 1500)
+    onLogin({
+      name: trimmedEmail.split('@')[0],
+      email: trimmedEmail,
+    })
   }
 
   const handleSocialLogin = (provider: 'Apple' | 'Google') => {
@@ -4939,13 +5198,15 @@ function LoginScreen({
                 </span>
                 <ChevronRight size={18} />
               </button>
-              <button className="account-row" type="button">
-                <span className="account-row-left">
-                  <Download size={18} />
-                  <span>Manage payment method</span>
-                </span>
-                <ChevronRight size={18} />
-              </button>
+              {isMainAccount(currentUser.email) && (
+                <button className="account-row" type="button" onClick={openManageAccounts}>
+                  <span className="account-row-left">
+                    <UserCog size={18} />
+                    <span>Manage Account</span>
+                  </span>
+                  <ChevronRight size={18} />
+                </button>
+              )}
               <button className="account-row" type="button">
                 <span className="account-row-left">
                   <Tv size={18} />
@@ -4967,6 +5228,93 @@ function LoginScreen({
             </div>
           </main>
         </div>
+
+        {manageOpen && (
+          <div className="bff-overlay" role="dialog" aria-label="Manage accounts">
+            <div className="bff-modal account-manage-modal">
+              <button className="bff-close" type="button" aria-label="Close" onClick={() => setManageOpen(false)}>
+                <X size={20} />
+              </button>
+              <h2 className="bff-title">Manage Accounts</h2>
+              <p className="bff-sub">
+                Add, edit or remove sign-in accounts. Everyone signs in with their
+                own email and password.
+              </p>
+
+              <div className="account-manage-form">
+                <input
+                  type="email"
+                  className="account-manage-input"
+                  placeholder="email@example.com"
+                  value={accEmail}
+                  onChange={(event) => setAccEmail(event.target.value)}
+                />
+                <input
+                  type="text"
+                  className="account-manage-input"
+                  placeholder="password"
+                  value={accPass}
+                  onChange={(event) => setAccPass(event.target.value)}
+                />
+                <button
+                  className="account-manage-save"
+                  type="button"
+                  disabled={accBusy}
+                  onClick={() => void submitAccount()}
+                >
+                  {accEditing ? 'Save' : 'Add'}
+                </button>
+                {accEditing && (
+                  <button
+                    className="account-manage-cancel"
+                    type="button"
+                    onClick={() => {
+                      setAccEditing(null)
+                      setAccEmail('')
+                      setAccPass('')
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {accError && <p className="bff-status">{accError}</p>}
+
+              <div className="account-manage-list">
+                {accounts.length === 0 ? (
+                  <p className="bff-empty">No accounts saved yet. Add one above.</p>
+                ) : (
+                  accounts.map((account) => (
+                    <div key={account.email} className="account-manage-row">
+                      <div className="account-manage-cred">
+                        <span className="account-manage-email">{account.email}</span>
+                        <span className="account-manage-pass">{account.password}</span>
+                      </div>
+                      <button
+                        className="account-manage-edit"
+                        type="button"
+                        onClick={() => startEditAccount(account)}
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      {!isMainAccount(account.email) && (
+                        <button
+                          className="account-manage-remove"
+                          type="button"
+                          disabled={accBusy}
+                          onClick={() => void removeAccount(account.email)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     )
   }
@@ -6602,6 +6950,7 @@ function PosterCard({
     >
       <PosterImage movie={movie} fallback={posterImageFor(movie)} />
       <span className="rank">{movie.rank}</span>
+      <span className="poster-card-title">{movie.title}</span>
     </button>
   )
 }
@@ -6609,10 +6958,12 @@ function PosterCard({
 function DetailTopBar({
   onBack,
   onShare,
+  onBff,
   dark,
 }: {
   onBack: () => void
   onShare: () => void
+  onBff?: () => void
   dark?: boolean
 }) {
   return (
@@ -6621,9 +6972,15 @@ function DetailTopBar({
         <ChevronLeft />
       </button>
       <div className="action-pill">
-        <button type="button" title="Share IMDb link" onClick={onShare}>
-          <Share />
-        </button>
+        {onBff ? (
+          <button type="button" title="Watch together (BFF)" onClick={onBff}>
+            <Users />
+          </button>
+        ) : (
+          <button type="button" title="Share IMDb link" onClick={onShare}>
+            <Share />
+          </button>
+        )}
       </div>
     </nav>
   )
@@ -7580,6 +7937,13 @@ function DesktopNav({
             >
               Library
             </button>
+            <button
+              className="apple-nav-link apple-nav-anime-link"
+              type="button"
+              onClick={onGoAnime}
+            >
+              Anime
+            </button>
             <span className="apple-nav-divider" aria-hidden="true" />
             <button
               className="apple-nav-icon-btn"
@@ -7589,15 +7953,6 @@ function DesktopNav({
               onClick={onSearch}
             >
               <Search size={18} />
-            </button>
-            <button
-              className="apple-nav-icon-btn apple-nav-anime-inline"
-              type="button"
-              title="Anime"
-              aria-label="Go to Anime"
-              onClick={onGoAnime}
-            >
-              <span className="anime-logo-mark">A</span>
             </button>
           </div>
           <ProfileMenu variant="apple" {...profileMenuProps} />

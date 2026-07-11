@@ -12395,16 +12395,16 @@ a.watch-option-card {
 .anime-float .anime-float-mark {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.32);
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   color: #fff;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 900;
   line-height: 1;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2);
 }
 
 /* ==========================================================================
@@ -12535,4 +12535,404 @@ a.watch-option-card {
 /* No back button on the profile chooser (it's the entry screen). */
 .profiles-screen-hero .profiles-header {
   display: none !important;
+}
+
+/* ==========================================================================
+   Detail page hero trailer (movie/TV info page) — poster shows first, the
+   trailer plays over it, then it reverts to the poster (Lumen + desktop).
+   ========================================================================== */
+.detail-hero .hero-trailer-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  background: #000;
+  animation: heroTrailerFade 0.6s ease both;
+}
+
+.detail-hero .hero-trailer-preview iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 56.25vw;
+  min-height: 100%;
+  min-width: 177.78vh;
+  transform: translate(-50%, -50%);
+  border: 0;
+  pointer-events: none;
+}
+
+/* Keep the detail copy + controls above the trailer. */
+.detail-hero .detail-copy {
+  z-index: 2;
+}
+.detail-hero .top-actions {
+  z-index: 3;
+}
+
+/* The netflix mobile detail hero is a stacked column (image block + info
+   below), so a full-bleed trailer overlay would cover the text — hide it
+   there. It still plays on desktop and on the Lumen (apple) detail hero. */
+@media (max-width: 899px) {
+  .netflix-theme .detail-screen .hero-trailer-preview {
+    display: none !important;
+  }
+}
+
+/* ==========================================================================
+   Rail card titles — show the movie/anime/drama name permanently under the
+   poster in Anime (Netflix) mode (Home + Drama rails). Hidden elsewhere.
+   ========================================================================== */
+.poster-card-title {
+  display: none;
+}
+
+/* Anime/Drama rails: poster image keeps a 2:3 portrait ratio and the title
+   flows underneath it permanently. */
+.netflix-theme .home-screen .poster-row:not(.compact) .poster-card,
+.netflix-theme .browse-screen .poster-row:not(.compact) .poster-card {
+  height: auto !important;
+  aspect-ratio: auto !important;
+  overflow: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.netflix-theme .home-screen .poster-row:not(.compact) .poster-card img,
+.netflix-theme .browse-screen .poster-row:not(.compact) .poster-card img {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 2 / 3 !important;
+  object-fit: cover !important;
+  border-radius: 4px !important;
+}
+
+.netflix-theme .poster-row:not(.compact) .poster-card .poster-card-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 8px;
+  padding: 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.88);
+  text-align: left;
+}
+
+/* ==========================================================================
+   Anime (Netflix) DESKTOP detail — remove the empty left gutter (there is no
+   sidebar on the detail screen) so the hero art is full-bleed.
+   ========================================================================== */
+@media (min-width: 900px) {
+  .netflix-theme .detail-screen,
+  .netflix-theme .watch-screen {
+    padding-left: 0 !important;
+  }
+}
+
+/* ==========================================================================
+   BFF "watch together" — invite modal, incoming-invite banner, party chip.
+   ========================================================================== */
+.bff-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.bff-modal {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 26px 22px 22px;
+  border-radius: 16px;
+  background: #16161a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7);
+  color: #fff;
+}
+
+.bff-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+}
+
+.bff-title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.bff-sub {
+  margin: 0 0 16px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.bff-friends {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bff-friend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.bff-friend:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.bff-friend-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #6d28d9, #2563eb);
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.bff-friend-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bff-friend-invite {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4aa8ff;
+}
+
+.bff-empty,
+.bff-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.bff-invite-banner {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12001;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100vw - 24px);
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #16161a;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+
+.bff-invite-text {
+  font-size: 13.5px;
+}
+
+.bff-invite-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.bff-invite-accept,
+.bff-invite-dismiss {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bff-invite-accept {
+  background: #fff;
+  color: #000;
+}
+
+.bff-invite-dismiss {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.bff-party-chip {
+  position: fixed;
+  bottom: max(90px, calc(env(safe-area-inset-bottom) + 84px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(20, 20, 22, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+
+.bff-party-leave {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Manage Accounts admin panel (main account only).
+   ========================================================================== */
+.account-manage-modal {
+  width: min(520px, 100%);
+}
+
+.account-manage-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.account-manage-input {
+  flex: 1 1 40%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+
+.account-manage-save,
+.account-manage-cancel {
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-manage-save {
+  background: #fff;
+  color: #000;
+}
+
+.account-manage-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.account-manage-cancel {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.account-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.account-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.account-manage-cred {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-manage-email {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-manage-pass {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: ui-monospace, monospace;
+}
+
+.account-manage-edit,
+.account-manage-remove {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+}
+
+.account-manage-remove {
+  background: rgba(229, 9, 20, 0.2);
+  color: #ff6b6b;
 }

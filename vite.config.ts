@@ -46,6 +46,20 @@ import {
   type StoredProfile,
 } from './api/_lib/supabase-core'
 import { fetchPosterImage, posterKeysFromEnv } from './api/_lib/poster-core'
+import {
+  createInvite,
+  getParty,
+  incomingInvites,
+  listAccountEmails,
+  updateParty,
+} from './api/_lib/watch-party-core'
+import {
+  adminEmailFromEnv,
+  deleteAccount,
+  listAccounts,
+  saveAccount,
+  verifyAccount,
+} from './api/_lib/accounts-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -924,6 +938,177 @@ function tmdbTrailerDevProxy(authChain: TmdbTrailerAuth[]): Plugin {
   }
 }
 
+function accountsDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'accounts-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/accounts', async (req: IncomingMessage, res) => {
+        const config = supabaseConfigFromEnv(env)
+        if (!config) {
+          sendJson(res, 200, { ok: false, configured: false })
+          return
+        }
+        const adminEmail = adminEmailFromEnv(env)
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const action = requestUrl.searchParams.get('action') ?? ''
+        const isAdmin = (value: unknown) => String(value ?? '').toLowerCase() === adminEmail
+
+        try {
+          if (req.method === 'GET' && action === 'list') {
+            if (!isAdmin(requestUrl.searchParams.get('admin'))) {
+              sendJson(res, 403, { ok: false, error: 'Not authorized.' })
+              return
+            }
+            sendJson(res, 200, { ok: true, configured: true, accounts: await listAccounts(config) })
+            return
+          }
+
+          if (req.method === 'POST') {
+            const chunks: Buffer[] = []
+            for await (const chunk of req) {
+              chunks.push(chunk as Buffer)
+            }
+            const raw = Buffer.concat(chunks).toString('utf8')
+            const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+
+            if (action === 'verify') {
+              const ok = await verifyAccount(
+                config,
+                String(body.email ?? '').toLowerCase(),
+                String(body.password ?? ''),
+              )
+              sendJson(res, 200, { ok })
+              return
+            }
+            if (action === 'save') {
+              if (!isAdmin(body.admin)) {
+                sendJson(res, 403, { ok: false, error: 'Not authorized.' })
+                return
+              }
+              const email = String(body.email ?? '').trim().toLowerCase()
+              const password = String(body.password ?? '')
+              if (!email || !email.includes('@') || password.length < 4) {
+                sendJson(res, 400, { ok: false, error: 'Valid email and password (4+ chars) required.' })
+                return
+              }
+              await saveAccount(config, email, password, String(body.previousEmail ?? '').toLowerCase() || undefined)
+              sendJson(res, 200, { ok: true })
+              return
+            }
+            if (action === 'delete') {
+              if (!isAdmin(body.admin)) {
+                sendJson(res, 403, { ok: false, error: 'Not authorized.' })
+                return
+              }
+              const email = String(body.email ?? '').toLowerCase()
+              if (email === adminEmail) {
+                sendJson(res, 400, { ok: false, error: 'The main account cannot be removed.' })
+                return
+              }
+              await deleteAccount(config, email)
+              sendJson(res, 200, { ok: true })
+              return
+            }
+          }
+
+          sendJson(res, 400, { ok: false, error: 'Unknown action.' })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Accounts request failed.'
+          sendJson(res, 502, { ok: false, error: message })
+        }
+      })
+    },
+  }
+}
+
+function watchPartyDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'watch-party-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/watch-party', async (req: IncomingMessage, res) => {
+        const config = supabaseConfigFromEnv(env)
+        if (!config) {
+          sendJson(res, 200, { ok: false, configured: false })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const action = requestUrl.searchParams.get('action') ?? ''
+
+        try {
+          if (req.method === 'GET') {
+            if (action === 'friends') {
+              const email = (requestUrl.searchParams.get('email') ?? '').toLowerCase()
+              const emails = (await listAccountEmails(config)).filter(
+                (candidate) => candidate.toLowerCase() !== email,
+              )
+              sendJson(res, 200, { ok: true, configured: true, friends: emails })
+              return
+            }
+            if (action === 'incoming') {
+              const email = (requestUrl.searchParams.get('email') ?? '').toLowerCase()
+              sendJson(res, 200, { ok: true, configured: true, invites: await incomingInvites(config, email) })
+              return
+            }
+            if (action === 'party') {
+              const id = requestUrl.searchParams.get('id') ?? ''
+              sendJson(res, 200, { ok: true, configured: true, party: id ? await getParty(config, id) : null })
+              return
+            }
+            sendJson(res, 400, { ok: false, error: 'Unknown action.' })
+            return
+          }
+
+          if (req.method === 'POST') {
+            const chunks: Buffer[] = []
+            for await (const chunk of req) {
+              chunks.push(chunk as Buffer)
+            }
+            const raw = Buffer.concat(chunks).toString('utf8')
+            const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+
+            if (action === 'invite') {
+              const hostEmail = String(body.hostEmail ?? '').toLowerCase()
+              const guestEmail = String(body.guestEmail ?? '').toLowerCase()
+              if (!hostEmail || !guestEmail || !body.movie) {
+                sendJson(res, 400, { ok: false, error: 'hostEmail, guestEmail, movie required.' })
+                return
+              }
+              const party = await createInvite(config, hostEmail, guestEmail, body.movie)
+              sendJson(res, 200, { ok: true, configured: true, party })
+              return
+            }
+            if (action === 'accept') {
+              await updateParty(config, String(body.id), { status: 'accepted' })
+              sendJson(res, 200, { ok: true })
+              return
+            }
+            if (action === 'state') {
+              await updateParty(config, String(body.id), {
+                playback: body.playback as { playing: boolean; time: number },
+              })
+              sendJson(res, 200, { ok: true })
+              return
+            }
+            if (action === 'end') {
+              await updateParty(config, String(body.id), { status: 'ended' })
+              sendJson(res, 200, { ok: true })
+              return
+            }
+            sendJson(res, 400, { ok: false, error: 'Unknown action.' })
+            return
+          }
+
+          sendJson(res, 405, { ok: false, error: 'Method not allowed.' })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Watch-party request failed.'
+          sendJson(res, 502, { ok: false, error: message })
+        }
+      })
+    },
+  }
+}
+
 function posterDevProxy(env: Record<string, string | undefined>): Plugin {
   return {
     name: 'poster-dev-proxy',
@@ -1143,6 +1328,8 @@ export default defineConfig(({ mode }) => {
       tmdbTrailerDevProxy(createTmdbTrailerAuthChain(env)),
       profilesDevProxy(env),
       posterDevProxy(env),
+      watchPartyDevProxy(env),
+      accountsDevProxy(env),
       tmdbDramaDevProxy(createTmdbWatchAuthChain(env)),
       tmdbEpisodesDevProxy(createTmdbWatchAuthChain(env)),
       movieGluDevProxy(
