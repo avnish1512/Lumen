@@ -1,5 +1,5 @@
-import { fetchKoreanChineseDramas } from './tmdb-drama-core.js'
-import { createTmdbWatchAuthChain } from './tmdb-watch-core.js'
+import { fetchKoreanChineseDramas } from './_lib/tmdb-drama-core.js'
+import { createTmdbWatchAuthChain } from './_lib/tmdb-watch-core.js'
 
 type ApiRequest = {
   method?: string

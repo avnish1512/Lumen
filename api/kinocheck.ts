@@ -1,4 +1,4 @@
-import { fetchKinocheckTrailer } from './kinocheck-core.js'
+import { fetchKinocheckTrailer } from './_lib/kinocheck-core.js'
 
 type QueryValue = string | string[] | undefined
 

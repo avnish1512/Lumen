@@ -1,11 +1,11 @@
 import {
   fetchTmdbHomeRails,
   streamingAvailabilityConfigFromEnv,
-} from './tmdb-home-core.js'
+} from './_lib/tmdb-home-core.js'
 import {
   createTmdbWatchAuthChain,
   normalizeWatchRegion,
-} from './tmdb-watch-core.js'
+} from './_lib/tmdb-watch-core.js'
 
 type QueryValue = string | string[] | undefined
 

@@ -2,7 +2,7 @@ import {
   isSuperEmbedRedirectUrl,
   resolveSuperEmbedPlayerUrl,
   superEmbedOptionsFromParams,
-} from './superembed-core.js'
+} from './_lib/superembed-core.js'
 
 type QueryValue = string | string[] | undefined
 

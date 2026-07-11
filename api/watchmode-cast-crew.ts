@@ -5,7 +5,7 @@ import {
   fetchTmdbCastCrew,
   fetchWatchmodeCastCrew,
   watchmodeConfigFromEnv,
-} from './tmdb-watch-core.js'
+} from './_lib/tmdb-watch-core.js'
 
 type QueryValue = string | string[] | undefined
 

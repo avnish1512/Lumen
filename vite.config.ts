@@ -5,18 +5,18 @@ import {
   fetchMovieGluTrailerClips,
   movieGluConfigFromEnv,
   type MovieGluConfig,
-} from './api/movieglu-core'
+} from './api/_lib/movieglu-core'
 import {
   fetchTmdbHomeRails,
   streamingAvailabilityConfigFromEnv,
   type StreamingAvailabilityConfig,
-} from './api/tmdb-home-core'
+} from './api/_lib/tmdb-home-core'
 import {
   createTmdbTrailerAuthChain,
   fallbackTrailerSearchClips,
   fetchTmdbTrailerClips,
   type TmdbAuth as TmdbTrailerAuth,
-} from './api/tmdb-trailer-core'
+} from './api/_lib/tmdb-trailer-core'
 import {
   bestCastCrewMembers,
   createTmdbWatchAuthChain,
@@ -28,16 +28,16 @@ import {
   type TmdbAuth as TmdbWatchAuth,
   type WatchmodeConfig,
   watchmodeConfigFromEnv,
-} from './api/tmdb-watch-core'
+} from './api/_lib/tmdb-watch-core'
 import {
   isSuperEmbedRedirectUrl,
   resolveSuperEmbedPlayerUrl,
   superEmbedOptionsFromParams,
-} from './api/superembed-core'
-import { fetchAnikotoRecent, fetchAnikotoSeries } from './api/anikoto-core'
-import { fetchKoreanChineseDramas } from './api/tmdb-drama-core'
-import { fetchKinocheckTrailer } from './api/kinocheck-core'
-import { fetchTmdbSeasonEpisodes } from './api/tmdb-episodes-core'
+} from './api/_lib/superembed-core'
+import { fetchAnikotoRecent, fetchAnikotoSeries } from './api/_lib/anikoto-core'
+import { fetchKoreanChineseDramas } from './api/_lib/tmdb-drama-core'
+import { fetchKinocheckTrailer } from './api/_lib/kinocheck-core'
+import { fetchTmdbSeasonEpisodes } from './api/_lib/tmdb-episodes-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'

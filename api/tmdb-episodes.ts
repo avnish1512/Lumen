@@ -1,5 +1,5 @@
-import { fetchTmdbSeasonEpisodes } from './tmdb-episodes-core.js'
-import { createTmdbWatchAuthChain } from './tmdb-watch-core.js'
+import { fetchTmdbSeasonEpisodes } from './_lib/tmdb-episodes-core.js'
+import { createTmdbWatchAuthChain } from './_lib/tmdb-watch-core.js'
 
 type QueryValue = string | string[] | undefined
 

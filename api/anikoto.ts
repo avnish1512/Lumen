@@ -1,4 +1,4 @@
-import { fetchAnikotoRecent, fetchAnikotoSeries } from './anikoto-core.js'
+import { fetchAnikotoRecent, fetchAnikotoSeries } from './_lib/anikoto-core.js'
 
 type QueryValue = string | string[] | undefined
 
