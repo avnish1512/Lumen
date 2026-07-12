@@ -36,9 +36,9 @@ import {
   superEmbedOptionsFromParams,
 } from './api/_lib/superembed-core'
 import { fetchAnikotoRecent, fetchAnikotoSeries } from './api/_lib/anikoto-core'
-import { fetchDramaRails, fetchKoreanChineseDramas } from './api/_lib/tmdb-drama-core'
+import { fetchDramaRails, fetchKoreanChineseDramas, searchTmdbTitles } from './api/_lib/tmdb-drama-core'
 import { fetchKinocheckTrailer } from './api/_lib/kinocheck-core'
-import { fetchTmdbSeasonEpisodes } from './api/_lib/tmdb-episodes-core'
+import { fetchTmdbSeasonEpisodes, fetchTmdbTvSeasons } from './api/_lib/tmdb-episodes-core'
 import {
   fetchAccountProfiles,
   saveAccountProfiles,
@@ -828,6 +828,7 @@ function tmdbEpisodesDevProxy(authChain: TmdbWatchAuth[]): Plugin {
         const requestUrl = new URL(req.url ?? '/', 'http://localhost')
         const tmdbId = Number(requestUrl.searchParams.get('tmdbId') ?? 0)
         const season = Number(requestUrl.searchParams.get('season') ?? 1)
+        const action = requestUrl.searchParams.get('action')
 
         if (!tmdbId) {
           sendJson(res, 400, { Response: 'False', Error: 'Provide tmdbId.', episodes: [] })
@@ -835,6 +836,12 @@ function tmdbEpisodesDevProxy(authChain: TmdbWatchAuth[]): Plugin {
         }
 
         try {
+          if (action === 'seasons') {
+            const seasons = await fetchTmdbTvSeasons(authChain, tmdbId)
+            sendJson(res, 200, { Response: 'True', seasons })
+            return
+          }
+
           const episodes = await fetchTmdbSeasonEpisodes(authChain, tmdbId, season || 1)
           sendJson(res, 200, { Response: 'True', episodes })
         } catch (error) {
@@ -854,6 +861,21 @@ function tmdbDramaDevProxy(authChain: TmdbWatchAuth[]): Plugin {
       server.middlewares.use('/api/tmdb-drama', async (req: IncomingMessage, res) => {
         if (req.method && req.method !== 'GET') {
           sendJson(res, 405, { Response: 'False', Error: 'Method not allowed.', results: [] })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+
+        if (requestUrl.searchParams.get('action') === 'search') {
+          const query = requestUrl.searchParams.get('query') ?? ''
+          try {
+            const results = await searchTmdbTitles(authChain, query)
+            sendJson(res, 200, { Response: 'True', results })
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : 'Could not reach TMDB.'
+            sendJson(res, 502, { Response: 'False', Error: message, results: [] })
+          }
           return
         }
 
@@ -1109,6 +1131,60 @@ function watchPartyDevProxy(env: Record<string, string | undefined>): Plugin {
   }
 }
 
+function imgDevProxy(): Plugin {
+  return {
+    name: 'img-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/img', async (req: IncomingMessage, res) => {
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const target = requestUrl.searchParams.get('url') ?? ''
+
+        let allowed = false
+        try {
+          const parsed = new URL(target)
+          allowed =
+            parsed.protocol === 'https:' &&
+            (parsed.hostname === 's4.anilist.co' ||
+              parsed.hostname.endsWith('.anilist.co'))
+        } catch {
+          allowed = false
+        }
+
+        if (!allowed) {
+          res.statusCode = 400
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: 'Unsupported image URL.' }))
+          return
+        }
+
+        try {
+          const upstream = await fetch(target)
+          if (!upstream.ok) {
+            res.statusCode = upstream.status
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Image unavailable.' }))
+            return
+          }
+          const contentType = upstream.headers.get('content-type') ?? 'image/jpeg'
+          const bytes = await upstream.arrayBuffer()
+          res.statusCode = 200
+          res.setHeader('Content-Type', contentType)
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+          res.end(Buffer.from(bytes))
+        } catch (error) {
+          res.statusCode = 502
+          res.setHeader('Content-Type', 'application/json')
+          res.end(
+            JSON.stringify({
+              error: error instanceof Error ? error.message : 'Image proxy error.',
+            }),
+          )
+        }
+      })
+    },
+  }
+}
+
 function posterDevProxy(env: Record<string, string | undefined>): Plugin {
   return {
     name: 'poster-dev-proxy',
@@ -1327,6 +1403,7 @@ export default defineConfig(({ mode }) => {
       kinocheckDevProxy(env.KINOCHECK_API_KEY),
       tmdbTrailerDevProxy(createTmdbTrailerAuthChain(env)),
       profilesDevProxy(env),
+      imgDevProxy(),
       posterDevProxy(env),
       watchPartyDevProxy(env),
       accountsDevProxy(env),

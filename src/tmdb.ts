@@ -428,6 +428,7 @@ export type SeasonEpisode = {
   overview: string
   still: string
   runtime: string
+  airDate?: string
 }
 
 export async function fetchSeasonEpisodes(
@@ -448,6 +449,31 @@ export async function fetchSeasonEpisodes(
   }
 }
 
+export type TvSeasonInfo = {
+  season: number
+  episodeCount: number
+}
+
+/** Accurate season list for a TV id (from TMDB) so the season dropdown and
+ * per-season episode counts are real, not guessed. */
+export async function fetchTvSeasons(tmdbId: number): Promise<TvSeasonInfo[]> {
+  try {
+    const response = await fetch(`/api/tmdb-episodes?action=seasons&tmdbId=${tmdbId}`)
+    const body = (await response.json()) as {
+      Response?: string
+      seasons?: TvSeasonInfo[]
+    }
+
+    if (!response.ok || body.Response === 'False') {
+      return []
+    }
+
+    return body.seasons ?? []
+  } catch {
+    return []
+  }
+}
+
 export type DramaRails = {
   kDrama: Movie[]
   cDrama: Movie[]
@@ -460,6 +486,27 @@ const emptyDramaRails: DramaRails = {
   cDrama: [],
   newReleases: [],
   romCom: [],
+}
+
+// Full-catalog TMDB title search (movies + TV). Results carry a tmdbId (no
+// AniList id), so they play through the TMDB player.
+export async function searchTmdb(query: string): Promise<Movie[]> {
+  const trimmed = query.trim()
+  if (!trimmed) {
+    return []
+  }
+  try {
+    const response = await fetch(
+      `/api/tmdb-drama?action=search&query=${encodeURIComponent(trimmed)}`,
+    )
+    const body = (await response.json()) as { Response?: string; results?: Movie[] }
+    if (!response.ok || body.Response === 'False') {
+      return []
+    }
+    return body.results ?? []
+  } catch {
+    return []
+  }
 }
 
 export async function fetchKoreanChineseDramas(): Promise<{

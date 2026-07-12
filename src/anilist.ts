@@ -18,6 +18,16 @@ export type AniListAnime = {
   genres?: string[];
   seasonYear?: number;
   episodes?: number;
+  nextAiringEpisode?: {
+    episode?: number;
+    airingAt?: number;
+  };
+  streamingEpisodes?: {
+    title?: string;
+    thumbnail?: string;
+    url?: string;
+    site?: string;
+  }[];
   format?: string;
   status?: string;
   synonyms?: string[];
@@ -79,6 +89,9 @@ export async function searchAnime(query: string, page = 1, perPage = 20): Promis
           genres
           seasonYear
           episodes
+          nextAiringEpisode {
+            episode
+          }
           format
           status
         }
@@ -114,6 +127,16 @@ export async function getAnimeDetails(id: number): Promise<AniListAnime> {
         genres
         seasonYear
         episodes
+        nextAiringEpisode {
+          episode
+          airingAt
+        }
+        streamingEpisodes {
+          title
+          thumbnail
+          url
+          site
+        }
         format
         status
         synonyms
@@ -203,6 +226,9 @@ export async function fetchAnimeByOptions({
           genres
           seasonYear
           episodes
+          nextAiringEpisode {
+            episode
+          }
           format
           status
           averageScore
@@ -251,6 +277,9 @@ export async function fetchAnimeListByIds(ids: number[]): Promise<AniListAnime[]
           genres
           seasonYear
           episodes
+          nextAiringEpisode {
+            episode
+          }
           format
           status
           averageScore

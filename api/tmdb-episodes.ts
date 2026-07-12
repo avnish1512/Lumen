@@ -1,4 +1,7 @@
-import { fetchTmdbSeasonEpisodes } from './_lib/tmdb-episodes-core.js'
+import {
+  fetchTmdbSeasonEpisodes,
+  fetchTmdbTvSeasons,
+} from './_lib/tmdb-episodes-core.js'
 import { createTmdbWatchAuthChain } from './_lib/tmdb-watch-core.js'
 
 type QueryValue = string | string[] | undefined
@@ -28,6 +31,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const tmdbId = Number(getQueryValue(req.query.tmdbId) ?? 0)
   const season = Number(getQueryValue(req.query.season) ?? 1)
+  const action = getQueryValue(req.query.action)
 
   if (!tmdbId) {
     res.status(400).json({ Response: 'False', Error: 'Provide tmdbId.', episodes: [] })
@@ -38,6 +42,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const authChain = createTmdbWatchAuthChain(
       process.env as Record<string, string | undefined>,
     )
+
+    if (action === 'seasons') {
+      const seasons = await fetchTmdbTvSeasons(authChain, tmdbId)
+      res.status(200).json({ Response: 'True', seasons })
+      return
+    }
+
     const episodes = await fetchTmdbSeasonEpisodes(authChain, tmdbId, season || 1)
     res.status(200).json({ Response: 'True', episodes })
   } catch (error) {

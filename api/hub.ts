@@ -82,6 +82,47 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return
   }
 
+  // ---- img (public image proxy, allowlisted hosts only) ----
+  // Streams AniList cover art through our own (edge-cached) origin so anime
+  // posters stay fast/reachable even when the AniList CDN is slow or blocked
+  // on the viewer's network.
+  if (kind === 'img') {
+    const target = qv(req.query.url) ?? ''
+    let allowed = false
+    try {
+      const parsed = new URL(target)
+      allowed =
+        parsed.protocol === 'https:' &&
+        (parsed.hostname === 's4.anilist.co' ||
+          parsed.hostname.endsWith('.anilist.co'))
+    } catch {
+      allowed = false
+    }
+    if (!allowed) {
+      res.status(400).json({ error: 'Unsupported image URL.' })
+      return
+    }
+    try {
+      const upstream = await fetch(target)
+      if (!upstream.ok) {
+        res.status(upstream.status).json({ error: 'Image unavailable.' })
+        return
+      }
+      const contentType = upstream.headers.get('content-type') ?? 'image/jpeg'
+      if (!contentType.startsWith('image/')) {
+        res.status(415).json({ error: 'Not an image.' })
+        return
+      }
+      const bytes = await upstream.arrayBuffer()
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable')
+      res.end(Buffer.from(bytes))
+    } catch (error) {
+      res.status(502).json({ error: error instanceof Error ? error.message : 'Image proxy error.' })
+    }
+    return
+  }
+
   // ---- poster (public, streams image bytes) ----
   if (kind === 'poster') {
     const image = await fetchPosterImage(posterKeysFromEnv(env), {

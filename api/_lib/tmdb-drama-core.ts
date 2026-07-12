@@ -199,6 +199,42 @@ export async function fetchKoreanChineseDramas(authChain: TmdbAuth[]): Promise<D
   return merged.map((item, index) => ({ ...item, rank: index + 1 }))
 }
 
+// Full-catalog title search (movies + TV) via TMDB multi-search. Used to power
+// the app's search box so any TMDB title (e.g. "Business Proposal") is found,
+// not just the pre-built drama rails. Results carry a tmdbId (no AniList id) so
+// they stream through the TMDB player.
+export async function searchTmdbTitles(
+  authChain: TmdbAuth[],
+  query: string,
+): Promise<DramaItem[]> {
+  const trimmed = query.trim()
+  if (authChain.length === 0 || !trimmed) {
+    return []
+  }
+
+  let response: { results?: Array<TmdbTvResult & { media_type?: string }> }
+  try {
+    response = (await requestFirstOk(authChain, '/search/multi', {
+      query: trimmed,
+      include_adult: 'false',
+      language: 'en-US',
+      page: '1',
+    })) as { results?: Array<TmdbTvResult & { media_type?: string }> }
+  } catch {
+    return []
+  }
+
+  return (response.results ?? [])
+    .filter((item) => item.media_type === 'tv' || item.media_type === 'movie')
+    .map((item, index) => {
+      const mediaType: 'tv' | 'movie' = item.media_type === 'movie' ? 'movie' : 'tv'
+      const label = mediaType === 'tv' ? 'Series' : 'Movie'
+      return mapToDrama(item, label, index + 1, mediaType)
+    })
+    .filter((item): item is DramaItem => Boolean(item))
+    .slice(0, 40)
+}
+
 // Distinct, category-specific drama rails (each rail is a different query so
 // they don't repeat the same titles): K-Drama, C-Drama, New Releases, Rom-Com.
 export type DramaRails = {

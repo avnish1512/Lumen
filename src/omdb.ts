@@ -64,6 +64,11 @@ export type Movie = {
   isAnime?: boolean
   animeFormat?: string
   episodeCount?: number
+  // Per-episode artwork/titles from AniList (streamingEpisodes), in episode
+  // order. Used to give anime their own episode thumbnails.
+  animeEpisodes?: { title: string; thumbnail: string }[]
+  // The next (not-yet-aired) episode, for a "coming soon" card with a date.
+  nextEpisode?: { number: number; airingAt?: number }
   trailerYoutubeId?: string
   rank: number
   title: string

@@ -26,6 +26,7 @@ import {
   LoaderCircle,
   Mic,
   MoreHorizontal,
+  Pause,
   Play,
   Plus,
   RefreshCcw,
@@ -34,6 +35,7 @@ import {
   Trash2,
   Tv,
   Users,
+  Volume2,
   VolumeX,
   X,
   Eye,
@@ -64,7 +66,9 @@ import {
   fetchTmdbWatchAvailability,
   fetchWatchmodeCastCrew,
   fetchKoreanChineseDramas,
+  searchTmdb,
   fetchSeasonEpisodes,
+  fetchTvSeasons,
   type DramaRails,
   type SeasonEpisode,
   streamProviderOptions,
@@ -101,7 +105,7 @@ import {
   loadHlsJs,
   type LiveChannel,
 } from './livetv'
-import { topPosterUrl, hasTopPoster } from './posters'
+import { topPosterUrl, hasTopPoster, proxiedAnimeImage } from './posters'
 import { fetchTrailerYoutubeId } from './kinocheck'
 import './App.css'
 
@@ -775,14 +779,42 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
   const poster = anime.coverImage?.large || anime.coverImage?.medium || ''
   const animeFormat = (anime.format || '').toUpperCase()
   const isAnimeFilm = animeFormat === 'MOVIE' || animeFormat === 'MUSIC'
-  const episodeCount = Number(anime.episodes) || 0
+  // AniList reports `episodes: null` while a series is still airing; in that
+  // case the already-aired count is nextAiringEpisode.episode - 1. Fall back to
+  // the total when finished.
+  const airedSoFar =
+    typeof anime.nextAiringEpisode?.episode === 'number'
+      ? Math.max(0, anime.nextAiringEpisode.episode - 1)
+      : 0
+  const episodeCount = Number(anime.episodes) || airedSoFar || 0
   const trailerYoutubeId =
     anime.trailer && (anime.trailer.site === 'youtube' || anime.trailer.site === 'YouTube')
       ? anime.trailer.id
       : undefined
   const runtime = isAnimeFilm
     ? 'Movie'
-    : `${anime.episodes || '?'} Episode${episodeCount === 1 ? '' : 's'}`
+    : `${episodeCount || '?'} Episode${episodeCount === 1 ? '' : 's'}`
+
+  // Per-episode artwork/titles from AniList (present on the details response).
+  const animeEpisodes = Array.isArray(anime.streamingEpisodes)
+    ? anime.streamingEpisodes
+        .filter((entry: any) => entry?.thumbnail)
+        .map((entry: any) => ({
+          title: String(entry.title ?? '').trim(),
+          thumbnail: String(entry.thumbnail ?? ''),
+        }))
+    : undefined
+
+  const nextEpisode =
+    typeof anime.nextAiringEpisode?.episode === 'number'
+      ? {
+          number: anime.nextAiringEpisode.episode as number,
+          airingAt:
+            typeof anime.nextAiringEpisode.airingAt === 'number'
+              ? anime.nextAiringEpisode.airingAt
+              : undefined,
+        }
+      : undefined
 
   return {
     id: `anilist-${anime.id}`,
@@ -791,6 +823,8 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
     isAnime: true,
     animeFormat,
     episodeCount,
+    animeEpisodes,
+    nextEpisode,
     trailerYoutubeId,
     rank,
     title,
@@ -1088,6 +1122,7 @@ function App() {
   const [bffFriends, setBffFriends] = useState<string[]>([])
   const [bffStatus, setBffStatus] = useState('')
   const [incomingInvite, setIncomingInvite] = useState<WatchParty | null>(null)
+  const [incomingInvites, setIncomingInvites] = useState<WatchParty[]>([])
   const [activeParty, setActiveParty] = useState<WatchParty | null>(null)
 
   const [kcDramas, setKcDramas] = useState<Movie[]>([])
@@ -1113,6 +1148,9 @@ function App() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  // Anime UI search filter: 'anime' pulls AniList results (played via AniList id),
+  // 'drama' pulls TMDB results (played via TMDB id).
+  const [searchMode, setSearchMode] = useState<'anime' | 'drama'>('anime')
   const [searchResults, setSearchResults] = useState<Movie[]>([])
   const [searchRecommendations, setSearchRecommendations] = useState<Movie[]>(() => initialCache?.searchRecommendations ?? [])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -1752,8 +1790,15 @@ function App() {
           const animeData = await getAnimeDetails(anilistId)
           fullMovie = mapAniListToMovieStandalone(animeData, movie.rank)
           fullMovie.isFull = true
-        } else {
+        } else if (/^tt\d+/.test(movie.id)) {
+          // Only real IMDb ids can be looked up on OMDb.
           fullMovie = await fetchMovieById(movie.id, movie.rank)
+        } else {
+          // TMDB-sourced titles (drama / TMDB search, id like `tmdb-tv-123`)
+          // aren't on OMDb — they already carry full detail from their mapping,
+          // so use them as-is instead of triggering an "Incorrect IMDb ID"
+          // error.
+          fullMovie = { ...movie, isFull: true }
         }
 
         // Prevent late/stale hydration from overwriting a newer selection.
@@ -1961,15 +2006,25 @@ function App() {
     }
   }
 
+  const acceptInviteAndWatch = async (invite: WatchParty) => {
+    await acceptInvite(invite.id)
+    setActiveParty({ ...invite, status: 'accepted' })
+    setIncomingInvite((current) => (current?.id === invite.id ? null : current))
+    setIncomingInvites((current) => current.filter((entry) => entry.id !== invite.id))
+    openWatch(invite.movie)
+  }
+
+  const dismissInvite = (invite: WatchParty) => {
+    void endParty(invite.id)
+    setIncomingInvite((current) => (current?.id === invite.id ? null : current))
+    setIncomingInvites((current) => current.filter((entry) => entry.id !== invite.id))
+  }
+
   const acceptIncomingInvite = async () => {
     if (!incomingInvite) {
       return
     }
-    await acceptInvite(incomingInvite.id)
-    setActiveParty({ ...incomingInvite, status: 'accepted' })
-    const movie = incomingInvite.movie
-    setIncomingInvite(null)
-    openWatch(movie)
+    await acceptInviteAndWatch(incomingInvite)
   }
 
   // Poll for incoming watch-party invites while signed in.
@@ -1982,7 +2037,9 @@ function App() {
     const check = () => {
       void fetchIncomingInvites(email).then((invites) => {
         if (!active) return
-        const pending = invites.find((invite) => invite.status === 'pending')
+        const pendingList = invites.filter((invite) => invite.status === 'pending')
+        setIncomingInvites(pendingList)
+        const pending = pendingList[0]
         setIncomingInvite((current) => {
           // Don't resurface an invite the user is already hosting/answering.
           if (pending && activeParty && pending.id === activeParty.id) return current
@@ -2104,30 +2161,56 @@ function App() {
       })
 
       if (designMode === 'netflix') {
-        const animeData = await searchAnime(trimmedQuery).catch(() => ({ results: [] }))
-        const mappedAnimeResults = animeData.results.map((anime: any, i: number) => mapAniListToMovie(anime, i + 1))
-        
-        const combined = [...uniqueLocalResults, ...mappedAnimeResults]
-        const finalSeen = new Set<string>()
-        const finalResults = combined.filter((m) => {
-          if (finalSeen.has(m.id)) return false
-          finalSeen.add(m.id)
-          return true
-        })
+        if (searchMode === 'drama') {
+          // Drama filter: TMDB titles (no AniList). These carry a tmdbId and no
+          // anilistId, so they stream through the TMDB player.
+          const [tmdbResults, movieResults] = await Promise.all([
+            searchTmdb(trimmedQuery),
+            searchMovies(trimmedQuery).catch(() => []),
+          ])
+          const nonAnimeLocal = uniqueLocalResults.filter((m) => !m.isAnime)
+          const combined = [...nonAnimeLocal, ...tmdbResults, ...movieResults]
+          const finalSeen = new Set<string>()
+          const finalResults = combined.filter((m) => {
+            if (finalSeen.has(m.id)) return false
+            finalSeen.add(m.id)
+            return true
+          })
 
-        setSearchResults(finalResults)
+          setSearchResults(finalResults)
 
-        if (finalResults.length === 0) {
-          setSearchError('No results found. Try another title.')
+          if (finalResults.length === 0) {
+            setSearchError('No results found. Try another title.')
+          }
+        } else {
+          // Anime filter: AniList results (played via AniList id) + local anime.
+          const animeData = await searchAnime(trimmedQuery).catch(() => ({ results: [] }))
+          const mappedAnimeResults = animeData.results.map((anime: any, i: number) => mapAniListToMovie(anime, i + 1))
+
+          const animeLocal = uniqueLocalResults.filter((m) => m.isAnime)
+          const combined = [...animeLocal, ...mappedAnimeResults]
+          const finalSeen = new Set<string>()
+          const finalResults = combined.filter((m) => {
+            if (finalSeen.has(m.id)) return false
+            finalSeen.add(m.id)
+            return true
+          })
+
+          setSearchResults(finalResults)
+
+          if (finalResults.length === 0) {
+            setSearchError('No results found. Try another title.')
+          }
         }
       } else {
-        const [movieResults, animeData] = await Promise.all([
+        const [tmdbResults, movieResults, animeData] = await Promise.all([
+          searchTmdb(trimmedQuery),
           searchMovies(trimmedQuery).catch(() => []),
           searchAnime(trimmedQuery).catch(() => ({ results: [] })),
         ])
 
         const mappedAnimeResults = animeData.results.map((anime: any, i: number) => mapAniListToMovie(anime, i + 1))
-        const combined = [...uniqueLocalResults, ...mappedAnimeResults, ...movieResults]
+        const combined = [...uniqueLocalResults, ...tmdbResults, ...mappedAnimeResults, ...movieResults]
         const finalSeen = new Set<string>()
         const finalResults = combined.filter((m) => {
           if (finalSeen.has(m.id)) return false
@@ -2149,7 +2232,7 @@ function App() {
     } finally {
       setSearchLoading(false)
     }
-  }, [mapAniListToMovie, designMode, movies, tvShows, anime])
+  }, [mapAniListToMovie, designMode, searchMode, movies, tvShows, anime])
 
   useEffect(() => {
     if (
@@ -2267,6 +2350,9 @@ function App() {
           onSave={toggleSaved}
           onSearch={() => setScreen('search')}
           onSelectHero={setHomeHeroMovie}
+          invites={incomingInvites}
+          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+          onDismissInvite={dismissInvite}
           onMarkWatched={markWatchedMovie}
           onRemoveContinue={removeContinueMovie}
           onRemoveWatchlist={removeWatchlistMovie}
@@ -2306,6 +2392,9 @@ function App() {
           onSave={toggleSaved}
           onSearch={() => setScreen('search')}
           onSelectHero={setDramaHeroMovie}
+          invites={incomingInvites}
+          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+          onDismissInvite={dismissInvite}
           onMarkWatched={markWatchedMovie}
           onRemoveContinue={removeContinueMovie}
           onRemoveWatchlist={removeWatchlistMovie}
@@ -2417,7 +2506,19 @@ function App() {
           onProfile={openProfileOrLogin}
           profiles={profiles}
           designMode={designMode}
-          searchRecommendations={searchRecommendations}
+          searchRecommendations={
+            designMode === 'netflix'
+              ? searchMode === 'drama'
+                ? dramaList.length
+                  ? dramaList.slice(0, 18)
+                  : searchRecommendations
+                : anime.length
+                  ? anime.slice(0, 18)
+                  : searchRecommendations
+              : searchRecommendations
+          }
+          searchMode={searchMode}
+          onSearchModeChange={setSearchMode}
         />
       )}
 
@@ -2537,6 +2638,9 @@ function App() {
           onSignOut={signOut}
           profiles={profiles}
           designMode={designMode}
+          invites={incomingInvites}
+          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+          onDismissInvite={dismissInvite}
         />
       )}
 
@@ -2630,14 +2734,28 @@ function App() {
 
 function HeroTrailerPreview({ movie }: { movie: Movie }) {
   const [youtubeId, setYoutubeId] = useState<string | null>(null)
-  const [visible, setVisible] = useState(false)
+  const [started, setStarted] = useState(false)
+  const [trailerOn, setTrailerOn] = useState(true)
+  const [muted, setMuted] = useState(true)
+  const [playToken, setPlayToken] = useState(0)
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
-  // Resolve the trailer: anime use their AniList id directly, movies/TV are
+  // Reset the preview only when a genuinely different title opens. NOTE: this
+  // deliberately does NOT depend on movie.tmdbId — streaming hydration updates
+  // the tmdbId on the same title, and re-running here would restart a trailer
+  // the viewer had turned off.
+  useEffect(() => {
+    setStarted(false)
+    setTrailerOn(true)
+    setMuted(true)
+    setPlayToken(0)
+  }, [movie.id])
+
+  // Resolve the trailer id: anime use their AniList id directly, movies/TV are
   // looked up through KinoCheck (by TMDB/IMDb id).
   useEffect(() => {
     let active = true
     setYoutubeId(null)
-    setVisible(false)
 
     void fetchTrailerYoutubeId(movie).then((id) => {
       if (active) {
@@ -2650,37 +2768,115 @@ function HeroTrailerPreview({ movie }: { movie: Movie }) {
     }
   }, [movie.id, movie.tmdbId])
 
-  // Show the poster first, then reveal a muted ~15s trailer preview.
+  // Show the poster first, then play the trailer once automatically.
   useEffect(() => {
     if (!youtubeId) {
       return
     }
-
-    const startTimer = window.setTimeout(() => setVisible(true), 900)
-    const hideTimer = window.setTimeout(() => setVisible(false), 15000)
-
-    return () => {
-      window.clearTimeout(startTimer)
-      window.clearTimeout(hideTimer)
-    }
+    const startTimer = window.setTimeout(() => setStarted(true), 900)
+    return () => window.clearTimeout(startTimer)
   }, [youtubeId])
 
-  if (!youtubeId || !visible) {
+  // Listen for the YouTube player's "ended" event so the trailer reverts to the
+  // poster after playing once (instead of freezing on a black end frame).
+  useEffect(() => {
+    if (!trailerOn) {
+      return
+    }
+    const handleMessage = (event: MessageEvent) => {
+      if (typeof event.data !== 'string' || !event.origin.includes('youtube')) {
+        return
+      }
+      try {
+        const data = JSON.parse(event.data)
+        if (data.event === 'onStateChange' && data.info === 0) {
+          setTrailerOn(false)
+        }
+      } catch {
+        // ignore non-JSON player chatter
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [trailerOn, playToken])
+
+  const handleIframeLoad = () => {
+    // Subscribe to player events (needed to receive onStateChange over
+    // postMessage with enablejsapi).
+    iframeRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: 'listening', id: youtubeId, channel: 'widget' }),
+      '*',
+    )
+  }
+
+  const toggleMute = () => {
+    setMuted((current) => {
+      const next = !current
+      iframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func: next ? 'mute' : 'unMute', args: [] }),
+        '*',
+      )
+      return next
+    })
+  }
+
+  const toggleTrailer = () => {
+    if (trailerOn) {
+      // Turn the trailer off — the poster shows through.
+      setTrailerOn(false)
+    } else {
+      // Start it again from the top (muted so autoplay is allowed).
+      setMuted(true)
+      setPlayToken((token) => token + 1)
+      setTrailerOn(true)
+    }
+  }
+
+  if (!youtubeId || !started) {
     return null
   }
 
+  // No loop — the trailer plays through once on open.
   const src =
     `https://www.youtube-nocookie.com/embed/${youtubeId}` +
-    `?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0&loop=1&playlist=${youtubeId}&start=8`
+    `?autoplay=1&mute=1&controls=0&modestbranding=1&playsinline=1&rel=0&start=8&enablejsapi=1`
 
   return (
-    <div className="hero-trailer-preview" aria-hidden="true">
-      <iframe
-        src={src}
-        title="Trailer preview"
-        allow="autoplay; encrypted-media"
-        frameBorder="0"
-      />
+    <div className={`hero-trailer-preview${trailerOn ? ' is-playing' : ''}`}>
+      {trailerOn && (
+        <iframe
+          key={`${youtubeId}-${playToken}`}
+          ref={iframeRef}
+          src={src}
+          title="Trailer preview"
+          allow="autoplay; encrypted-media"
+          frameBorder="0"
+          onLoad={handleIframeLoad}
+        />
+      )}
+
+      <div className="hero-trailer-controls">
+        {trailerOn && (
+          <button
+            type="button"
+            className="hero-trailer-btn"
+            onClick={toggleMute}
+            aria-label={muted ? 'Unmute trailer' : 'Mute trailer'}
+            title={muted ? 'Unmute' : 'Mute'}
+          >
+            {muted ? <VolumeX /> : <Volume2 />}
+          </button>
+        )}
+        <button
+          type="button"
+          className="hero-trailer-btn"
+          onClick={toggleTrailer}
+          aria-label={trailerOn ? 'Turn off trailer' : 'Play trailer'}
+          title={trailerOn ? 'Turn off trailer' : 'Play trailer'}
+        >
+          {trailerOn ? <Pause /> : <Play />}
+        </button>
+      </div>
     </div>
   )
 }
@@ -2739,6 +2935,9 @@ type HomeScreenProps = {
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
   screen?: Screen
+  invites?: WatchParty[]
+  onAcceptInvite?: (invite: WatchParty) => void
+  onDismissInvite?: (invite: WatchParty) => void
 }
 
 function HomeScreen({
@@ -2769,6 +2968,9 @@ function HomeScreen({
   profiles,
   designMode,
   screen,
+  invites = [],
+  onAcceptInvite,
+  onDismissInvite,
 }: HomeScreenProps) {
   const isDramaMode = screen === 'drama'
   const isNetflixMode = designMode === 'netflix'
@@ -2949,6 +3151,14 @@ function HomeScreen({
                 <button className="netflix-icon-btn" type="button" title="Search" onClick={onSearch}>
                   <Search size={22} />
                 </button>
+                {onAcceptInvite && onDismissInvite && (
+                  <NotificationBell
+                    variant="netflix"
+                    invites={invites}
+                    onAccept={onAcceptInvite}
+                    onDismiss={onDismissInvite}
+                  />
+                )}
                 {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
                   <ProfileMenu
                     currentUser={currentUser}
@@ -2989,9 +3199,14 @@ function HomeScreen({
               <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
                 <Search />
               </button>
-              <button className="mute-button" type="button" title="Muted">
-                <VolumeX />
-              </button>
+              {onAcceptInvite && onDismissInvite && (
+                <NotificationBell
+                  variant="apple"
+                  invites={invites}
+                  onAccept={onAcceptInvite}
+                  onDismiss={onDismissInvite}
+                />
+              )}
               {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
                 <ProfileMenu
                   currentUser={currentUser}
@@ -4118,7 +4333,10 @@ function SeasonEpisodeSection({
   movie: Movie
   onPlayEpisode: (season: number, episode: number) => void
 }) {
-  const seasons = useMemo(() => seasonsFor(movie), [movie])
+  const fallbackSeasons = useMemo(() => seasonsFor(movie), [movie])
+  const [tmdbSeasons, setTmdbSeasons] = useState<{ season: number; episodeCount: number }[]>([])
+  // Real TMDB seasons when available, otherwise the local guess.
+  const seasons = tmdbSeasons.length > 0 ? tmdbSeasons : fallbackSeasons
   const initialSeason = movie.streamSeason ?? seasons[0]?.season ?? 1
   const [selectedSeason, setSelectedSeason] = useState(() => initialSeason)
   const [tmdbEpisodes, setTmdbEpisodes] = useState<SeasonEpisode[]>([])
@@ -4126,12 +4344,43 @@ function SeasonEpisodeSection({
   const [highlightedEpisode, setHighlightedEpisode] = useState<number | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
 
+  // Anime always use AniList's single continuous season with absolute episode
+  // numbering (what the anime players expect). Never pull TMDB's multi-season
+  // structure for anime — it desyncs the episode list from what actually plays.
+  const isTvId =
+    !movie.isAnime && Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
+
+  // Load the accurate season list from TMDB so the dropdown/counts are correct.
+  useEffect(() => {
+    let active = true
+    setTmdbSeasons([])
+
+    if (isTvId && movie.tmdbId) {
+      void fetchTvSeasons(movie.tmdbId).then((list) => {
+        if (active) {
+          setTmdbSeasons(list)
+        }
+      })
+    }
+
+    return () => {
+      active = false
+    }
+  }, [movie.tmdbId, isTvId])
+
+  // Keep the selected season valid once the real season list arrives.
+  useEffect(() => {
+    if (seasons.length > 0 && !seasons.some((s) => s.season === selectedSeason)) {
+      setSelectedSeason(seasons[0].season)
+    }
+  }, [seasons, selectedSeason])
+
   // Load real per-episode covers/titles from TMDB when we have a tv id.
   useEffect(() => {
     let active = true
     setTmdbEpisodes([])
 
-    if (movie.tmdbId && (movie.tmdbType === 'tv' || isTvShow(movie))) {
+    if (isTvId && movie.tmdbId) {
       void fetchSeasonEpisodes(movie.tmdbId, selectedSeason).then((episodes) => {
         if (active) {
           setTmdbEpisodes(episodes)
@@ -4142,7 +4391,7 @@ function SeasonEpisodeSection({
     return () => {
       active = false
     }
-  }, [movie.tmdbId, movie.tmdbType, selectedSeason])
+  }, [movie.tmdbId, isTvId, selectedSeason])
 
   const activeSeason =
     seasons.find((season) => season.season === selectedSeason) ?? seasons[0]
@@ -4154,6 +4403,26 @@ function SeasonEpisodeSection({
   const episodeCount =
     tmdbEpisodes.length > 0 ? tmdbEpisodes.length : activeSeason.episodeCount
   const episodes = Array.from({ length: episodeCount }, (_, index) => index + 1)
+  // Append the next, not-yet-aired anime episode as a "coming soon" card.
+  if (
+    movie.isAnime &&
+    movie.nextEpisode &&
+    movie.nextEpisode.number > episodeCount
+  ) {
+    episodes.push(movie.nextEpisode.number)
+  }
+
+  const formatAirDate = (value: number | string) => {
+    const date = typeof value === 'number' ? new Date(value) : new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return ''
+    }
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
 
   const scrollRow = (direction: 1 | -1) => {
     const row = rowRef.current
@@ -4221,21 +4490,54 @@ function SeasonEpisodeSection({
         <div ref={rowRef} className="episode-row episode-row-v2">
           {episodes.map((episode) => {
             const data = tmdbEpisodes.find((item) => item.number === episode)
+            // AniList exposes real per-episode artwork/titles via
+            // streamingEpisodes (in episode order).
+            const animeEp = movie.isAnime
+              ? movie.animeEpisodes?.[episode - 1]
+              : undefined
+            // Prefer the real episode still: TMDB still → AniList episode
+            // thumbnail → fall back to the show art (proxied for anime).
             const cover =
-              data?.still || movie.still || movie.hero || movie.poster
-            const name = data?.name || episodeTitle(selectedSeason, episode)
+              data?.still ||
+              animeEp?.thumbnail ||
+              (movie.isAnime
+                ? proxiedAnimeImage(movie.still || movie.hero || movie.poster)
+                : movie.still || movie.hero || movie.poster)
+            const name =
+              data?.name || animeEp?.title || episodeTitle(selectedSeason, episode)
             const overview =
               data?.overview || episodeSynopsis(movie, selectedSeason, episode)
             const runtime =
               data?.runtime || episodeRuntime(movie, selectedSeason, episode)
 
+            // "Coming soon" detection: a future TMDB air_date, or the anime's
+            // next-airing episode.
+            const animeUpcoming =
+              movie.isAnime && movie.nextEpisode?.number === episode
+            const tmdbUpcoming =
+              !!data?.airDate && new Date(data.airDate).getTime() > Date.now()
+            const upcoming = animeUpcoming || tmdbUpcoming
+            const comingDate = animeUpcoming
+              ? movie.nextEpisode?.airingAt
+                ? formatAirDate(movie.nextEpisode.airingAt * 1000)
+                : ''
+              : data?.airDate
+                ? formatAirDate(data.airDate)
+                : ''
+
             return (
               <button
-                className={`episode-card-v2${episode === highlightedEpisode ? ' episode-highlighted' : ''}`}
+                className={`episode-card-v2${episode === highlightedEpisode ? ' episode-highlighted' : ''}${upcoming ? ' episode-upcoming' : ''}`}
                 type="button"
                 key={`${selectedSeason}-${episode}`}
                 data-episode={episode}
-                onClick={() => onPlayEpisode(selectedSeason, episode)}
+                disabled={upcoming}
+                aria-disabled={upcoming}
+                onClick={() => {
+                  if (!upcoming) {
+                    onPlayEpisode(selectedSeason, episode)
+                  }
+                }}
               >
                 <span className="episode-thumb">
                   <img
@@ -4243,18 +4545,33 @@ function SeasonEpisodeSection({
                     alt=""
                     loading="lazy"
                     onError={(event) => {
-                      event.currentTarget.src = movie.still || movie.hero || movie.poster || fallbackPosterForRank(movie.rank)
+                      const showArt = movie.isAnime
+                        ? proxiedAnimeImage(movie.hero || movie.poster || movie.still)
+                        : movie.still || movie.hero || movie.poster
+                      // Avoid an error loop if the fallback is the same source.
+                      if (showArt && event.currentTarget.src !== showArt) {
+                        event.currentTarget.src = showArt
+                      } else {
+                        event.currentTarget.src = fallbackPosterForRank(movie.rank)
+                      }
                     }}
                   />
                 </span>
                 <span className="episode-body">
-                  <small className="episode-eyebrow">EPISODE {episode}</small>
+                  <small className="episode-eyebrow">
+                    EPISODE {episode}
+                    {upcoming && <span className="episode-soon-tag">Coming soon</span>}
+                  </small>
                   <strong className="episode-name">{name}</strong>
-                  <em className="episode-desc">{overview}</em>
+                  <em className="episode-desc">
+                    {upcoming && comingDate
+                      ? `Premieres ${comingDate}`
+                      : overview}
+                  </em>
                   <span className="episode-foot">
                     <span className="episode-time">
                       <RefreshCcw />
-                      {runtime}
+                      {upcoming ? (comingDate || 'Coming soon') : runtime}
                     </span>
                     <MoreHorizontal />
                   </span>
@@ -4596,13 +4913,29 @@ function WatchScreen({
   onStreamProviderChange,
   designMode,
 }: WatchScreenProps) {
-  const isAnimeMovie = movie.isAnime || movie.type === 'Anime' || movie.genres.includes('Anime') || movie.genres.includes('Animation') || designMode === 'netflix'
+  // A TMDB title (drama, K/C-drama, regular movie/series) is anything that
+  // isn't flagged as anime and has no AniList id but does have a TMDB id. These
+  // must stream from the TMDB-based providers, never the AniList anime players.
+  const isTmdbTitle = !movie.isAnime && !movie.anilistId && !!movie.tmdbId
+  const isAnimeMovie =
+    !isTmdbTitle &&
+    (movie.isAnime ||
+      movie.type === 'Anime' ||
+      movie.genres.includes('Anime') ||
+      movie.genres.includes('Animation') ||
+      designMode === 'netflix')
 
   const animeProviderIds: StreamProvider[] = ['megaplay', 'animeplay']
 
-  const activeProviderId = isAnimeMovie && !animeProviderIds.includes(streamProvider)
-    ? 'megaplay'
-    : streamProvider
+  const activeProviderId = isAnimeMovie
+    ? animeProviderIds.includes(streamProvider)
+      ? streamProvider
+      : 'megaplay'
+    : // Non-anime (drama / movie / TV): never use an AniList-only provider —
+      // fall back to the TMDB player so the TMDB id is used to stream.
+      animeProviderIds.includes(streamProvider)
+      ? 'vidking'
+      : streamProvider
 
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
   const [episode, setEpisode] = useState(movie.streamEpisode ?? 1)
@@ -4629,7 +4962,31 @@ function WatchScreen({
   const opensExternally =
     activeProviderId === 'multiembed' || activeProviderId === 'multiembed-vip'
 
-  const watchSeasons = useMemo(() => seasonsFor(movie), [movie])
+  const fallbackWatchSeasons = useMemo(() => seasonsFor(movie), [movie])
+  const [tmdbWatchSeasons, setTmdbWatchSeasons] = useState<
+    { season: number; episodeCount: number }[]
+  >([])
+  const watchSeasons =
+    tmdbWatchSeasons.length > 0 ? tmdbWatchSeasons : fallbackWatchSeasons
+
+  const watchIsTvId =
+    !isAnimeMovie && Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
+
+  useEffect(() => {
+    let active = true
+    setTmdbWatchSeasons([])
+    if (watchIsTvId && movie.tmdbId) {
+      void fetchTvSeasons(movie.tmdbId).then((list) => {
+        if (active) {
+          setTmdbWatchSeasons(list)
+        }
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [movie.tmdbId, watchIsTvId])
+
   const activeWatchSeason =
     watchSeasons.find((entry) => entry.season === season) ?? watchSeasons[0]
   const episodeNumbers = activeWatchSeason
@@ -4900,6 +5257,8 @@ type SearchScreenProps = {
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
   searchRecommendations: Movie[]
+  searchMode: 'anime' | 'drama'
+  onSearchModeChange: (mode: 'anime' | 'drama') => void
 }
 
 function SearchScreen({
@@ -4918,6 +5277,8 @@ function SearchScreen({
   profiles,
   designMode,
   searchRecommendations,
+  searchMode,
+  onSearchModeChange,
 }: SearchScreenProps) {
   useEffect(() => {
     const trimmed = query.trim()
@@ -4992,6 +5353,30 @@ function SearchScreen({
               <Mic size={20} />
             </button>
           </div>
+          <div className="search-mode-toggle" role="group" aria-label="Search type">
+            <button
+              type="button"
+              className={searchMode === 'anime' ? 'active' : ''}
+              aria-pressed={searchMode === 'anime'}
+              onClick={() => {
+                onSearchModeChange('anime')
+                if (query.trim()) onSearch(query)
+              }}
+            >
+              Anime
+            </button>
+            <button
+              type="button"
+              className={searchMode === 'drama' ? 'active' : ''}
+              aria-pressed={searchMode === 'drama'}
+              onClick={() => {
+                onSearchModeChange('drama')
+                if (query.trim()) onSearch(query)
+              }}
+            >
+              Drama
+            </button>
+          </div>
         </div>
       ) : (
         <header className="search-header">
@@ -5014,7 +5399,9 @@ function SearchScreen({
 
           {!query && (
             <div className="netflix-recommended-panel">
-              <h2 className="netflix-recommended-title">Recommended Shows & Movies</h2>
+              <h2 className="netflix-recommended-title">
+                Recommended {searchMode === 'drama' ? 'Dramas' : 'Anime'}
+              </h2>
               <div className="netflix-search-list">
                 {searchRecommendations.map(renderNetflixSearchItem)}
               </div>
@@ -7066,16 +7453,42 @@ function PosterImage({
   className?: string
   alt?: string
 }) {
-  // Prefer the Top-Posters proxy (keys live server-side); fall back to the
-  // original artwork if the proxy has no poster for this title.
-  const [failed, setFailed] = useState(() => !hasTopPoster(movie))
+  // Ordered list of image sources to try. On each load error we advance to the
+  // next candidate. Anime skip the Top-Posters proxy (they're never indexed
+  // there — attempting it just adds a slow 404) and gain a proxied AniList
+  // fallback so a flaky AniList CDN still resolves through our cached origin.
+  const candidates = useMemo(() => {
+    const list: string[] = []
+    const direct = cleanImageUrl(movie.poster)
+
+    if (movie.isAnime) {
+      if (direct) {
+        list.push(direct)
+        list.push(proxiedAnimeImage(direct))
+      }
+    } else {
+      if (hasTopPoster(movie)) {
+        list.push(topPosterUrl(movie))
+      }
+      if (direct) {
+        list.push(direct)
+      }
+    }
+
+    if (fallback) {
+      list.push(fallback)
+    }
+
+    return list.filter((entry, index) => Boolean(entry) && list.indexOf(entry) === index)
+  }, [movie.id, movie.tmdbId, movie.isAnime, movie.poster, fallback])
+
+  const [index, setIndex] = useState(0)
 
   useEffect(() => {
-    setFailed(!hasTopPoster(movie))
-  }, [movie.id, movie.tmdbId])
+    setIndex(0)
+  }, [candidates])
 
-  const primary = failed ? '' : topPosterUrl(movie)
-  const src = primary || fallback || fallbackPosterForRank(movie.rank)
+  const src = candidates[index] || fallbackPosterForRank(movie.rank)
 
   return (
     <img
@@ -7083,7 +7496,8 @@ function PosterImage({
       src={src}
       alt={alt}
       loading="lazy"
-      onError={() => setFailed(true)}
+      decoding="async"
+      onError={() => setIndex((current) => current + 1)}
     />
   )
 }
@@ -7760,6 +8174,109 @@ function BottomNav({
   )
 }
 
+function NotificationBell({
+  invites,
+  onAccept,
+  onDismiss,
+  variant,
+}: {
+  invites: WatchParty[]
+  onAccept: (invite: WatchParty) => void
+  onDismiss: (invite: WatchParty) => void
+  variant: 'apple' | 'netflix'
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    const handlePointer = (event: Event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handlePointer)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handlePointer)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [open])
+
+  const count = invites.length
+
+  return (
+    <div className={`notif-menu notif-menu-${variant}`} ref={rootRef}>
+      <button
+        className="notif-trigger"
+        type="button"
+        title="Notifications"
+        aria-label={`Notifications${count ? ` (${count})` : ''}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Bell size={22} strokeWidth={2.2} />
+        {count > 0 && <span className="bell-badge">{count}</span>}
+      </button>
+
+      {open && (
+        <div className="notif-dropdown" role="menu">
+          <div className="notif-heading">Notifications</div>
+          {count === 0 ? (
+            <div className="notif-empty">You&apos;re all caught up.</div>
+          ) : (
+            invites.map((invite) => (
+              <div className="notif-item" key={invite.id} role="menuitem">
+                <span className="notif-thumb">
+                  <img
+                    src={invite.movie?.poster || invite.movie?.still || invite.movie?.hero || ''}
+                    alt=""
+                    loading="lazy"
+                  />
+                </span>
+                <div className="notif-item-body">
+                  <strong className="notif-item-title">Watch party invite</strong>
+                  <span className="notif-item-text">
+                    <strong>{invite.host_email}</strong> invited you to watch{' '}
+                    <strong>{invite.movie?.title}</strong>
+                  </span>
+                  <div className="notif-item-actions">
+                    <button
+                      className="notif-join"
+                      type="button"
+                      onClick={() => {
+                        onAccept(invite)
+                        setOpen(false)
+                      }}
+                    >
+                      Join
+                    </button>
+                    <button
+                      className="notif-dismiss"
+                      type="button"
+                      onClick={() => onDismiss(invite)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 type ProfileMenuProps = {
   currentUser: UserInfo | null
   profiles: UserProfile[]
@@ -7949,6 +8466,9 @@ function DesktopNav({
   onSignOut,
   profiles,
   designMode,
+  invites,
+  onAcceptInvite,
+  onDismissInvite,
 }: {
   active: PrimaryTab
   onHome: () => void
@@ -7969,6 +8489,9 @@ function DesktopNav({
   onSignOut: () => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
+  invites: WatchParty[]
+  onAcceptInvite: (invite: WatchParty) => void
+  onDismissInvite: (invite: WatchParty) => void
 }) {
   const profileMenuProps = {
     currentUser,
@@ -8051,10 +8574,12 @@ function DesktopNav({
 
           {/* Bottom Actions: Notifications & Profile */}
           <div className="netflix-sidebar-bottom">
-            <button className="netflix-sidebar-btn bell-btn" type="button" title="Notifications">
-              <Bell size={22} strokeWidth={2.2} />
-              <span className="bell-badge">7</span>
-            </button>
+            <NotificationBell
+              variant="netflix"
+              invites={invites}
+              onAccept={onAcceptInvite}
+              onDismiss={onDismissInvite}
+            />
             <ProfileMenu variant="netflix" {...profileMenuProps} />
           </div>
         </div>
@@ -8098,8 +8623,9 @@ function DesktopNav({
               className="apple-nav-link apple-nav-anime-link"
               type="button"
               onClick={onGoAnime}
+              title="Switch to Anime / Drama"
             >
-              Anime
+              A/D
             </button>
             <button
               className="apple-nav-icon-btn"
@@ -8111,6 +8637,12 @@ function DesktopNav({
               <Search size={18} />
             </button>
           </div>
+          <NotificationBell
+            variant="apple"
+            invites={invites}
+            onAccept={onAcceptInvite}
+            onDismiss={onDismissInvite}
+          />
           <ProfileMenu variant="apple" {...profileMenuProps} />
         </>
       )}

@@ -36,3 +36,23 @@ export function topPosterUrl(movie: Movie): string {
 
   return ''
 }
+
+/**
+ * Routes an AniList cover-art URL through our own image proxy (edge-cached),
+ * so anime posters stay fast/reachable even when the AniList CDN is slow or
+ * blocked on the viewer's network. Non-AniList URLs are returned unchanged.
+ */
+export function proxiedAnimeImage(url: string): string {
+  if (!url) {
+    return ''
+  }
+  try {
+    const host = new URL(url).hostname
+    if (host === 's4.anilist.co' || host.endsWith('.anilist.co')) {
+      return `/api/img?url=${encodeURIComponent(url)}`
+    }
+  } catch {
+    return url
+  }
+  return url
+}
