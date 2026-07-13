@@ -13769,3 +13769,46 @@ a.watch-option-card {
     max-height: 56vh;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Pull-to-refresh indicator (mobile / WebView). Sits pinned to the top-center
+   and slides in as the user drags down from the top of the scroll container.
+--------------------------------------------------------------------------- */
+.pull-refresh {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 6px);
+  left: 50%;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(18, 18, 20, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-44px);
+  transition: opacity 0.15s ease;
+}
+
+.pull-refresh.visible {
+  opacity: 1;
+}
+
+.pull-refresh-spinner {
+  display: grid;
+  place-items: center;
+  line-height: 0;
+}
+
+.pull-refresh.refreshing .pull-refresh-spinner {
+  animation: pullRefreshSpin 0.8s linear infinite;
+}
+
+@keyframes pullRefreshSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

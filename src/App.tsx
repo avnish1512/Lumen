@@ -3,6 +3,7 @@ import {
   type FormEvent,
   type MouseEvent,
   type PointerEvent,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -978,6 +979,110 @@ async function fetchAnimeRails(): Promise<AnimeHomeExtras> {
 type UserProfile = {
   name: string
   avatarColor: string
+}
+
+// Pull-to-refresh for the WebView / mobile web app. Native browser pull-to-
+// refresh is disabled inside the Expo WebView, so we replicate it: when the
+// scroll container is already at the top and the user drags down past a
+// threshold, we reload the app.
+function PullToRefresh({ containerRef }: { containerRef: RefObject<HTMLElement | null> }) {
+  const [distance, setDistance] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const gesture = useRef({ startY: null as number | null, dist: 0, active: false })
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) {
+      return
+    }
+
+    const THRESHOLD = 72
+    const MAX = 120
+
+    const scrollTopNow = () =>
+      el.scrollHeight > el.clientHeight + 1
+        ? el.scrollTop
+        : window.scrollY || document.documentElement.scrollTop || 0
+
+    const onStart = (event: TouchEvent) => {
+      if (refreshing || event.touches.length !== 1 || scrollTopNow() > 0) {
+        gesture.current.startY = null
+        return
+      }
+      gesture.current.startY = event.touches[0].clientY
+      gesture.current.active = false
+    }
+
+    const onMove = (event: TouchEvent) => {
+      const state = gesture.current
+      if (state.startY === null || refreshing) {
+        return
+      }
+      const dy = event.touches[0].clientY - state.startY
+      // Cancel if the user scrolls up or the container is no longer at the top.
+      if (dy <= 0 || scrollTopNow() > 0) {
+        if (state.active) {
+          state.active = false
+          state.dist = 0
+          setDistance(0)
+        }
+        state.startY = event.touches[0].clientY
+        return
+      }
+      state.active = true
+      const pulled = Math.min(MAX, dy * 0.5)
+      state.dist = pulled
+      setDistance(pulled)
+      // Prevent the native rubber-band scroll while we own the gesture.
+      event.preventDefault()
+    }
+
+    const finish = () => {
+      const state = gesture.current
+      if (state.startY === null) {
+        return
+      }
+      const trigger = state.active && state.dist >= THRESHOLD
+      state.startY = null
+      state.active = false
+      state.dist = 0
+      setDistance(0)
+      if (trigger) {
+        setRefreshing(true)
+        window.setTimeout(() => window.location.reload(), 450)
+      }
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', finish, { passive: true })
+    el.addEventListener('touchcancel', finish, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', finish)
+      el.removeEventListener('touchcancel', finish)
+    }
+  }, [containerRef, refreshing])
+
+  const visible = distance > 0 || refreshing
+  const offset = refreshing ? 16 : Math.round(distance) - 44
+  const rotation = Math.min(360, (distance / 72) * 360)
+
+  return (
+    <div
+      className={`pull-refresh${visible ? ' visible' : ''}${refreshing ? ' refreshing' : ''}`}
+      style={{ transform: `translateX(-50%) translateY(${offset}px)` }}
+      aria-hidden={!visible}
+    >
+      <span
+        className="pull-refresh-spinner"
+        style={refreshing ? undefined : { transform: `rotate(${rotation}deg)` }}
+      >
+        <RefreshCcw size={22} />
+      </span>
+    </div>
+  )
 }
 
 function App() {
@@ -2333,6 +2438,7 @@ function App() {
       className={`app-shell ${designMode}-theme ${navScrolled ? 'nav-scrolled' : ''}`}
       style={appShellStyle}
     >
+      <PullToRefresh containerRef={appShellRef} />
       {screen === 'home' && featuredMovie && (
         <HomeScreen
           screen={screen}
