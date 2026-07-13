@@ -12521,6 +12521,37 @@ a.watch-option-card {
    dropdown (same menu as desktop). Size the trigger like the round avatar.
    ========================================================================== */
 @media (max-width: 899px) {
+  /* Match the anime UI header: evenly spaced, icon-style controls. */
+  .apple-theme .home-header .header-actions {
+    gap: 20px;
+  }
+
+  /* Search: transparent icon button with a 30px glyph (same as anime). */
+  .apple-theme .home-header .header-actions .mobile-search-btn {
+    width: auto;
+    height: auto;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .apple-theme .home-header .header-actions .mobile-search-btn svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* Notification bell: 44px trigger with a 28px glyph (same as anime). */
+  .apple-theme .home-header .header-actions .notif-menu-apple .notif-trigger {
+    width: 44px;
+    height: 44px;
+  }
+
+  .apple-theme .home-header .header-actions .notif-menu-apple .notif-trigger svg {
+    width: 28px;
+    height: 28px;
+  }
+
   .apple-theme .home-header .header-actions .profile-menu-apple {
     position: relative;
     display: inline-flex;
@@ -12528,9 +12559,10 @@ a.watch-option-card {
     z-index: 4000;
   }
 
+  /* Profile avatar: 42px round trigger (same as anime). */
   .apple-theme .home-header .header-actions .apple-nav-profile {
-    width: 58px;
-    height: 58px;
+    width: 42px;
+    height: 42px;
     padding: 0;
     display: grid;
     place-items: center;

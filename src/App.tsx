@@ -3405,13 +3405,6 @@ function HomeScreen({
               </button>
             )}
           </div>
-
-          {designMode === 'apple' && (
-            <button className="hero-search" type="button" onClick={onSearch}>
-              <Search />
-              <span>Search Lumen</span>
-            </button>
-          )}
         </div>
 
         <div className="carousel-dots" aria-label="Featured movies">
