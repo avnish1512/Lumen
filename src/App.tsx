@@ -2742,20 +2742,6 @@ function App() {
   )
 }
 
-// Lumen brand swoosh mark (inline so it inherits currentColor). Matches the
-// arrow in the Lumen wordmark logo used for the app icon.
-function LumenMark({ size = 22 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 96 72" width={size} height={size} fill="none" aria-hidden="true">
-      <g stroke="currentColor" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 50 C9 62 26 66 36 54" />
-        <path d="M20 54 C34 36 52 28 76 24" />
-      </g>
-      <path d="M60 12 L84 22 L74 46 Z" fill="currentColor" />
-    </svg>
-  )
-}
-
 function HeroTrailerPreview({ movie }: { movie: Movie }) {
   const [youtubeId, setYoutubeId] = useState<string | null>(null)
   const [started, setStarted] = useState(false)
@@ -8120,7 +8106,7 @@ function BottomNav({
             onClick={onGoLumen}
             title="Switch to Lumen"
           >
-            <LumenMark size={22} />
+            <img className="lumen-tab-icon" src="/icon.jpeg" alt="" />
             <span>Lumen</span>
           </button>
         </nav>

@@ -12063,6 +12063,13 @@ a.watch-option-card {
   height: 24px;
 }
 
+.netflix-tab-bar .netflix-tab .lumen-tab-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
 .netflix-tab-bar .netflix-tab-avatar {
   width: 26px;
   height: 26px;
