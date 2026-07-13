@@ -13634,7 +13634,7 @@ a.watch-option-card {
 }
 
 .notif-empty {
-  padding: 18px 12px 22px;
+  padding: 12px 12px 14px;
   color: rgba(255, 255, 255, 0.55);
   font-size: 13px;
   text-align: center;
@@ -13726,14 +13726,18 @@ a.watch-option-card {
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* On small screens the dropdown anchors to the right of the viewport. */
+/* On small screens the dropdown anchors to the right of the viewport, sitting
+   BELOW the header row (so the profile avatar doesn't overlap its corner) and
+   capped to a compact width instead of stretching across the screen. */
 @media (max-width: 899px) {
   .notif-menu-netflix .notif-dropdown,
   .notif-menu-apple .notif-dropdown {
     position: fixed;
-    top: 64px;
+    top: calc(env(safe-area-inset-top, 20px) + 80px);
     right: 12px;
     left: auto;
     bottom: auto;
+    width: min(300px, calc(100vw - 24px));
+    max-height: 56vh;
   }
 }
