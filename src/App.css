@@ -13881,7 +13881,7 @@ a.watch-option-card {
     z-index: 2;
     display: flex;
     justify-content: center;
-    padding-top: calc(env(safe-area-inset-top, 20px) + 34px);
+    padding-top: calc(env(safe-area-inset-top, 20px) + 41px);
   }
 
   .mobile-login-logo {
@@ -13904,7 +13904,7 @@ a.watch-option-card {
     gap: 18px;
     /* Extra bottom padding lifts the whole group (tagline → terms) up from the
        screen edge so it sits higher, matching the reference. */
-    padding: 24px 26px calc(env(safe-area-inset-bottom, 16px) + 12vh);
+    padding: 20px 26px calc(env(safe-area-inset-bottom, 16px) + 8vh);
   }
 
   /* Give the tagline breathing room above so the button group lands in the
