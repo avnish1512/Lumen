@@ -5985,7 +5985,7 @@ function LoginScreen({
         }}
       >
         <div className="mobile-login-top">
-          <img className="mobile-login-logo" src="/icon.jpeg" alt="Lumen" />
+          <img className="mobile-login-logo" src="/lumen-logo.svg" alt="Lumen" />
         </div>
 
         <div className="mobile-login-panel">
