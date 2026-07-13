@@ -372,6 +372,16 @@ function useHeroSwipe(
         return
       }
 
+      // Never hijack taps that land on interactive controls (Play, More Info,
+      // Add, carousel dots, trailer buttons, search…). Calling
+      // setPointerCapture on the hero would retarget their click event to the
+      // hero container, so the buttons' own onClick never fires.
+      const target = event.target as HTMLElement | null
+      if (target?.closest('button, a, input, select, textarea, [role="button"]')) {
+        swipeStartRef.current = null
+        return
+      }
+
       swipeStartRef.current = {
         x: event.clientX,
         y: event.clientY,
