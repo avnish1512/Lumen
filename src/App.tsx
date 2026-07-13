@@ -25,6 +25,7 @@ import {
   ThumbsUp,
   Library,
   LoaderCircle,
+  Mail,
   Mic,
   MoreHorizontal,
   Pause,
@@ -5652,6 +5653,9 @@ function LoginScreen({
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Mobile (numi-style) login: the email/password form is hidden until the
+  // user taps "Login" or the email button.
+  const [mobileEmailOpen, setMobileEmailOpen] = useState(false)
 
   // Admin "Manage Account" panel (main account only).
   const [manageOpen, setManageOpen] = useState(false)
@@ -5967,6 +5971,121 @@ function LoginScreen({
         <div className="blob blob-purple"></div>
         <div className="blob blob-blue"></div>
         <div className="blob blob-cyan"></div>
+      </div>
+
+      {/* Mobile login (numi-style): sky background, logo, tagline, Login pill
+          and social buttons. Hidden on desktop via CSS. */}
+      <div className="mobile-login">
+        <div className="mobile-login-sky" aria-hidden="true">
+          <svg className="mobile-login-cloud" viewBox="0 0 200 90" fill="#ffffff" aria-hidden="true">
+            <path d="M55 78c-20 0-33-12-33-27 0-14 11-25 26-25 3 0 6 .4 9 1.3C63 12 76 4 91 4c18 0 33 12 36 29 1-.2 3-.3 4-.3 15 0 26 10 26 24 0 12-10 21-25 21H55z" />
+          </svg>
+        </div>
+
+        <div className="mobile-login-top">
+          <img className="mobile-login-logo" src="/icon.jpeg" alt="Lumen" />
+        </div>
+
+        <div className="mobile-login-panel">
+          <h2 className="mobile-login-tagline">Stream smarter.<br />Watch calmer.</h2>
+
+          {error && <div className="mobile-login-error">{error}</div>}
+
+          {mobileEmailOpen ? (
+            <form onSubmit={handleFormSubmit} className="mobile-login-form">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email address"
+                disabled={loading}
+                required
+              />
+              <div className="mobile-login-password">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  disabled={loading}
+                  required
+                />
+                <button
+                  type="button"
+                  className="mobile-login-eye"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+              <button className="mobile-login-primary" type="submit" disabled={loading}>
+                {loading ? <LoaderCircle className="spin-icon-btn" /> : <span>Login</span>}
+              </button>
+              <button
+                type="button"
+                className="mobile-login-back"
+                onClick={() => setMobileEmailOpen(false)}
+                disabled={loading}
+              >
+                Back
+              </button>
+            </form>
+          ) : (
+            <>
+              <button
+                className="mobile-login-primary"
+                type="button"
+                onClick={() => setMobileEmailOpen(true)}
+                disabled={loading}
+              >
+                <span>Login</span>
+              </button>
+
+              <div className="mobile-login-or"><span>OR</span></div>
+
+              <div className="mobile-login-socials">
+                <button
+                  type="button"
+                  className="mobile-login-social"
+                  onClick={() => handleSocialLogin('Google')}
+                  disabled={loading}
+                  aria-label="Continue with Google"
+                >
+                  <span className="mobile-login-g">G</span>
+                </button>
+                <button
+                  type="button"
+                  className="mobile-login-social"
+                  onClick={() => handleSocialLogin('Apple')}
+                  disabled={loading}
+                  aria-label="Continue with Apple"
+                >
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
+                    <path d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.9-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.94-3.94.94-.82 0-2.06-.92-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.82 3.16-.47 7.84 1.3 10.41.87 1.26 1.9 2.67 3.25 2.62 1.3-.05 1.79-.84 3.36-.84 1.56 0 2.01.84 3.38.81 1.4-.02 2.28-1.28 3.13-2.55.99-1.46 1.4-2.87 1.42-2.94-.03-.01-2.72-1.04-2.75-4.13z" />
+                    <path d="M14.9 4.7c.72-.87 1.2-2.08 1.07-3.28-1.03.04-2.28.69-3.02 1.56-.66.77-1.24 2-1.09 3.18 1.15.09 2.32-.59 3.04-1.46z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="mobile-login-social"
+                  onClick={() => setMobileEmailOpen(true)}
+                  disabled={loading}
+                  aria-label="Continue with email"
+                >
+                  <Mail size={22} />
+                </button>
+              </div>
+            </>
+          )}
+
+          <p className="mobile-login-terms">
+            By using Lumen you agree to Lumen&apos;s{' '}
+            <a href="#privacy" onClick={(e) => e.preventDefault()}>Privacy Policy</a> &amp;{' '}
+            <a href="#terms" onClick={(e) => e.preventDefault()}>Terms of Service</a>
+          </p>
+        </div>
       </div>
 
       <header className="login-header" style={{ justifyContent: 'center' }}>

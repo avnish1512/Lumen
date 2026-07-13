@@ -13844,3 +13844,257 @@ a.watch-option-card {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ---------------------------------------------------------------------------
+   Mobile login (numi-style): sky/cloud/grass background, logo, tagline, a
+   white "Login" pill, OR divider and three outlined social buttons.
+   Shown only on mobile; desktop keeps the glass card.
+--------------------------------------------------------------------------- */
+.login-screen .mobile-login {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .login-screen .mobile-login {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Sky (top) fading down into grass (bottom), like the reference. */
+    background: linear-gradient(
+      180deg,
+      #4a97e0 0%,
+      #6fb0e8 34%,
+      #a9cfe0 58%,
+      #c9dcc0 74%,
+      #7fa95c 100%
+    );
+  }
+
+  /* Hide the desktop glass card + header on mobile. */
+  .login-screen .login-header,
+  .login-screen .login-content,
+  .login-screen .login-background {
+    display: none;
+  }
+
+  .mobile-login-sky {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .mobile-login-cloud {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    width: 58%;
+    max-width: 320px;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 12px 24px rgba(120, 150, 180, 0.25));
+    opacity: 0.96;
+  }
+
+  .mobile-login-top {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    padding-top: calc(env(safe-area-inset-top, 20px) + 28px);
+  }
+
+  .mobile-login-logo {
+    height: 42px;
+    width: auto;
+    max-width: 60%;
+    object-fit: contain;
+    /* The wordmark is dark, so keep it crisp on the light sky. */
+    border-radius: 8px;
+  }
+
+  .mobile-login-panel {
+    position: relative;
+    z-index: 2;
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 24px 24px calc(env(safe-area-inset-bottom, 16px) + 22px);
+  }
+
+  .mobile-login-tagline {
+    margin: 0 0 6px;
+    color: #ffffff;
+    font-size: clamp(28px, 8vw, 36px);
+    font-weight: 700;
+    line-height: 1.12;
+    text-align: center;
+    letter-spacing: -0.01em;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 0.18);
+  }
+
+  .mobile-login-error {
+    width: 100%;
+    max-width: 420px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(220, 38, 38, 0.92);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .mobile-login-primary {
+    width: 100%;
+    max-width: 420px;
+    height: 58px;
+    border: 0;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #0a0a0b;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  }
+
+  .mobile-login-primary:active {
+    transform: scale(0.99);
+  }
+
+  .mobile-login-primary:disabled {
+    opacity: 0.7;
+  }
+
+  .mobile-login-or {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+  }
+
+  .mobile-login-socials {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .mobile-login-social {
+    flex: 1;
+    height: 56px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #ffffff;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .mobile-login-social:active {
+    transform: scale(0.97);
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .mobile-login-social:disabled {
+    opacity: 0.6;
+  }
+
+  .mobile-login-g {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    font-family: 'Product Sans', Arial, sans-serif;
+  }
+
+  .mobile-login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .mobile-login-form input {
+    width: 100%;
+    height: 54px;
+    padding: 0 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.9);
+    color: #0a0a0b;
+    font-size: 16px;
+    outline: none;
+  }
+
+  .mobile-login-form input::placeholder {
+    color: rgba(10, 10, 11, 0.5);
+  }
+
+  .mobile-login-password {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .mobile-login-password input {
+    padding-right: 48px;
+  }
+
+  .mobile-login-eye {
+    position: absolute;
+    right: 10px;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(10, 10, 11, 0.65);
+    cursor: pointer;
+  }
+
+  .mobile-login-back {
+    align-self: center;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+
+  .mobile-login-terms {
+    margin: 4px 0 0;
+    max-width: 340px;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  .mobile-login-terms a {
+    color: #ffffff;
+    text-decoration: underline;
+    font-weight: 600;
+  }
+}
