@@ -13902,7 +13902,9 @@ a.watch-option-card {
     flex-direction: column;
     align-items: center;
     gap: 18px;
-    padding: 24px 26px calc(env(safe-area-inset-bottom, 16px) + 26px);
+    /* Extra bottom padding lifts the whole group (tagline → terms) up from the
+       screen edge so it sits higher, matching the reference. */
+    padding: 24px 26px calc(env(safe-area-inset-bottom, 16px) + 12vh);
   }
 
   /* Give the tagline breathing room above so the button group lands in the
