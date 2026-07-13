@@ -13862,15 +13862,11 @@ a.watch-option-card {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    /* Sky (top) fading down into grass (bottom), like the reference. */
-    background: linear-gradient(
-      180deg,
-      #4a97e0 0%,
-      #6fb0e8 34%,
-      #a9cfe0 58%,
-      #c9dcc0 74%,
-      #7fa95c 100%
-    );
+    /* The actual image is set inline (with a readability gradient on top). */
+    background-color: #0a0a0b;
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: cover;
   }
 
   /* Hide the desktop glass card + header on mobile. */
@@ -13878,23 +13874,6 @@ a.watch-option-card {
   .login-screen .login-content,
   .login-screen .login-background {
     display: none;
-  }
-
-  .mobile-login-sky {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-
-  .mobile-login-cloud {
-    position: absolute;
-    top: 20%;
-    left: 50%;
-    width: 58%;
-    max-width: 320px;
-    transform: translateX(-50%);
-    filter: drop-shadow(0 12px 24px rgba(120, 150, 180, 0.25));
-    opacity: 0.96;
   }
 
   .mobile-login-top {

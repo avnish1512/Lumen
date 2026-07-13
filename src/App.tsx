@@ -5668,6 +5668,9 @@ function LoginScreen({
 
   const adminEmail = currentUser?.email ?? ''
 
+  // Login page background image (served from /public).
+  const loginBg = '/login-bg.jpeg'
+
   const loadAccounts = async () => {
     setAccounts(await listAccountsApi(adminEmail))
   }
@@ -5973,15 +5976,14 @@ function LoginScreen({
         <div className="blob blob-cyan"></div>
       </div>
 
-      {/* Mobile login (numi-style): sky background, logo, tagline, Login pill
-          and social buttons. Hidden on desktop via CSS. */}
-      <div className="mobile-login">
-        <div className="mobile-login-sky" aria-hidden="true">
-          <svg className="mobile-login-cloud" viewBox="0 0 200 90" fill="#ffffff" aria-hidden="true">
-            <path d="M55 78c-20 0-33-12-33-27 0-14 11-25 26-25 3 0 6 .4 9 1.3C63 12 76 4 91 4c18 0 33 12 36 29 1-.2 3-.3 4-.3 15 0 26 10 26 24 0 12-10 21-25 21H55z" />
-          </svg>
-        </div>
-
+      {/* Mobile login (numi-style): provided background image, logo, tagline,
+          Login pill and social buttons. Hidden on desktop via CSS. */}
+      <div
+        className="mobile-login"
+        style={{
+          backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.1) 42%, rgba(0,0,0,0.45) 74%, rgba(0,0,0,0.72) 100%), url(${loginBg})`,
+        }}
+      >
         <div className="mobile-login-top">
           <img className="mobile-login-logo" src="/icon.jpeg" alt="Lumen" />
         </div>
