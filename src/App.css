@@ -12120,7 +12120,28 @@ a.watch-option-card {
   }
 
   .netflix-theme .netflix-user-greeting {
-    font-size: 20px;
+    font-size: 24px;
+  }
+
+  /* Bigger tap targets in the mobile header row (search / notification /
+     profile) now that the Shows/Movies/Categories pills are gone. */
+  .netflix-theme .netflix-mobile-header-icons {
+    gap: 20px;
+  }
+
+  .netflix-theme .netflix-mobile-header-icons .netflix-icon-btn svg {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .netflix-theme .netflix-mobile-header-icons .notif-trigger {
+    width: 44px;
+    height: 44px;
+  }
+
+  .netflix-theme .netflix-mobile-header-icons .notif-trigger svg {
+    width: 28px;
+    height: 28px;
   }
 
   /* Issue 2 — profile avatar button + dropdown inside the header icons row. */
@@ -12137,9 +12158,9 @@ a.watch-option-card {
 
   .netflix-theme .netflix-mobile-header-icons .netflix-sidebar-avatar,
   .netflix-theme .netflix-mobile-header-icons .netflix-header-avatar-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
     overflow: hidden;
     padding: 0;
     border: none;

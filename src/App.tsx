@@ -2742,6 +2742,20 @@ function App() {
   )
 }
 
+// Lumen brand swoosh mark (inline so it inherits currentColor). Matches the
+// arrow in the Lumen wordmark logo used for the app icon.
+function LumenMark({ size = 22 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 96 72" width={size} height={size} fill="none" aria-hidden="true">
+      <g stroke="currentColor" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 50 C9 62 26 66 36 54" />
+        <path d="M20 54 C34 36 52 28 76 24" />
+      </g>
+      <path d="M60 12 L84 22 L74 46 Z" fill="currentColor" />
+    </svg>
+  )
+}
+
 function HeroTrailerPreview({ movie }: { movie: Movie }) {
   const [youtubeId, setYoutubeId] = useState<string | null>(null)
   const [started, setStarted] = useState(false)
@@ -3192,14 +3206,6 @@ function HomeScreen({
                   </button>
                 )}
               </div>
-            </div>
-            <div className="netflix-mobile-header-pills">
-              <button className="netflix-pill" type="button" onClick={onSearch}>Shows</button>
-              <button className="netflix-pill" type="button" onClick={onSearch}>Movies</button>
-              <button className="netflix-pill categories-pill" type="button">
-                <span>Categories</span>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
             </div>
           </header>
         ) : (
@@ -8114,7 +8120,7 @@ function BottomNav({
             onClick={onGoLumen}
             title="Switch to Lumen"
           >
-            <ArrowLeftRight />
+            <LumenMark size={22} />
             <span>Lumen</span>
           </button>
         </nav>
