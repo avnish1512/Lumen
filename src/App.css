@@ -11818,9 +11818,13 @@ a.watch-option-card {
 
 .home-hero .home-header {
   position: relative;
-  /* Must sit above .hero-copy (z-index 4) so the profile dropdown that lives
-     inside the header isn't painted under the hero title/copy. */
-  z-index: 50;
+  /* This header is positioned + z-indexed, so it forms its own stacking
+     context — the profile dropdown inside it (z-index 4000) is clamped to
+     THIS value relative to the hero's siblings. Keep it high enough to beat
+     the hero copy (4), carousel dots (4) AND the content rails / bars below
+     the hero (which use z-index up to ~100) so the open dropdown is never
+     painted under them. Stays below the fullscreen player/overlays (9999). */
+  z-index: 3000;
 }
 
 /* netflix-mobile-header stays position: fixed (see its own rule) — only ensure

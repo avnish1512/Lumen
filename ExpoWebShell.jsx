@@ -1,7 +1,10 @@
 /* global process */
 import Constants from 'expo-constants'
+import { useCallback, useRef, useState } from 'react'
 import { ActivityIndicator, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { WebView } from 'react-native-webview'
+
+const MAX_RETRIES = 5
 
 const fallbackHost = process.env.EXPO_PUBLIC_VITE_HOST || '192.168.31.5'
 const vitePort = process.env.EXPO_PUBLIC_VITE_PORT || '5173'
@@ -54,6 +57,26 @@ function ErrorView() {
 }
 
 export default function ExpoWebShell() {
+  const webViewRef = useRef(null)
+  // Bumping this key forces a fresh WebView instance, which reliably clears the
+  // iOS "network connection was lost" (-1005) state on the initial LAN load.
+  const [reloadKey, setReloadKey] = useState(0)
+  const retriesRef = useRef(0)
+
+  const retryLoad = useCallback(() => {
+    if (retriesRef.current >= MAX_RETRIES) {
+      return
+    }
+    retriesRef.current += 1
+    // Small delay so the dev server / network has a moment to settle.
+    setTimeout(() => setReloadKey((key) => key + 1), 800)
+  }, [])
+
+  const handleLoadEnd = useCallback(() => {
+    // A successful load resets the retry budget for future transient drops.
+    retriesRef.current = 0
+  }, [])
+
   return (
     <View style={styles.container}>
       <StatusBar
@@ -62,14 +85,21 @@ export default function ExpoWebShell() {
         translucent
       />
       <WebView
+        key={reloadKey}
+        ref={webViewRef}
         allowsFullscreenVideo
         allowsInlineMediaPlayback
         automaticallyAdjustContentInsets={false}
+        cacheEnabled={false}
         contentInsetAdjustmentBehavior="never"
         domStorageEnabled
         javaScriptEnabled
         mediaPlaybackRequiresUserAction={false}
         mixedContentMode="always"
+        onContentProcessDidTerminate={retryLoad}
+        onError={retryLoad}
+        onHttpError={retryLoad}
+        onLoadEnd={handleLoadEnd}
         originWhitelist={['*']}
         renderError={ErrorView}
         renderLoading={LoadingView}
