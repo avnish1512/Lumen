@@ -13885,11 +13885,13 @@ a.watch-option-card {
   }
 
   .mobile-login-logo {
-    height: 30px;
+    height: 34px;
     width: auto;
-    max-width: 55%;
+    max-width: 58%;
     object-fit: contain;
-    filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.3));
+    /* The provided logo is dark; recolor it to white so it reads on the photo
+       background. brightness(0) -> solid silhouette, invert(1) -> white. */
+    filter: brightness(0) invert(1) drop-shadow(0 2px 10px rgba(0, 0, 0, 0.35));
   }
 
   .mobile-login-panel {
