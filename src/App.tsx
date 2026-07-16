@@ -23,7 +23,6 @@ import {
   Heart,
   Home,
   Info,
-  ThumbsUp,
   Library,
   LoaderCircle,
   Mail,
@@ -488,122 +487,6 @@ function deviceLastActiveLabel(session: DeviceSession): string {
   const hours = Math.round(minutes / 60)
   if (hours < 24) return `Active ${hours} hr ago`
   const days = Math.round(hours / 24)
-  return `Active ${days} day${days === 1 ? '' : 's'} ago`
-}
-
-// ---------------------------------------------------------------------------
-// Manage Devices — logged-in device sessions (JioHotstar-style)
-// ---------------------------------------------------------------------------
-
-type DeviceKind = 'tv' | 'mobile' | 'tablet' | 'desktop'
-
-type LoggedInDevice = {
-  id: string
-  name: string
-  kind: DeviceKind
-  location: string
-  // Epoch ms of last activity. The current device is refreshed on each visit.
-  lastActive: number
-  // True for the device currently being used (cannot be listed as "log out").
-  current: boolean
-}
-
-const devicesKey = 'omdb.apple-tv-style.devices'
-
-function devicesKeyFor(email: string | undefined): string {
-  return email ? `${devicesKey}.${email.toLowerCase()}` : devicesKey
-}
-
-/** Best-effort detection of the current device from the user agent. */
-function detectCurrentDevice(): { name: string; kind: DeviceKind } {
-  if (typeof navigator === 'undefined') {
-    return { name: 'This device', kind: 'desktop' }
-  }
-  const ua = navigator.userAgent || ''
-  const isTablet = /iPad|Tablet/i.test(ua)
-  const isMobile = !isTablet && /Mobi|Android|iPhone/i.test(ua)
-  const kind: DeviceKind = isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop'
-
-  let os = 'Web'
-  if (/Windows/i.test(ua)) os = 'Windows'
-  else if (/Android/i.test(ua)) os = 'Android'
-  else if (/iPhone|iPad|iPod|Mac OS X/i.test(ua)) os = /Mac OS X/i.test(ua) && !isMobile && !isTablet ? 'Mac' : 'iOS'
-  else if (/Linux/i.test(ua)) os = 'Linux'
-
-  let browser = 'Browser'
-  if (/Edg\//i.test(ua)) browser = 'Edge'
-  else if (/Chrome\//i.test(ua)) browser = 'Chrome'
-  else if (/Firefox\//i.test(ua)) browser = 'Firefox'
-  else if (/Safari\//i.test(ua)) browser = 'Safari'
-
-  const name = kind === 'desktop' ? `${browser} on ${os}` : `${os} ${kind === 'tablet' ? 'Tablet' : 'Phone'}`
-  return { name, kind }
-}
-
-/**
- * Reads the stored device sessions for an account, seeding a realistic set on
- * first use and always ensuring the current device is present and refreshed.
- */
-function readDevicesFor(email: string | undefined): LoggedInDevice[] {
-  const current = detectCurrentDevice()
-  let list: LoggedInDevice[] = []
-  try {
-    const raw = window.localStorage.getItem(devicesKeyFor(email))
-    if (raw) {
-      list = JSON.parse(raw) as LoggedInDevice[]
-    }
-  } catch {
-    list = []
-  }
-
-  if (list.length === 0) {
-    // Seed a plausible multi-device history the first time (like the device
-    // list a returning streaming user would see).
-    const now = Date.now()
-    list = [
-      { id: 'seed-tv', name: 'Samsung Smart TV', kind: 'tv', location: 'Living Room', lastActive: now - 2 * 60 * 60 * 1000, current: false },
-      { id: 'seed-phone', name: 'iPhone 15', kind: 'mobile', location: 'Mumbai, IN', lastActive: now - 26 * 60 * 60 * 1000, current: false },
-    ]
-  }
-
-  // Upsert the current device (unique per detected name), mark it current and
-  // clear `current` on the others.
-  const currentId = `this-${current.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-  const now = Date.now()
-  const others = list
-    .filter((device) => device.id !== currentId)
-    .map((device) => ({ ...device, current: false }))
-  const currentDevice: LoggedInDevice = {
-    id: currentId,
-    name: current.name,
-    kind: current.kind,
-    location: 'This device',
-    lastActive: now,
-    current: true,
-  }
-  return [currentDevice, ...others]
-}
-
-function writeDevicesFor(email: string | undefined, devices: LoggedInDevice[]) {
-  try {
-    window.localStorage.setItem(devicesKeyFor(email), JSON.stringify(devices))
-  } catch {
-    // ignore quota / serialization errors
-  }
-}
-
-/** Human-readable "last active" label. */
-function formatLastActive(device: LoggedInDevice): string {
-  if (device.current) {
-    return 'Active now'
-  }
-  const diff = Date.now() - device.lastActive
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return 'Active just now'
-  if (minutes < 60) return `Active ${minutes} min ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `Active ${hours} hour${hours === 1 ? '' : 's'} ago`
-  const days = Math.floor(hours / 24)
   return `Active ${days} day${days === 1 ? '' : 's'} ago`
 }
 
@@ -6038,33 +5921,6 @@ function LoginScreen({
   // "Manage Devices" panel — logged-in sessions for this account.
   const [devicesOpen, setDevicesOpen] = useState(false)
   const [devices, setDevices] = useState<DeviceSession[]>([])
-
-  // "Manage Devices" panel — logged-in device sessions for this account.
-  const [devicesOpen, setDevicesOpen] = useState(false)
-  const [devices, setDevices] = useState<LoggedInDevice[]>([])
-
-  const openManageDevices = () => {
-    const list = readDevicesFor(currentUser?.email)
-    setDevices(list)
-    writeDevicesFor(currentUser?.email, list)
-    setDevicesOpen(true)
-  }
-
-  const logOutDevice = (id: string) => {
-    setDevices((current) => {
-      const next = current.filter((device) => device.id !== id)
-      writeDevicesFor(currentUser?.email, next)
-      return next
-    })
-  }
-
-  const logOutOtherDevices = () => {
-    setDevices((current) => {
-      const next = current.filter((device) => device.current)
-      writeDevicesFor(currentUser?.email, next)
-      return next
-    })
-  }
   const [accEmail, setAccEmail] = useState('')
   const [accPass, setAccPass] = useState('')
   const [accEditing, setAccEditing] = useState<string | null>(null)
@@ -6413,11 +6269,11 @@ function LoginScreen({
               <div className="device-list">
                 {devices.map((device) => (
                   <div key={device.id} className="device-row">
-                    <span className={`device-icon device-icon-${device.kind}`}>
-                      {device.kind === 'tv' && <Tv size={22} />}
-                      {device.kind === 'mobile' && <Smartphone size={22} />}
-                      {device.kind === 'tablet' && <Tablet size={22} />}
-                      {device.kind === 'desktop' && <Monitor size={22} />}
+                    <span className={`device-icon device-icon-${device.type}`}>
+                      {device.type === 'tv' && <Tv size={22} />}
+                      {device.type === 'mobile' && <Smartphone size={22} />}
+                      {device.type === 'tablet' && <Tablet size={22} />}
+                      {device.type === 'desktop' && <Monitor size={22} />}
                     </span>
                     <div className="device-info">
                       <span className="device-name">
@@ -6425,7 +6281,7 @@ function LoginScreen({
                         {device.current && <span className="device-current-tag">This device</span>}
                       </span>
                       <span className="device-meta">
-                        {device.location} • {formatLastActive(device)}
+                        {device.location} • {deviceLastActiveLabel(device)}
                       </span>
                     </div>
                     {device.current ? (
@@ -6434,7 +6290,7 @@ function LoginScreen({
                       <button
                         className="device-logout"
                         type="button"
-                        onClick={() => logOutDevice(device.id)}
+                        onClick={() => logoutDevice(device.id)}
                       >
                         <LogOut size={15} />
                         <span>Log out</span>
@@ -6448,7 +6304,7 @@ function LoginScreen({
                 <button
                   className="device-logout-all"
                   type="button"
-                  onClick={logOutOtherDevices}
+                  onClick={logoutOtherDevices}
                 >
                   Log out of all other devices
                 </button>
