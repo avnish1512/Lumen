@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Sparkles, Shuffle, ArrowRight, X } from 'lucide-react'
 import type { Movie } from '../omdb'
 import type { Category } from './types'
@@ -160,7 +161,7 @@ export function WatchRecommenderModal({
     onClose()
   }
 
-  return (
+  const overlay = (
     <div
       className={`watch-recommender ${designMode}-theme wr-overlay`}
       role="dialog"
@@ -209,6 +210,14 @@ export function WatchRecommenderModal({
       </div>
     </div>
   )
+
+  // Render the overlay through a portal to `document.body` so it always covers
+  // the full viewport. Without this, a `position: fixed` overlay is trapped by
+  // any transformed/positioned ancestor (e.g. the header cluster that hosts the
+  // icon-variant entry button uses `transform`), which would clip the modal.
+  return typeof document !== 'undefined'
+    ? createPortal(overlay, document.body)
+    : overlay
 }
 
 // -----------------------------------------------------------------------------
