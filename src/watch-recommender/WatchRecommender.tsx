@@ -154,7 +154,8 @@ export function WatchRecommenderModal({
   onOpenDetail,
   onClose,
 }: WatchRecommenderModalProps) {
-  const { state, selectCategory, shuffle, retry, reset } = useWatchRecommender()
+  const { state, selectCategory, selectGenre, shuffle, retry, reset } =
+    useWatchRecommender()
 
   const handleClose = () => {
     reset()
@@ -189,10 +190,21 @@ export function WatchRecommenderModal({
           designMode={designMode}
         />
 
+        {/* Preference refinement: genre chips derived from the fetched pool,
+            shown once a category has titles (Requirement 10). */}
+        {state.availableGenres.length > 0 && (
+          <GenrePicker
+            genres={state.availableGenres}
+            selected={state.genre}
+            onSelect={selectGenre}
+            designMode={designMode}
+          />
+        )}
+
         {/* State-dependent region — dedicated views selected on status. */}
         {state.status === 'loading' && <LoadingView />}
 
-        {state.status === 'empty' && <EmptyView />}
+        {state.status === 'empty' && <EmptyView genre={state.genre} />}
 
         {state.status === 'error' && (
           <ErrorView message={state.errorMessage} onRetry={retry} />
@@ -259,6 +271,64 @@ export function CategoryPicker({
           data-testid={`wr-category-${value}`}
         >
           {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// -----------------------------------------------------------------------------
+// Genre picker — preference refinement (Requirement 10)
+// -----------------------------------------------------------------------------
+
+export interface GenrePickerProps {
+  /** Distinct genres available in the fetched pool (e.g. Sci-Fi, Romance). */
+  genres: string[]
+  /** The currently selected genre, or `null` for "Any". */
+  selected: string | null
+  /** Called with the chosen genre, or `null` when "Any" is picked. */
+  onSelect: (genre: string | null) => void
+  designMode: 'apple' | 'netflix'
+}
+
+/**
+ * `GenrePicker` — optional preference refinement shown after a category has
+ * titles. Renders an "Any" chip (clears the filter, Req 10.3) plus one chip per
+ * available genre; selecting one restricts the recommendation to that genre
+ * (Req 10.1, 10.2).
+ */
+export function GenrePicker({
+  genres,
+  selected,
+  onSelect,
+  designMode,
+}: GenrePickerProps) {
+  return (
+    <div
+      className={`wr-genres ${designMode}-theme`}
+      role="group"
+      aria-label="Genre"
+      data-testid="wr-genres"
+    >
+      <button
+        type="button"
+        className={`wr-genre${selected === null ? ' is-selected' : ''}`}
+        aria-pressed={selected === null}
+        onClick={() => onSelect(null)}
+        data-testid="wr-genre-any"
+      >
+        Any
+      </button>
+      {genres.map((genre) => (
+        <button
+          key={genre}
+          type="button"
+          className={`wr-genre${selected === genre ? ' is-selected' : ''}`}
+          aria-pressed={selected === genre}
+          onClick={() => onSelect(genre)}
+          data-testid={`wr-genre-${genre.toLowerCase().replace(/\s+/g, '-')}`}
+        >
+          {genre}
         </button>
       ))}
     </div>
@@ -384,14 +454,23 @@ export function LoadingView() {
   )
 }
 
+export interface EmptyViewProps {
+  /** When set, the empty state is due to a genre filter (Req 10.4). */
+  genre?: string | null
+}
+
 /**
  * `EmptyView` — shown when retrieval succeeds but the pool contains no titles
- * (Req 8.2).
+ * (Req 8.2), or when a selected genre preference matches no titles (Req 10.4).
  */
-export function EmptyView() {
+export function EmptyView({ genre }: EmptyViewProps = {}) {
   return (
     <div className="wr-empty" data-testid="wr-empty" aria-live="polite">
-      <p>No recommendation available for that category.</p>
+      <p>
+        {genre
+          ? `No ${genre} titles here — try another genre.`
+          : 'No recommendation available for that category.'}
+      </p>
     </div>
   )
 }

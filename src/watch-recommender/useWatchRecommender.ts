@@ -41,9 +41,24 @@ export type RecommenderAction =
   | { type: 'shuffle'; recommendation: Movie }
   | { type: 'retry' }
   | { type: 'reset' }
-  | { type: 'resolved'; pool: Movie[]; recommendation: Movie }
+  | {
+      type: 'resolved'
+      pool: Movie[]
+      recommendation: Movie
+      basePool?: Movie[]
+      availableGenres?: string[]
+    }
   | { type: 'empty' }
   | { type: 'failed'; errorMessage: string }
+  // Preference refinement: re-filter the already-fetched `basePool` by a genre
+  // without re-fetching (Requirement 10). `recommendation` is null when the
+  // filtered pool is empty (Requirement 10.4).
+  | {
+      type: 'selectGenre'
+      genre: string | null
+      pool: Movie[]
+      recommendation: Movie | null
+    }
 
 // -----------------------------------------------------------------------------
 // Initial state
@@ -60,6 +75,9 @@ export const initialRecommenderState: RecommenderState = {
   pool: [],
   recommendation: null,
   errorMessage: null,
+  basePool: [],
+  availableGenres: [],
+  genre: null,
 }
 
 // -----------------------------------------------------------------------------
@@ -101,6 +119,9 @@ export function recommenderReducer(
         pool: [],
         recommendation: null,
         errorMessage: null,
+        basePool: [],
+        availableGenres: [],
+        genre: null,
       }
 
     // Re-select within the current pool. Only meaningful while `ready`; keeps
@@ -131,6 +152,9 @@ export function recommenderReducer(
         pool: [],
         recommendation: null,
         errorMessage: null,
+        basePool: [],
+        availableGenres: [],
+        genre: null,
       }
 
     // Return to the initial idle state (e.g. the picker/modal is closed).
@@ -140,8 +164,47 @@ export function recommenderReducer(
     // Retrieval settled with a usable pool and a chosen title. Only applied
     // while `loading`. Guards the `ready` invariant: an empty pool or missing
     // recommendation degrades to `empty` rather than an invalid `ready`.
-    case 'resolved':
+    case 'resolved': {
       if (state.status !== 'loading') {
+        return state
+      }
+      // Fresh fetch: the base pool defaults to the resolved pool, and the
+      // available genres are supplied by the hook (empty when not provided,
+      // e.g. from the reducer property test). A fresh category has no genre
+      // preference yet (Req 10.3).
+      const basePool = action.basePool ?? action.pool
+      const availableGenres = action.availableGenres ?? []
+      if (action.pool.length === 0 || action.recommendation === null) {
+        return {
+          ...state,
+          status: 'empty',
+          pool: [],
+          recommendation: null,
+          errorMessage: null,
+          basePool,
+          availableGenres,
+          genre: null,
+        }
+      }
+      return {
+        ...state,
+        status: 'ready',
+        pool: action.pool,
+        recommendation: action.recommendation,
+        errorMessage: null,
+        basePool,
+        availableGenres,
+        genre: null,
+      }
+    }
+
+    // Preference refinement: apply/clear a genre filter over the already-fetched
+    // `basePool` without re-fetching (Req 10.2, 10.3). A filtered pool with no
+    // titles degrades to `empty` while retaining the base pool and genre list so
+    // the viewer can pick another preference (Req 10.4). No-op if nothing has
+    // been fetched yet.
+    case 'selectGenre':
+      if (state.basePool.length === 0) {
         return state
       }
       if (action.pool.length === 0 || action.recommendation === null) {
@@ -151,6 +214,7 @@ export function recommenderReducer(
           pool: [],
           recommendation: null,
           errorMessage: null,
+          genre: action.genre,
         }
       }
       return {
@@ -159,6 +223,7 @@ export function recommenderReducer(
         pool: action.pool,
         recommendation: action.recommendation,
         errorMessage: null,
+        genre: action.genre,
       }
 
     // Retrieval succeeded but produced no titles. Only applied while `loading`.
@@ -173,6 +238,9 @@ export function recommenderReducer(
         pool: [],
         recommendation: null,
         errorMessage: null,
+        basePool: [],
+        availableGenres: [],
+        genre: null,
       }
 
     // Retrieval failed at the transport level. Only applied while `loading`.
@@ -187,6 +255,9 @@ export function recommenderReducer(
         pool: [],
         recommendation: null,
         errorMessage: action.errorMessage,
+        basePool: [],
+        availableGenres: [],
+        genre: null,
       }
 
     default:
@@ -203,6 +274,8 @@ import {
   buildCandidatePool,
   selectRecommendation,
   shuffleRecommendation,
+  extractGenres,
+  filterByGenre,
 } from './logic'
 import { fetchPoolInputs, PoolFetchError } from './adapter'
 
@@ -213,6 +286,8 @@ import { fetchPoolInputs, PoolFetchError } from './adapter'
 export interface UseWatchRecommender {
   state: RecommenderState
   selectCategory: (category: Category) => void
+  /** Apply (or clear, with `null`) a genre preference (Requirement 10). */
+  selectGenre: (genre: string | null) => void
   shuffle: () => void
   retry: () => void
   reset: () => void
@@ -279,7 +354,16 @@ export function useWatchRecommender(): UseWatchRecommender {
           dispatch({ type: 'empty' })
           return
         }
-        dispatch({ type: 'resolved', pool, recommendation })
+        // Derive the genre refinement options from the fetched pool so only
+        // genres that actually have titles are offered (Req 10.1).
+        const availableGenres = extractGenres(pool)
+        dispatch({
+          type: 'resolved',
+          pool,
+          recommendation,
+          basePool: pool,
+          availableGenres,
+        })
       })
       .catch((error: unknown) => {
         if (requestIdRef.current !== requestId) {
@@ -305,6 +389,20 @@ export function useWatchRecommender(): UseWatchRecommender {
     },
     [runFetch],
   )
+
+  // Apply (or clear) a genre preference by re-filtering the already-fetched
+  // `basePool` — no re-fetch (Req 10.2, 10.3). Picks a fresh recommendation from
+  // the filtered pool; an empty result degrades to `empty` in the reducer so the
+  // viewer can choose another preference (Req 10.4).
+  const selectGenre = useCallback((genre: string | null) => {
+    const { basePool } = stateRef.current
+    if (basePool.length === 0) {
+      return
+    }
+    const pool = filterByGenre(basePool, genre)
+    const recommendation = selectRecommendation(pool)
+    dispatch({ type: 'selectGenre', genre, pool, recommendation })
+  }, [])
 
   // Re-select from the current pool without re-fetching, retaining the category
   // (Req 6.2, 6.4). No-op unless a recommendation is currently displayed; the
@@ -342,5 +440,5 @@ export function useWatchRecommender(): UseWatchRecommender {
     dispatch({ type: 'reset' })
   }, [])
 
-  return { state, selectCategory, shuffle, retry, reset }
+  return { state, selectCategory, selectGenre, shuffle, retry, reset }
 }

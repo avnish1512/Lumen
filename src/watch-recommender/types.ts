@@ -30,7 +30,17 @@ export type RecommenderStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 export interface RecommenderState {
   status: RecommenderStatus
   category: Category | null
+  /** The pool used for selection/shuffle — `basePool` filtered by `genre`. */
   pool: Movie[]
   recommendation: Movie | null
   errorMessage: string | null
+  /**
+   * All fetched candidates for the current category, before any genre filter.
+   * Genre refinement re-filters this without re-fetching (Requirement 10).
+   */
+  basePool: Movie[]
+  /** Distinct genres available in `basePool`, offered as refinement options. */
+  availableGenres: string[]
+  /** The selected genre preference, or `null` for "any" (Requirement 10.3). */
+  genre: string | null
 }

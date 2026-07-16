@@ -11,6 +11,8 @@ import {
   shuffleRecommendation,
   resolvePoster,
   POSTER_PLACEHOLDER,
+  extractGenres,
+  filterByGenre,
 } from './logic'
 
 /**
@@ -586,6 +588,85 @@ describe('Property 5: Poster resolution always yields a usable image', () => {
         },
       ),
       { numRuns: 200 },
+    )
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Preference refinement — extractGenres / filterByGenre (Requirement 10)
+// -----------------------------------------------------------------------------
+
+/** Builds a movie with a specific `id` and `genres` for genre tests. */
+function makeGenreMovie(id: string, genres: string[]): Movie {
+  return { ...makeMovie(id), genres }
+}
+
+describe('extractGenres', () => {
+  it('returns the distinct genres present in the pool, sorted alphabetically', () => {
+    const pool = [
+      makeGenreMovie('a', ['Sci-Fi', 'Thriller']),
+      makeGenreMovie('b', ['Romance']),
+      makeGenreMovie('c', ['Thriller', 'Drama']),
+    ]
+    expect(extractGenres(pool)).toEqual(['Drama', 'Romance', 'Sci-Fi', 'Thriller'])
+  })
+
+  it('de-duplicates case-insensitively and ignores blank/invalid entries', () => {
+    const pool = [
+      makeGenreMovie('a', ['Action', 'action', '  ', 'ACTION']),
+      makeGenreMovie('b', ['Comedy']),
+    ]
+    // Only one "Action" (first-seen casing) plus "Comedy".
+    expect(extractGenres(pool)).toEqual(['Action', 'Comedy'])
+  })
+
+  it('returns an empty array for an empty pool', () => {
+    expect(extractGenres([])).toEqual([])
+  })
+})
+
+describe('filterByGenre', () => {
+  const pool = [
+    makeGenreMovie('a', ['Sci-Fi', 'Thriller']),
+    makeGenreMovie('b', ['Romance']),
+    makeGenreMovie('c', ['Thriller']),
+  ]
+
+  it('returns the pool unchanged when genre is null (no preference)', () => {
+    expect(filterByGenre(pool, null)).toBe(pool)
+  })
+
+  it('keeps only titles whose genres include the selected genre (case-insensitive)', () => {
+    const result = filterByGenre(pool, 'thriller')
+    expect(result.map((m) => m.id)).toEqual(['a', 'c'])
+  })
+
+  it('returns an empty array when no title matches the selected genre', () => {
+    expect(filterByGenre(pool, 'Documentary')).toEqual([])
+  })
+
+  it('never throws and returns Movie[] for any pool/genre combination', () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            id: fc.string({ minLength: 1, maxLength: 6 }),
+            genres: fc.array(fc.string({ maxLength: 8 }), { maxLength: 4 }),
+          }),
+          { maxLength: 8 },
+        ),
+        fc.option(fc.string({ maxLength: 8 }), { nil: null }),
+        (rows, genre) => {
+          const testPool = rows.map((r) => makeGenreMovie(r.id, r.genres))
+          const result = filterByGenre(testPool, genre)
+          expect(Array.isArray(result)).toBe(true)
+          // Every result element is a member of the input pool.
+          for (const movie of result) {
+            expect(testPool).toContain(movie)
+          }
+        },
+      ),
+      { numRuns: 100 },
     )
   })
 })

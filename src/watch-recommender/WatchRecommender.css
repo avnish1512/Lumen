@@ -269,6 +269,64 @@
 }
 
 /* --------------------------------------------------------------------------
+   Genre picker — preference refinement chips (Requirement 10)
+   -------------------------------------------------------------------------- */
+
+.wr-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wr-genre {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  color: var(--wr-text);
+  border: 1px solid var(--wr-border);
+  border-radius: 999px;
+  background: var(--wr-surface-2);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease,
+    color 150ms ease;
+}
+
+.wr-genre:hover,
+.wr-genre:focus-visible {
+  border-color: var(--wr-accent);
+  color: #fff;
+  outline: 0;
+}
+
+.wr-genre:active {
+  transform: scale(0.96);
+}
+
+.wr-genre.is-selected,
+.wr-genre[aria-pressed="true"] {
+  color: #050505;
+  border-color: transparent;
+  background: var(--wr-accent);
+}
+
+/* Netflix skin: selected chip uses the accent red with white text. */
+.watch-recommender.netflix-theme .wr-genre.is-selected,
+.watch-recommender.netflix-theme .wr-genre[aria-pressed="true"] {
+  color: #fff;
+  background: #e50914;
+}
+
+.watch-recommender.netflix-theme .wr-genre:hover,
+.watch-recommender.netflix-theme .wr-genre:focus-visible {
+  border-color: #e50914;
+}
+
+/* --------------------------------------------------------------------------
    Recommendation card
    -------------------------------------------------------------------------- */
 

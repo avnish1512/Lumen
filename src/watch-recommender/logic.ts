@@ -224,3 +224,65 @@ export function resolvePoster(movie: Movie): string {
   }
   return POSTER_PLACEHOLDER
 }
+
+// -----------------------------------------------------------------------------
+// Preference refinement — genre extraction and filtering (Requirement 10)
+// -----------------------------------------------------------------------------
+
+/**
+ * Extracts the distinct genres present across a candidate pool, so the UI can
+ * offer only genres that actually have titles (e.g. Sci-Fi, Romance, Thriller).
+ *
+ * Genres are trimmed, de-duplicated case-insensitively (first-seen casing is
+ * kept), non-empty, and returned sorted alphabetically. Always returns a
+ * `string[]` (Requirement 10.1).
+ */
+export function extractGenres(pool: Movie[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const movie of pool) {
+    const genres = Array.isArray(movie?.genres) ? movie.genres : []
+    for (const genre of genres) {
+      if (typeof genre !== 'string') {
+        continue
+      }
+      const trimmed = genre.trim()
+      const key = trimmed.toLowerCase()
+      if (trimmed.length === 0 || seen.has(key)) {
+        continue
+      }
+      seen.add(key)
+      result.push(trimmed)
+    }
+  }
+  result.sort((a, b) => a.localeCompare(b))
+  return result
+}
+
+/**
+ * Restricts a candidate pool to titles matching the selected genre preference.
+ *
+ * - `genre === null` (or blank): returns the pool unchanged — "no preference",
+ *   i.e. popular/trending content for the category (Requirement 10.3).
+ * - otherwise: returns only titles whose `genres` include the selected genre
+ *   (case-insensitive) (Requirement 10.2).
+ *
+ * Never throws; always returns a `Movie[]`.
+ */
+export function filterByGenre(pool: Movie[], genre: string | null): Movie[] {
+  if (genre === null) {
+    return pool
+  }
+  const target = genre.trim().toLowerCase()
+  if (target.length === 0) {
+    return pool
+  }
+  return pool.filter((movie) => {
+    const genres = Array.isArray(movie?.genres) ? movie.genres : []
+    return genres.some(
+      (genreName) =>
+        typeof genreName === 'string' &&
+        genreName.trim().toLowerCase() === target,
+    )
+  })
+}
