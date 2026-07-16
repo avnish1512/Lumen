@@ -514,9 +514,27 @@ button {
   background: transparent;
 }
 
+/* No solid "bubble" behind the first pill button — every action (Like, Watch
+   together, Share) shares the same translucent treatment so none stands out
+   with a stray white circle. */
 .action-pill button:first-child {
-  background: rgba(255, 255, 255, 0.95);
-  color: #050505;
+  background: transparent;
+  color: #fff;
+}
+
+.action-pill button:hover,
+.action-pill button:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  outline: 0;
+}
+
+/* Liked heart tints with the accent in the top pill. */
+.action-pill button.action-like.is-liked {
+  color: #e50914;
+}
+
+.action-pill button.action-like.is-liked svg {
+  fill: #e50914;
 }
 
 .action-pill svg {

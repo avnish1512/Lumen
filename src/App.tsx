@@ -4152,6 +4152,8 @@ function DetailScreen({
           onBack={onBack}
           onShare={onShare}
           onBff={onBff}
+          isLiked={isLiked}
+          onToggleLike={onToggleLike}
         />
 
         <div
@@ -4245,16 +4247,6 @@ function DetailScreen({
                     </button>
                     <button
                       type="button"
-                      className={`netflix-icon-action${isLiked ? ' active' : ''}`}
-                      onClick={onToggleLike}
-                      aria-pressed={isLiked}
-                      title={isLiked ? 'Liked' : 'Like'}
-                    >
-                      <Heart fill={isLiked ? 'currentColor' : 'none'} />
-                      <span>{isLiked ? 'Liked' : 'Like'}</span>
-                    </button>
-                    <button
-                      type="button"
                       className="netflix-icon-action"
                       onClick={onShare}
                       title="Share"
@@ -4296,15 +4288,6 @@ function DetailScreen({
                   title={isSaved ? 'Saved' : 'Add to library'}
                 >
                   {isSaved ? <Check /> : <Plus />}
-                </button>
-                <button
-                  className={`circle-action${isLiked ? ' is-liked' : ''}`}
-                  type="button"
-                  onClick={onToggleLike}
-                  aria-pressed={isLiked}
-                  title={isLiked ? 'Liked' : 'Like'}
-                >
-                  <Heart fill={isLiked ? 'currentColor' : 'none'} />
                 </button>
               </>
             )}
@@ -7873,11 +7856,15 @@ function DetailTopBar({
   onBack,
   onShare,
   onBff,
+  isLiked,
+  onToggleLike,
   dark,
 }: {
   onBack: () => void
   onShare?: () => void
   onBff?: () => void
+  isLiked?: boolean
+  onToggleLike?: () => void
   dark?: boolean
 }) {
   return (
@@ -7885,13 +7872,25 @@ function DetailTopBar({
       <button className="round-nav" type="button" onClick={onBack} title="Back">
         <ChevronLeft />
       </button>
-      {(onBff || onShare) && (
+      {(onBff || onShare || onToggleLike) && (
         <div className="action-pill">
-          {onBff ? (
+          {onToggleLike && (
+            <button
+              type="button"
+              className={`action-like${isLiked ? ' is-liked' : ''}`}
+              aria-pressed={isLiked}
+              title={isLiked ? 'Liked' : 'Like'}
+              onClick={onToggleLike}
+            >
+              <Heart fill={isLiked ? 'currentColor' : 'none'} />
+            </button>
+          )}
+          {onBff && (
             <button type="button" title="Watch together (BFF)" onClick={onBff}>
               <Users />
             </button>
-          ) : (
+          )}
+          {!onBff && onShare && (
             <button type="button" title="Share IMDb link" onClick={onShare}>
               <Share />
             </button>
