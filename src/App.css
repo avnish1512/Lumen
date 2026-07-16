@@ -14134,3 +14134,122 @@ a.watch-option-card {
 .watch-like-btn.is-liked span {
   color: #e50914;
 }
+
+/* ==========================================================================
+   Manage Devices — logged-in device sessions list (JioHotstar-style)
+   ========================================================================== */
+.device-manage-modal {
+  max-width: 520px;
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.device-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.device-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.device-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.device-current-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #050505;
+  background: #4aa7ff;
+}
+
+.device-meta {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-current-badge {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.device-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  color: #fff;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.device-logout:hover,
+.device-logout:focus-visible {
+  border-color: #e50914;
+  background: rgba(229, 9, 20, 0.16);
+  outline: 0;
+}
+
+.device-logout-all {
+  width: 100%;
+  margin-top: 16px;
+  padding: 13px;
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  background: #e50914;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.device-logout-all:hover,
+.device-logout-all:focus-visible {
+  background: #f6121d;
+  outline: 0;
+}
