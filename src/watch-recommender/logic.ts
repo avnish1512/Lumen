@@ -103,18 +103,35 @@ export function buildCandidatePool(
   const rails = inputs.homeRails
   let raw: Movie[]
 
+  const movieCol = rails?.movieCollection
+  const tvCol = rails?.tvShowCollection
+
   switch (category) {
     case 'movie':
+      // Draw from every movie source so the pool is large and varied (all four
+      // collection buckets, the featured rail, and the movie entries of the
+      // trending and new-release rails) rather than a single bucket.
       raw = [
-        ...(rails?.movieCollection.top ?? []),
-        ...(rails?.trendingNow ?? []).filter(isMovieEntry),
+        ...(movieCol?.top ?? []),
+        ...(movieCol?.thrilling ?? []),
+        ...(movieCol?.adventure ?? []),
+        ...(movieCol?.kidsFamily ?? []),
         ...(rails?.featuredMovies ?? []),
+        ...(rails?.trendingNow ?? []).filter(isMovieEntry),
+        ...(rails?.newReleases ?? []).filter(isMovieEntry),
       ]
       break
     case 'tv':
+      // Same breadth for TV: all four collection buckets, the featured rail,
+      // and the TV entries of the trending and new-release rails.
       raw = [
-        ...(rails?.tvShowCollection.top ?? []),
+        ...(tvCol?.top ?? []),
+        ...(tvCol?.thrilling ?? []),
+        ...(tvCol?.adventure ?? []),
+        ...(tvCol?.kidsFamily ?? []),
         ...(rails?.featuredTvShows ?? []),
+        ...(rails?.trendingNow ?? []).filter((m) => !isMovieEntry(m)),
+        ...(rails?.newReleases ?? []).filter((m) => !isMovieEntry(m)),
       ]
       break
     case 'drama':

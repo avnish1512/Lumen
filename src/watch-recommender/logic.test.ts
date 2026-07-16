@@ -169,13 +169,22 @@ function expectedSourceIds(
     case 'movie':
       return new Set([
         ...(rails?.movieCollection.top ?? []).map((m) => m.id),
-        ...(rails?.trendingNow ?? []).filter(isGeneratedMovieEntry).map((m) => m.id),
+        ...(rails?.movieCollection.thrilling ?? []).map((m) => m.id),
+        ...(rails?.movieCollection.adventure ?? []).map((m) => m.id),
+        ...(rails?.movieCollection.kidsFamily ?? []).map((m) => m.id),
         ...(rails?.featuredMovies ?? []).map((m) => m.id),
+        ...(rails?.trendingNow ?? []).filter(isGeneratedMovieEntry).map((m) => m.id),
+        ...(rails?.newReleases ?? []).filter(isGeneratedMovieEntry).map((m) => m.id),
       ])
     case 'tv':
       return new Set([
         ...(rails?.tvShowCollection.top ?? []).map((m) => m.id),
+        ...(rails?.tvShowCollection.thrilling ?? []).map((m) => m.id),
+        ...(rails?.tvShowCollection.adventure ?? []).map((m) => m.id),
+        ...(rails?.tvShowCollection.kidsFamily ?? []).map((m) => m.id),
         ...(rails?.featuredTvShows ?? []).map((m) => m.id),
+        ...(rails?.trendingNow ?? []).filter((m) => !isGeneratedMovieEntry(m)).map((m) => m.id),
+        ...(rails?.newReleases ?? []).filter((m) => !isGeneratedMovieEntry(m)).map((m) => m.id),
       ])
     case 'drama':
       return new Set((inputs.dramaList ?? []).map((m) => m.id))

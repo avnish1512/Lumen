@@ -200,7 +200,7 @@ export async function fetchPoolInputs(category: Category): Promise<PoolInputs> {
     case 'anime': {
       const media = await fetchAnimeByOptions({
         sort: ['TRENDING_DESC', 'POPULARITY_DESC'],
-        perPage: 25,
+        perPage: 50,
       })
       inputs = { animeList: media.map((item, i) => mapAniListToMovie(item, i + 1)) }
       break
