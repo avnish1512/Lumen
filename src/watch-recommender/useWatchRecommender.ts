@@ -272,11 +272,12 @@ export function recommenderReducer(
 import { useCallback, useReducer, useRef } from 'react'
 import {
   buildCandidatePool,
-  selectRecommendation,
-  shuffleRecommendation,
   extractGenres,
   filterByGenre,
+  weightedSelectRecommendation,
+  weightedShuffleRecommendation,
 } from './logic'
+import type { TasteProfile } from './logic'
 import { fetchPoolInputs, PoolFetchError } from './adapter'
 
 /**
@@ -320,11 +321,19 @@ const GENERIC_ERROR_MESSAGE =
  * prevents a slow earlier fetch from overwriting a newer recommendation. This
  * mirrors the `selectedMovieIdRef` guard used in `App.tsx`.
  */
-export function useWatchRecommender(): UseWatchRecommender {
+export function useWatchRecommender(
+  options?: { taste?: TasteProfile },
+): UseWatchRecommender {
   const [state, dispatch] = useReducer(
     recommenderReducer,
     initialRecommenderState,
   )
+
+  // Latest taste profile (viewer "personality"), read by the selection
+  // callbacks so recommendations lean toward liked genres without re-creating
+  // the callbacks whenever the profile changes.
+  const tasteRef = useRef<TasteProfile>(options?.taste ?? {})
+  tasteRef.current = options?.taste ?? {}
 
   // Monotonic id identifying the most recently initiated retrieval. Bumped on
   // every `selectCategory`/`retry`; async results compare against it to detect
@@ -349,7 +358,10 @@ export function useWatchRecommender(): UseWatchRecommender {
           return
         }
         const pool = buildCandidatePool(category, inputs)
-        const recommendation = selectRecommendation(pool)
+        const recommendation = weightedSelectRecommendation(
+          pool,
+          tasteRef.current,
+        )
         if (pool.length === 0 || recommendation === null) {
           dispatch({ type: 'empty' })
           return
@@ -400,7 +412,7 @@ export function useWatchRecommender(): UseWatchRecommender {
       return
     }
     const pool = filterByGenre(basePool, genre)
-    const recommendation = selectRecommendation(pool)
+    const recommendation = weightedSelectRecommendation(pool, tasteRef.current)
     dispatch({ type: 'selectGenre', genre, pool, recommendation })
   }, [])
 
@@ -412,7 +424,11 @@ export function useWatchRecommender(): UseWatchRecommender {
     if (status !== 'ready') {
       return
     }
-    const next = shuffleRecommendation(pool, recommendation)
+    const next = weightedShuffleRecommendation(
+      pool,
+      recommendation,
+      tasteRef.current,
+    )
     if (next === null) {
       return
     }

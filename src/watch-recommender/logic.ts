@@ -276,6 +276,121 @@ export function extractGenres(pool: Movie[]): string[] {
   return result
 }
 
+// -----------------------------------------------------------------------------
+// Personality / taste profile — like-driven personalization (Requirement 10)
+// -----------------------------------------------------------------------------
+
+/**
+ * A viewer's "personality": a map of lowercased genre → weight, derived from
+ * the titles they have liked. Higher weight means a stronger preference. An
+ * empty profile means "no personalization" (uniform selection).
+ */
+export type TasteProfile = Record<string, number>
+
+/**
+ * Builds a taste profile from a viewer's liked titles by counting how often
+ * each genre appears across them. The counts act as selection weights so that
+ * recommendations lean toward the genres the viewer likes most.
+ */
+export function computeTasteProfile(liked: Movie[]): TasteProfile {
+  const profile: TasteProfile = {}
+  for (const movie of liked) {
+    const genres = Array.isArray(movie?.genres) ? movie.genres : []
+    for (const genre of genres) {
+      if (typeof genre !== 'string') {
+        continue
+      }
+      const key = genre.trim().toLowerCase()
+      if (key.length === 0) {
+        continue
+      }
+      profile[key] = (profile[key] ?? 0) + 1
+    }
+  }
+  return profile
+}
+
+/**
+ * Selection weight for a single title given a taste profile. Every title gets a
+ * base weight of 1 (so nothing is ever unreachable — shuffle stays varied),
+ * plus the summed weights of any of its genres that appear in the profile.
+ */
+function tasteScore(movie: Movie, taste: TasteProfile): number {
+  let score = 1
+  const genres = Array.isArray(movie?.genres) ? movie.genres : []
+  for (const genre of genres) {
+    if (typeof genre !== 'string') {
+      continue
+    }
+    const weight = taste[genre.trim().toLowerCase()]
+    if (typeof weight === 'number' && weight > 0) {
+      score += weight
+    }
+  }
+  return score
+}
+
+/**
+ * Selects a title from the pool weighted by the taste profile: titles matching
+ * the viewer's liked genres are proportionally more likely to be chosen, but
+ * every title remains reachable (base weight 1). Falls back to uniform
+ * selection when the profile is empty. Returns `null` for an empty pool and
+ * never throws (Requirement 10 personalization; mirrors `selectRecommendation`).
+ */
+export function weightedSelectRecommendation(
+  pool: Movie[],
+  taste: TasteProfile,
+  rng: Rng = Math.random,
+): Movie | null {
+  if (pool.length === 0) {
+    return null
+  }
+  if (Object.keys(taste).length === 0) {
+    return selectRecommendation(pool, rng)
+  }
+  const weights = pool.map((movie) => tasteScore(movie, taste))
+  const total = weights.reduce((sum, weight) => sum + weight, 0)
+  if (total <= 0) {
+    return selectRecommendation(pool, rng)
+  }
+  let threshold = rng() * total
+  for (let i = 0; i < pool.length; i += 1) {
+    threshold -= weights[i]
+    if (threshold < 0) {
+      return pool[i]
+    }
+  }
+  // RNG rounding fallback: return the last member so the function stays total.
+  return pool[pool.length - 1]
+}
+
+/**
+ * Weighted counterpart to `shuffleRecommendation`: re-selects from the pool
+ * (avoiding `current` when alternatives exist) using taste-weighted selection.
+ * Returns `null` for an empty pool, the sole title for a single-title pool, and
+ * never throws (Requirements 6.2, 6.3 + personalization).
+ */
+export function weightedShuffleRecommendation(
+  pool: Movie[],
+  current: Movie | null,
+  taste: TasteProfile,
+  rng: Rng = Math.random,
+): Movie | null {
+  if (pool.length === 0) {
+    return null
+  }
+  if (pool.length === 1) {
+    return pool[0]
+  }
+  const currentId = current?.id
+  const alternatives =
+    typeof currentId === 'string' && currentId.length > 0
+      ? pool.filter((movie) => movie.id !== currentId)
+      : pool
+  const source = alternatives.length > 0 ? alternatives : pool
+  return weightedSelectRecommendation(source, taste, rng)
+}
+
 /**
  * Restricts a candidate pool to titles matching the selected genre preference.
  *

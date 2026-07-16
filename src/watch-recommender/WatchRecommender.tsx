@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, Shuffle, ArrowRight, X } from 'lucide-react'
 import type { Movie } from '../omdb'
 import type { Category } from './types'
 import { useWatchRecommender } from './useWatchRecommender'
-import { resolvePoster, POSTER_PLACEHOLDER } from './logic'
+import { resolvePoster, POSTER_PLACEHOLDER, computeTasteProfile } from './logic'
 import './WatchRecommender.css'
 
 /**
@@ -59,6 +59,12 @@ export interface WatchRecommenderEntryProps {
    */
   onOpenDetail: (movie: Movie) => void
   /**
+   * The viewer's liked titles. Their genres form a "personality" profile that
+   * biases recommendations toward liked genres (Requirement 10). Optional; when
+   * omitted or empty, selection is uniform.
+   */
+  likedMovies?: Movie[]
+  /**
    * Presentation of the entry control:
    * - `'block'` (default): the full-width pill labeled "I don't know what to
    *   watch".
@@ -79,6 +85,7 @@ export interface WatchRecommenderEntryProps {
 export function WatchRecommenderEntry({
   designMode,
   onOpenDetail,
+  likedMovies,
   variant = 'block',
 }: WatchRecommenderEntryProps) {
   const [open, setOpen] = useState(false)
@@ -118,6 +125,7 @@ export function WatchRecommenderEntry({
         <WatchRecommenderModal
           designMode={designMode}
           onOpenDetail={onOpenDetail}
+          likedMovies={likedMovies}
           onClose={() => setOpen(false)}
         />
       )}
@@ -132,6 +140,8 @@ export function WatchRecommenderEntry({
 export interface WatchRecommenderModalProps {
   designMode: 'apple' | 'netflix'
   onOpenDetail: (movie: Movie) => void
+  /** Liked titles that drive the taste-based personalization (Requirement 10). */
+  likedMovies?: Movie[]
   /** Closes the modal; also resets the recommender back to idle. */
   onClose: () => void
 }
@@ -152,10 +162,17 @@ export interface WatchRecommenderModalProps {
 export function WatchRecommenderModal({
   designMode,
   onOpenDetail,
+  likedMovies,
   onClose,
 }: WatchRecommenderModalProps) {
+  // Derive the viewer's taste profile from their liked titles so the hook can
+  // bias recommendations toward liked genres (Requirement 10).
+  const taste = useMemo(
+    () => computeTasteProfile(likedMovies ?? []),
+    [likedMovies],
+  )
   const { state, selectCategory, selectGenre, shuffle, retry, reset } =
-    useWatchRecommender()
+    useWatchRecommender({ taste })
 
   const handleClose = () => {
     reset()

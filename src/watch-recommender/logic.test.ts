@@ -13,6 +13,8 @@ import {
   POSTER_PLACEHOLDER,
   extractGenres,
   filterByGenre,
+  computeTasteProfile,
+  weightedSelectRecommendation,
 } from './logic'
 
 /**
@@ -677,5 +679,76 @@ describe('filterByGenre', () => {
       ),
       { numRuns: 100 },
     )
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Personality / taste — computeTasteProfile / weightedSelectRecommendation
+// -----------------------------------------------------------------------------
+
+describe('computeTasteProfile', () => {
+  it('counts genre occurrences across liked titles (case-insensitive keys)', () => {
+    const liked = [
+      makeGenreMovie('a', ['Sci-Fi', 'Thriller']),
+      makeGenreMovie('b', ['sci-fi']),
+      makeGenreMovie('c', ['Romance']),
+    ]
+    expect(computeTasteProfile(liked)).toEqual({
+      'sci-fi': 2,
+      thriller: 1,
+      romance: 1,
+    })
+  })
+
+  it('returns an empty profile for no liked titles', () => {
+    expect(computeTasteProfile([])).toEqual({})
+  })
+})
+
+describe('weightedSelectRecommendation', () => {
+  it('returns null for an empty pool', () => {
+    expect(weightedSelectRecommendation([], { action: 3 })).toBeNull()
+  })
+
+  it('falls back to uniform selection when the profile is empty', () => {
+    const pool = [makeGenreMovie('a', ['Drama']), makeGenreMovie('b', ['Comedy'])]
+    // rng=0 → index 0 (matches selectRecommendation's uniform behavior).
+    expect(weightedSelectRecommendation(pool, {}, () => 0)?.id).toBe('a')
+  })
+
+  it('always returns a member of the pool and never throws', () => {
+    fc.assert(
+      fc.property(
+        nonEmptyPoolArb,
+        fc.dictionary(fc.string({ maxLength: 6 }), fc.nat({ max: 5 })),
+        fc.double({ min: 0, max: 1, noNaN: true, maxExcluded: true }),
+        (pool, taste, rngValue) => {
+          const picked = weightedSelectRecommendation(pool, taste, () => rngValue)
+          expect(picked).not.toBeNull()
+          expect(pool).toContain(picked)
+        },
+      ),
+      { numRuns: 100 },
+    )
+  })
+
+  it('biases selection toward titles matching the taste profile', () => {
+    // Two titles: one matches a heavily-weighted genre, one does not. Sweeping
+    // the RNG across [0,1) should pick the matching title far more often.
+    const pool = [
+      makeGenreMovie('match', ['Horror']),
+      makeGenreMovie('other', ['Comedy']),
+    ]
+    const taste = { horror: 9 } // scores: match=1+9=10, other=1 → total 11
+    let matchCount = 0
+    const samples = 100
+    for (let i = 0; i < samples; i += 1) {
+      const picked = weightedSelectRecommendation(pool, taste, () => i / samples)
+      if (picked?.id === 'match') {
+        matchCount += 1
+      }
+    }
+    // With weights 10:1 the matching title should dominate (~91%).
+    expect(matchCount).toBeGreaterThan(samples * 0.8)
   })
 })

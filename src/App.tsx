@@ -20,6 +20,7 @@ import {
   CircleMinus,
   Clapperboard,
   Download,
+  Heart,
   Home,
   Info,
   ThumbsUp,
@@ -147,6 +148,7 @@ type LandscapeCard = {
 }
 
 const savedMoviesKey = 'omdb.apple-tv-style.saved-movies'
+const likedMoviesKey = 'omdb.apple-tv-style.liked-movies'
 const watchHistoryKey = 'omdb.apple-tv-style.watch-history'
 const streamProviderKey = 'omdb.apple-tv-style.stream-provider'
 const streamSandboxKey = 'omdb.apple-tv-style.stream-sandbox'
@@ -322,6 +324,17 @@ function readSavedMovies(): SavedMovies {
     const key = user ? `${savedMoviesKey}.${user.name}` : savedMoviesKey
     const saved = window.localStorage.getItem(key)
     return saved ? (JSON.parse(saved) as SavedMovies) : {}
+  } catch {
+    return {}
+  }
+}
+
+function readLikedMovies(): SavedMovies {
+  try {
+    const user = readCurrentUser()
+    const key = user ? `${likedMoviesKey}.${user.name}` : likedMoviesKey
+    const liked = window.localStorage.getItem(key)
+    return liked ? (JSON.parse(liked) as SavedMovies) : {}
   } catch {
     return {}
   }
@@ -1155,6 +1168,11 @@ function App() {
         window.localStorage.setItem(`${savedMoviesKey}.${newName}`, oldSaved)
         window.localStorage.removeItem(`${savedMoviesKey}.${oldName}`)
       }
+      const oldLiked = window.localStorage.getItem(`${likedMoviesKey}.${oldName}`)
+      if (oldLiked) {
+        window.localStorage.setItem(`${likedMoviesKey}.${newName}`, oldLiked)
+        window.localStorage.removeItem(`${likedMoviesKey}.${oldName}`)
+      }
       const oldHistory = window.localStorage.getItem(`${watchHistoryKey}.${oldName}`)
       if (oldHistory) {
         window.localStorage.setItem(`${watchHistoryKey}.${newName}`, oldHistory)
@@ -1180,6 +1198,7 @@ function App() {
     }
 
     window.localStorage.removeItem(`${savedMoviesKey}.${name}`)
+    window.localStorage.removeItem(`${likedMoviesKey}.${name}`)
     window.localStorage.removeItem(`${watchHistoryKey}.${name}`)
 
     if (currentUser && currentUser.name === name) {
@@ -1258,6 +1277,7 @@ function App() {
   const [dramaHeroMovie, setDramaHeroMovie] = useState<Movie | null>(null)
   const [detailBackScreen, setDetailBackScreen] = useState<Screen>('home')
   const [savedMovies, setSavedMovies] = useState<SavedMovies>(readSavedMovies)
+  const [likedMovies, setLikedMovies] = useState<SavedMovies>(readLikedMovies)
   const [watchHistory, setWatchHistory] =
     useState<WatchHistory>(readWatchHistory)
   const [homeLoading, setHomeLoading] = useState(() => !initialCache)
@@ -1301,6 +1321,7 @@ function App() {
       ? homeHeroMovie
       : anime[0]) ?? null
   const savedList = useMemo(() => Object.values(savedMovies), [savedMovies])
+  const likedList = useMemo(() => Object.values(likedMovies), [likedMovies])
   const continueWatching = useMemo(
     () =>
       Object.values(watchHistory)
@@ -1680,6 +1701,18 @@ function App() {
 
   useEffect(() => {
     if ((currentUser?.name ?? null) !== loadedProfileRef.current) {
+      // Profile switch in progress; the loader effect replaces likedMovies.
+      return
+    }
+    if (currentUser) {
+      window.localStorage.setItem(`${likedMoviesKey}.${currentUser.name}`, JSON.stringify(likedMovies))
+    } else {
+      window.localStorage.setItem(likedMoviesKey, JSON.stringify(likedMovies))
+    }
+  }, [likedMovies, currentUser])
+
+  useEffect(() => {
+    if ((currentUser?.name ?? null) !== loadedProfileRef.current) {
       return
     }
     if (currentUser) {
@@ -1697,11 +1730,15 @@ function App() {
       const savedStr = window.localStorage.getItem(`${savedMoviesKey}.${currentUser.name}`)
       setSavedMovies(savedStr ? JSON.parse(savedStr) : {})
 
+      const likedStr = window.localStorage.getItem(`${likedMoviesKey}.${currentUser.name}`)
+      setLikedMovies(likedStr ? JSON.parse(likedStr) : {})
+
       const historyStr = window.localStorage.getItem(`${watchHistoryKey}.${currentUser.name}`)
       setWatchHistory(historyStr ? JSON.parse(historyStr) : {})
     } else {
       window.localStorage.removeItem(currentUserKey)
       setSavedMovies({})
+      setLikedMovies({})
       setWatchHistory({})
     }
     // Mark this profile as the one now loaded so the persistence effects above
@@ -2197,6 +2234,28 @@ function App() {
     )
   }, [])
 
+  // Toggle a title's "liked" state. Liked titles drive the Watch Recommender's
+  // personality-based personalization and are shared between the detail and
+  // watch screens (they read/write the same per-profile store).
+  const toggleLiked = (movie: Movie) => {
+    setLikedMovies((current) => {
+      const matchingKey = findMatchingMovieKey(
+        current,
+        movie,
+        (likedMovie) => likedMovie,
+      )
+      const next = { ...current }
+
+      if (matchingKey) {
+        delete next[matchingKey]
+      } else {
+        next[movie.id] = movie
+      }
+
+      return next
+    })
+  }
+
   const removeContinueMovie = useCallback((movie: Movie) => {
     setWatchHistory((current) =>
       removeMatchingMovieRecords(current, movie, (entry) => entry.movie),
@@ -2463,6 +2522,7 @@ function App() {
           } : tmdbHomeRails}
           continueMovies={continueWatching}
           savedMovies={savedMovies}
+          likedMovies={likedList}
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSave={toggleSaved}
@@ -2505,6 +2565,7 @@ function App() {
           }}
           continueMovies={continueWatching}
           savedMovies={savedMovies}
+          likedMovies={likedList}
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSave={toggleSaved}
@@ -2580,6 +2641,12 @@ function App() {
             })
           }}
           onSave={() => toggleSaved(selectedMovie)}
+          isLiked={hasMatchingMovie(
+            likedMovies,
+            selectedMovie,
+            (likedMovie) => likedMovie,
+          )}
+          onToggleLike={() => toggleLiked(selectedMovie)}
           onShare={shareSelectedMovie}
           onBff={() => openBff(selectedMovie)}
           onOpenPoster={openSelectedPoster}
@@ -2595,6 +2662,12 @@ function App() {
             selectedMovie,
             (savedMovie) => savedMovie,
           )}
+          isLiked={hasMatchingMovie(
+            likedMovies,
+            selectedMovie,
+            (likedMovie) => likedMovie,
+          )}
+          onToggleLike={() => toggleLiked(selectedMovie)}
           streamLoading={streamLoading}
           streamError={streamError}
           streamProvider={streamProvider}
@@ -2755,6 +2828,7 @@ function App() {
           }}
           onSignOut={signOut}
           onOpenDetail={openDetail}
+          likedMovies={likedList}
           profiles={profiles}
           designMode={designMode}
           invites={incomingInvites}
@@ -3035,6 +3109,7 @@ type HomeScreenProps = {
   tmdbHomeRails: TmdbHomeRails
   continueMovies: Movie[]
   savedMovies: SavedMovies
+  likedMovies?: Movie[]
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSave: (movie: Movie) => void
@@ -3068,6 +3143,7 @@ function HomeScreen({
   tmdbHomeRails,
   continueMovies,
   savedMovies,
+  likedMovies,
   onOpenDetail,
   onPlay,
   onSave,
@@ -3281,6 +3357,7 @@ function HomeScreen({
                 <WatchRecommenderEntry
                   designMode={designMode}
                   onOpenDetail={onOpenDetail}
+                  likedMovies={likedMovies}
                   variant="icon"
                 />
                 {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
@@ -3326,6 +3403,7 @@ function HomeScreen({
               <WatchRecommenderEntry
                 designMode={designMode}
                 onOpenDetail={onOpenDetail}
+                likedMovies={likedMovies}
                 variant="icon"
               />
               {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
@@ -3855,6 +3933,7 @@ type DetailScreenProps = {
   movie: Movie
   relatedMovies: Movie[]
   isSaved: boolean
+  isLiked: boolean
   isLoading: boolean
   error: string
   onBack: () => void
@@ -3862,6 +3941,7 @@ type DetailScreenProps = {
   onPlay: (provider?: StreamProvider) => void
   onPlayEpisode: (season: number, episode: number) => void
   onSave: () => void
+  onToggleLike: () => void
   onShare: () => void
   onBff?: () => void
   onOpenPoster: () => void
@@ -3872,6 +3952,7 @@ function DetailScreen({
   movie,
   relatedMovies,
   isSaved,
+  isLiked,
   isLoading,
   error,
   onBack,
@@ -3879,6 +3960,7 @@ function DetailScreen({
   onPlay,
   onPlayEpisode,
   onSave,
+  onToggleLike,
   onShare,
   onBff,
   onOpenPoster,
@@ -4161,9 +4243,15 @@ function DetailScreen({
                       {isSaved ? <Check /> : <Plus />}
                       <span>My List</span>
                     </button>
-                    <button type="button" className="netflix-icon-action" title="Rate">
-                      <ThumbsUp />
-                      <span>Rate</span>
+                    <button
+                      type="button"
+                      className={`netflix-icon-action${isLiked ? ' active' : ''}`}
+                      onClick={onToggleLike}
+                      aria-pressed={isLiked}
+                      title={isLiked ? 'Liked' : 'Like'}
+                    >
+                      <Heart fill={isLiked ? 'currentColor' : 'none'} />
+                      <span>{isLiked ? 'Liked' : 'Like'}</span>
                     </button>
                     <button
                       type="button"
@@ -4208,6 +4296,15 @@ function DetailScreen({
                   title={isSaved ? 'Saved' : 'Add to library'}
                 >
                   {isSaved ? <Check /> : <Plus />}
+                </button>
+                <button
+                  className={`circle-action${isLiked ? ' is-liked' : ''}`}
+                  type="button"
+                  onClick={onToggleLike}
+                  aria-pressed={isLiked}
+                  title={isLiked ? 'Liked' : 'Like'}
+                >
+                  <Heart fill={isLiked ? 'currentColor' : 'none'} />
                 </button>
               </>
             )}
@@ -5001,12 +5098,14 @@ function CastCrewRail({
 type WatchScreenProps = {
   movie: Movie
   isSaved: boolean
+  isLiked: boolean
   streamLoading: boolean
   streamError: string
   streamProvider: StreamProvider
   streamSandboxEnabled: boolean
   onBack: () => void
   onSave: () => void
+  onToggleLike: () => void
   onStartWatching: (movie: Movie) => void
   onStreamSandboxChange: (enabled: boolean) => void
   onStreamProviderChange: (provider: StreamProvider) => void
@@ -5016,12 +5115,14 @@ type WatchScreenProps = {
 function WatchScreen({
   movie,
   isSaved,
+  isLiked,
   streamLoading,
   streamError,
   streamProvider,
   streamSandboxEnabled,
   onBack,
   onSave,
+  onToggleLike,
   onStartWatching,
   onStreamSandboxChange,
   onStreamProviderChange,
@@ -5278,6 +5379,17 @@ function WatchScreen({
           >
             {isSaved ? <Check /> : <Plus />}
             <span>{isSaved ? 'Saved' : 'My List'}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
+            onClick={onToggleLike}
+            aria-pressed={isLiked}
+            title={isLiked ? 'Liked' : 'Like'}
+          >
+            <Heart fill={isLiked ? 'currentColor' : 'none'} />
+            <span>{isLiked ? 'Liked' : 'Like'}</span>
           </button>
 
           <label className="stream-sandbox-toggle">
@@ -8699,6 +8811,7 @@ function DesktopNav({
   onGoLumen,
   onSignOut,
   onOpenDetail,
+  likedMovies,
   profiles,
   designMode,
   invites,
@@ -8723,6 +8836,7 @@ function DesktopNav({
   onGoLumen: () => void
   onSignOut: () => void
   onOpenDetail: (movie: Movie) => void
+  likedMovies: Movie[]
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
   invites: WatchParty[]
@@ -8819,6 +8933,7 @@ function DesktopNav({
             <WatchRecommenderEntry
               designMode={designMode}
               onOpenDetail={onOpenDetail}
+              likedMovies={likedMovies}
               variant="icon"
             />
             <ProfileMenu variant="netflix" {...profileMenuProps} />
@@ -8887,6 +9002,7 @@ function DesktopNav({
           <WatchRecommenderEntry
             designMode={designMode}
             onOpenDetail={onOpenDetail}
+            likedMovies={likedMovies}
             variant="icon"
           />
           <ProfileMenu variant="apple" {...profileMenuProps} />

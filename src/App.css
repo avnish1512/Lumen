@@ -14096,3 +14096,23 @@ a.watch-option-card {
     font-weight: 600;
   }
 }
+
+/* ==========================================================================
+   Like (heart) button — detail + watch screens. Liked state tints the heart
+   with the accent so it reads as "liked" across both skins.
+   ========================================================================== */
+.circle-action.is-liked,
+.watch-like-btn.is-liked,
+.netflix-icon-action.active svg.lucide-heart {
+  color: #e50914;
+}
+
+.circle-action.is-liked svg,
+.watch-like-btn.is-liked svg {
+  color: #e50914;
+  fill: #e50914;
+}
+
+.watch-like-btn.is-liked span {
+  color: #e50914;
+}
