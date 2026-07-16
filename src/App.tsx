@@ -109,6 +109,7 @@ import {
 } from './livetv'
 import { topPosterUrl, hasTopPoster, proxiedAnimeImage } from './posters'
 import { fetchTrailerYoutubeId } from './kinocheck'
+import { WatchRecommenderEntry } from './watch-recommender/WatchRecommender'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -2484,6 +2485,10 @@ function App() {
           profiles={profiles}
           designMode={designMode}
         />
+      )}
+
+      {screen === 'home' && (
+        <WatchRecommenderEntry designMode={designMode} onOpenDetail={openDetail} />
       )}
 
       {screen === 'drama' && (featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime)) && (

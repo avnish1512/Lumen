@@ -1,0 +1,837 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Watch Recommender layout snapshots > category picker — apple skin @ desktop 1`] = `
+<div
+  aria-label="Category"
+  class="wr-picker apple-theme"
+  data-testid="wr-picker"
+  role="group"
+>
+  <button
+    aria-pressed="true"
+    class="wr-category is-selected"
+    data-testid="wr-category-movie"
+    type="button"
+  >
+    Movie
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-tv"
+    type="button"
+  >
+    TV Show
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-anime"
+    type="button"
+  >
+    Anime
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-drama"
+    type="button"
+  >
+    Drama
+  </button>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > category picker — apple skin @ mobile 1`] = `
+<div
+  aria-label="Category"
+  class="wr-picker apple-theme"
+  data-testid="wr-picker"
+  role="group"
+>
+  <button
+    aria-pressed="true"
+    class="wr-category is-selected"
+    data-testid="wr-category-movie"
+    type="button"
+  >
+    Movie
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-tv"
+    type="button"
+  >
+    TV Show
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-anime"
+    type="button"
+  >
+    Anime
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-drama"
+    type="button"
+  >
+    Drama
+  </button>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > category picker — netflix skin @ desktop 1`] = `
+<div
+  aria-label="Category"
+  class="wr-picker netflix-theme"
+  data-testid="wr-picker"
+  role="group"
+>
+  <button
+    aria-pressed="true"
+    class="wr-category is-selected"
+    data-testid="wr-category-movie"
+    type="button"
+  >
+    Movie
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-tv"
+    type="button"
+  >
+    TV Show
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-anime"
+    type="button"
+  >
+    Anime
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-drama"
+    type="button"
+  >
+    Drama
+  </button>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > category picker — netflix skin @ mobile 1`] = `
+<div
+  aria-label="Category"
+  class="wr-picker netflix-theme"
+  data-testid="wr-picker"
+  role="group"
+>
+  <button
+    aria-pressed="true"
+    class="wr-category is-selected"
+    data-testid="wr-category-movie"
+    type="button"
+  >
+    Movie
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-tv"
+    type="button"
+  >
+    TV Show
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-anime"
+    type="button"
+  >
+    Anime
+  </button>
+  <button
+    aria-pressed="false"
+    class="wr-category"
+    data-testid="wr-category-drama"
+    type="button"
+  >
+    Drama
+  </button>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > entry control — apple skin @ desktop 1`] = `
+<div
+  class="watch-recommender apple-theme"
+>
+  <button
+    aria-expanded="false"
+    aria-haspopup="dialog"
+    class="wr-entry"
+    data-testid="wr-entry"
+    type="button"
+  >
+    <svg
+      aria-hidden="true"
+      class="lucide lucide-sparkles wr-entry-icon"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+      width="18"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+      />
+      <path
+        d="M20 2v4"
+      />
+      <path
+        d="M22 4h-4"
+      />
+      <circle
+        cx="4"
+        cy="20"
+        r="2"
+      />
+    </svg>
+    <span
+      class="wr-entry-label"
+    >
+      I don't know what to watch
+    </span>
+  </button>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > entry control — apple skin @ mobile 1`] = `
+<div
+  class="watch-recommender apple-theme"
+>
+  <button
+    aria-expanded="false"
+    aria-haspopup="dialog"
+    class="wr-entry"
+    data-testid="wr-entry"
+    type="button"
+  >
+    <svg
+      aria-hidden="true"
+      class="lucide lucide-sparkles wr-entry-icon"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+      width="18"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+      />
+      <path
+        d="M20 2v4"
+      />
+      <path
+        d="M22 4h-4"
+      />
+      <circle
+        cx="4"
+        cy="20"
+        r="2"
+      />
+    </svg>
+    <span
+      class="wr-entry-label"
+    >
+      I don't know what to watch
+    </span>
+  </button>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > entry control — netflix skin @ desktop 1`] = `
+<div
+  class="watch-recommender netflix-theme"
+>
+  <button
+    aria-expanded="false"
+    aria-haspopup="dialog"
+    class="wr-entry"
+    data-testid="wr-entry"
+    type="button"
+  >
+    <svg
+      aria-hidden="true"
+      class="lucide lucide-sparkles wr-entry-icon"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+      width="18"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+      />
+      <path
+        d="M20 2v4"
+      />
+      <path
+        d="M22 4h-4"
+      />
+      <circle
+        cx="4"
+        cy="20"
+        r="2"
+      />
+    </svg>
+    <span
+      class="wr-entry-label"
+    >
+      I don't know what to watch
+    </span>
+  </button>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > entry control — netflix skin @ mobile 1`] = `
+<div
+  class="watch-recommender netflix-theme"
+>
+  <button
+    aria-expanded="false"
+    aria-haspopup="dialog"
+    class="wr-entry"
+    data-testid="wr-entry"
+    type="button"
+  >
+    <svg
+      aria-hidden="true"
+      class="lucide lucide-sparkles wr-entry-icon"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+      width="18"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+      />
+      <path
+        d="M20 2v4"
+      />
+      <path
+        d="M22 4h-4"
+      />
+      <circle
+        cx="4"
+        cy="20"
+        r="2"
+      />
+    </svg>
+    <span
+      class="wr-entry-label"
+    >
+      I don't know what to watch
+    </span>
+  </button>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > recommendation card — apple skin @ desktop 1`] = `
+<div
+  class="wr-card apple-theme"
+  data-testid="wr-card"
+>
+  <img
+    alt="Poster for The Grand Adventure"
+    class="wr-card__poster"
+    data-placeholder="false"
+    data-testid="wr-card-poster"
+    loading="lazy"
+    src="https://example.test/poster.jpg"
+  />
+  <div
+    class="wr-card__body"
+  >
+    <span
+      class="wr-card__category"
+      data-testid="wr-card-category"
+    >
+      Movie
+    </span>
+    <h3
+      class="wr-card__title"
+      data-testid="wr-card-title"
+    >
+      The Grand Adventure
+    </h3>
+    <p
+      class="wr-card__meta"
+      data-testid="wr-card-meta"
+    >
+      <span
+        data-testid="wr-card-year"
+      >
+        2024
+      </span>
+      <span
+        data-testid="wr-card-genres"
+      >
+        Drama, Adventure
+      </span>
+      <span
+        data-testid="wr-card-rating"
+      >
+        7.5
+      </span>
+    </p>
+    <div
+      class="wr-controls"
+    >
+      <button
+        class="wr-open-details"
+        data-testid="wr-open-detail"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-arrow-right"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M5 12h14"
+          />
+          <path
+            d="m12 5 7 7-7 7"
+          />
+        </svg>
+        View details
+      </button>
+      <button
+        class="wr-shuffle"
+        data-testid="wr-shuffle"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-shuffle"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m18 14 4 4-4 4"
+          />
+          <path
+            d="m18 2 4 4-4 4"
+          />
+          <path
+            d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"
+          />
+          <path
+            d="M2 6h1.972a4 4 0 0 1 3.6 2.2"
+          />
+          <path
+            d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"
+          />
+        </svg>
+        Shuffle again
+      </button>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > recommendation card — apple skin @ mobile 1`] = `
+<div
+  class="wr-card apple-theme"
+  data-testid="wr-card"
+>
+  <img
+    alt="Poster for The Grand Adventure"
+    class="wr-card__poster"
+    data-placeholder="false"
+    data-testid="wr-card-poster"
+    loading="lazy"
+    src="https://example.test/poster.jpg"
+  />
+  <div
+    class="wr-card__body"
+  >
+    <span
+      class="wr-card__category"
+      data-testid="wr-card-category"
+    >
+      Movie
+    </span>
+    <h3
+      class="wr-card__title"
+      data-testid="wr-card-title"
+    >
+      The Grand Adventure
+    </h3>
+    <p
+      class="wr-card__meta"
+      data-testid="wr-card-meta"
+    >
+      <span
+        data-testid="wr-card-year"
+      >
+        2024
+      </span>
+      <span
+        data-testid="wr-card-genres"
+      >
+        Drama, Adventure
+      </span>
+      <span
+        data-testid="wr-card-rating"
+      >
+        7.5
+      </span>
+    </p>
+    <div
+      class="wr-controls"
+    >
+      <button
+        class="wr-open-details"
+        data-testid="wr-open-detail"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-arrow-right"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M5 12h14"
+          />
+          <path
+            d="m12 5 7 7-7 7"
+          />
+        </svg>
+        View details
+      </button>
+      <button
+        class="wr-shuffle"
+        data-testid="wr-shuffle"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-shuffle"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m18 14 4 4-4 4"
+          />
+          <path
+            d="m18 2 4 4-4 4"
+          />
+          <path
+            d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"
+          />
+          <path
+            d="M2 6h1.972a4 4 0 0 1 3.6 2.2"
+          />
+          <path
+            d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"
+          />
+        </svg>
+        Shuffle again
+      </button>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > recommendation card — netflix skin @ desktop 1`] = `
+<div
+  class="wr-card netflix-theme"
+  data-testid="wr-card"
+>
+  <img
+    alt="Poster for The Grand Adventure"
+    class="wr-card__poster"
+    data-placeholder="false"
+    data-testid="wr-card-poster"
+    loading="lazy"
+    src="https://example.test/poster.jpg"
+  />
+  <div
+    class="wr-card__body"
+  >
+    <span
+      class="wr-card__category"
+      data-testid="wr-card-category"
+    >
+      Movie
+    </span>
+    <h3
+      class="wr-card__title"
+      data-testid="wr-card-title"
+    >
+      The Grand Adventure
+    </h3>
+    <p
+      class="wr-card__meta"
+      data-testid="wr-card-meta"
+    >
+      <span
+        data-testid="wr-card-year"
+      >
+        2024
+      </span>
+      <span
+        data-testid="wr-card-genres"
+      >
+        Drama, Adventure
+      </span>
+      <span
+        data-testid="wr-card-rating"
+      >
+        7.5
+      </span>
+    </p>
+    <div
+      class="wr-controls"
+    >
+      <button
+        class="wr-open-details"
+        data-testid="wr-open-detail"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-arrow-right"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M5 12h14"
+          />
+          <path
+            d="m12 5 7 7-7 7"
+          />
+        </svg>
+        View details
+      </button>
+      <button
+        class="wr-shuffle"
+        data-testid="wr-shuffle"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-shuffle"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m18 14 4 4-4 4"
+          />
+          <path
+            d="m18 2 4 4-4 4"
+          />
+          <path
+            d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"
+          />
+          <path
+            d="M2 6h1.972a4 4 0 0 1 3.6 2.2"
+          />
+          <path
+            d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"
+          />
+        </svg>
+        Shuffle again
+      </button>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Watch Recommender layout snapshots > recommendation card — netflix skin @ mobile 1`] = `
+<div
+  class="wr-card netflix-theme"
+  data-testid="wr-card"
+>
+  <img
+    alt="Poster for The Grand Adventure"
+    class="wr-card__poster"
+    data-placeholder="false"
+    data-testid="wr-card-poster"
+    loading="lazy"
+    src="https://example.test/poster.jpg"
+  />
+  <div
+    class="wr-card__body"
+  >
+    <span
+      class="wr-card__category"
+      data-testid="wr-card-category"
+    >
+      Movie
+    </span>
+    <h3
+      class="wr-card__title"
+      data-testid="wr-card-title"
+    >
+      The Grand Adventure
+    </h3>
+    <p
+      class="wr-card__meta"
+      data-testid="wr-card-meta"
+    >
+      <span
+        data-testid="wr-card-year"
+      >
+        2024
+      </span>
+      <span
+        data-testid="wr-card-genres"
+      >
+        Drama, Adventure
+      </span>
+      <span
+        data-testid="wr-card-rating"
+      >
+        7.5
+      </span>
+    </p>
+    <div
+      class="wr-controls"
+    >
+      <button
+        class="wr-open-details"
+        data-testid="wr-open-detail"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-arrow-right"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M5 12h14"
+          />
+          <path
+            d="m12 5 7 7-7 7"
+          />
+        </svg>
+        View details
+      </button>
+      <button
+        class="wr-shuffle"
+        data-testid="wr-shuffle"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-shuffle"
+          fill="none"
+          height="18"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m18 14 4 4-4 4"
+          />
+          <path
+            d="m18 2 4 4-4 4"
+          />
+          <path
+            d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"
+          />
+          <path
+            d="M2 6h1.972a4 4 0 0 1 3.6 2.2"
+          />
+          <path
+            d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"
+          />
+        </svg>
+        Shuffle again
+      </button>
+    </div>
+  </div>
+</div>
+`;
