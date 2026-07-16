@@ -2487,10 +2487,6 @@ function App() {
         />
       )}
 
-      {screen === 'home' && (
-        <WatchRecommenderEntry designMode={designMode} onOpenDetail={openDetail} />
-      )}
-
       {screen === 'drama' && (featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime)) && (
         <HomeScreen
           screen={screen}
@@ -3281,6 +3277,11 @@ function HomeScreen({
                     onDismiss={onDismissInvite}
                   />
                 )}
+                <WatchRecommenderEntry
+                  designMode={designMode}
+                  onOpenDetail={onOpenDetail}
+                  variant="icon"
+                />
                 {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
                   <ProfileMenu
                     currentUser={currentUser}
@@ -3321,6 +3322,11 @@ function HomeScreen({
                   onDismiss={onDismissInvite}
                 />
               )}
+              <WatchRecommenderEntry
+                designMode={designMode}
+                onOpenDetail={onOpenDetail}
+                variant="icon"
+              />
               {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
                 <ProfileMenu
                   currentUser={currentUser}

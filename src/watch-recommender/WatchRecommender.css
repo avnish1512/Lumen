@@ -78,6 +78,26 @@
   transform: scale(0.97);
 }
 
+/* Icon-only variant used inside the top header, between the notification bell
+   and the profile control. The wrapper must not stretch; it simply hosts the
+   compact button, which borrows the header's own icon-button styling. */
+.watch-recommender.wr-inline {
+  display: inline-flex;
+  align-items: center;
+}
+
+.wr-entry-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.wr-entry-icon-btn .wr-entry-icon {
+  width: 22px;
+  height: 22px;
+}
+
 /* --------------------------------------------------------------------------
    Modal / panel shell
    -------------------------------------------------------------------------- */

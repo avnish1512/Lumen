@@ -57,6 +57,16 @@ export interface WatchRecommenderEntryProps {
    * (Requirement 5.3).
    */
   onOpenDetail: (movie: Movie) => void
+  /**
+   * Presentation of the entry control:
+   * - `'block'` (default): the full-width pill labeled "I don't know what to
+   *   watch".
+   * - `'icon'`: a compact, icon-only button suited to a toolbar/header (for
+   *   example, between the notification bell and the profile control). It
+   *   carries the sibling header-button class so it blends into the header,
+   *   while still opening the same modal.
+   */
+  variant?: 'block' | 'icon'
 }
 
 /**
@@ -68,22 +78,43 @@ export interface WatchRecommenderEntryProps {
 export function WatchRecommenderEntry({
   designMode,
   onOpenDetail,
+  variant = 'block',
 }: WatchRecommenderEntryProps) {
   const [open, setOpen] = useState(false)
 
+  const isIcon = variant === 'icon'
+  // In icon mode, borrow the header's own icon-button class so the control
+  // sits flush with the sibling search / notification / profile buttons.
+  const headerBtnClass = designMode === 'netflix' ? 'netflix-icon-btn' : 'mobile-search-btn'
+
   return (
-    <div className={`watch-recommender ${designMode}-theme`}>
-      <button
-        type="button"
-        className="wr-entry"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        data-testid="wr-entry"
-      >
-        <Sparkles size={18} className="wr-entry-icon" aria-hidden="true" />
-        <span className="wr-entry-label">I don't know what to watch</span>
-      </button>
+    <div className={`watch-recommender ${designMode}-theme${isIcon ? ' wr-inline' : ''}`}>
+      {isIcon ? (
+        <button
+          type="button"
+          className={`${headerBtnClass} wr-entry-icon-btn`}
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label="I don't know what to watch"
+          title="I don't know what to watch"
+          data-testid="wr-entry"
+        >
+          <Sparkles size={22} className="wr-entry-icon" aria-hidden="true" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="wr-entry"
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          data-testid="wr-entry"
+        >
+          <Sparkles size={18} className="wr-entry-icon" aria-hidden="true" />
+          <span className="wr-entry-label">I don't know what to watch</span>
+        </button>
+      )}
 
       {open && (
         <WatchRecommenderModal
