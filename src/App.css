@@ -11244,11 +11244,21 @@ a.watch-option-card {
     transform: translateY(-50%);
   }
 
-  /* Notification bell sits directly to the LEFT of the profile avatar (grouped
-     with the profile, not inside the floating nav pill). */
+  /* Right cluster, ordered right-to-left: profile avatar (right: 40px),
+     the Watch Recommender button, then the notification bell. All three are
+     absolutely pinned to the right of the bar, so the recommender is placed
+     explicitly between the profile and the bell (the bell is shifted left to
+     make room). */
+  .apple-desktop-nav .watch-recommender.wr-inline {
+    position: absolute;
+    right: 96px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
   .apple-desktop-nav .notif-menu-apple {
     position: absolute;
-    right: 94px;
+    right: 150px;
     top: 50%;
     transform: translateY(-50%);
   }
