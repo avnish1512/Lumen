@@ -78,24 +78,54 @@
   transform: scale(0.97);
 }
 
-/* Icon-only variant used inside the top header, between the notification bell
-   and the profile control. The wrapper must not stretch; it simply hosts the
-   compact button, which borrows the header's own icon-button styling. */
+/* Icon-only variant used inside the top header/nav, between the notification
+   bell and the profile control. The wrapper must not stretch; it simply hosts
+   the compact button. The button is fully self-styled (rather than borrowing
+   the app's header classes, some of which are viewport-gated) so it stays
+   visible in every skin and at every breakpoint. */
 .watch-recommender.wr-inline {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
 }
 
 .wr-entry-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  color: var(--wr-text);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, color 160ms ease;
 }
 
 .wr-entry-icon-btn .wr-entry-icon {
   width: 22px;
   height: 22px;
+  flex: 0 0 auto;
+}
+
+.wr-entry-icon-btn:hover,
+.wr-entry-icon-btn:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  outline: 0;
+}
+
+.wr-entry-icon-btn:active {
+  transform: scale(0.94);
+}
+
+/* Netflix skin: accent on hover to match the sidebar controls. */
+.watch-recommender.netflix-theme .wr-entry-icon-btn:hover,
+.watch-recommender.netflix-theme .wr-entry-icon-btn:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* --------------------------------------------------------------------------

@@ -83,16 +83,13 @@ export function WatchRecommenderEntry({
   const [open, setOpen] = useState(false)
 
   const isIcon = variant === 'icon'
-  // In icon mode, borrow the header's own icon-button class so the control
-  // sits flush with the sibling search / notification / profile buttons.
-  const headerBtnClass = designMode === 'netflix' ? 'netflix-icon-btn' : 'mobile-search-btn'
 
   return (
     <div className={`watch-recommender ${designMode}-theme${isIcon ? ' wr-inline' : ''}`}>
       {isIcon ? (
         <button
           type="button"
-          className={`${headerBtnClass} wr-entry-icon-btn`}
+          className="wr-entry-icon-btn"
           onClick={() => setOpen(true)}
           aria-haspopup="dialog"
           aria-expanded={open}

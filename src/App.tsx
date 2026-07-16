@@ -2754,6 +2754,7 @@ function App() {
             }
           }}
           onSignOut={signOut}
+          onOpenDetail={openDetail}
           profiles={profiles}
           designMode={designMode}
           invites={incomingInvites}
@@ -8697,6 +8698,7 @@ function DesktopNav({
   onGoAnime,
   onGoLumen,
   onSignOut,
+  onOpenDetail,
   profiles,
   designMode,
   invites,
@@ -8720,6 +8722,7 @@ function DesktopNav({
   onGoAnime: () => void
   onGoLumen: () => void
   onSignOut: () => void
+  onOpenDetail: (movie: Movie) => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
   invites: WatchParty[]
@@ -8813,6 +8816,11 @@ function DesktopNav({
               onAccept={onAcceptInvite}
               onDismiss={onDismissInvite}
             />
+            <WatchRecommenderEntry
+              designMode={designMode}
+              onOpenDetail={onOpenDetail}
+              variant="icon"
+            />
             <ProfileMenu variant="netflix" {...profileMenuProps} />
           </div>
         </div>
@@ -8875,6 +8883,11 @@ function DesktopNav({
             invites={invites}
             onAccept={onAcceptInvite}
             onDismiss={onDismissInvite}
+          />
+          <WatchRecommenderEntry
+            designMode={designMode}
+            onOpenDetail={onOpenDetail}
+            variant="icon"
           />
           <ProfileMenu variant="apple" {...profileMenuProps} />
         </>
