@@ -14253,3 +14253,37 @@ a.watch-option-card {
   background: #f6121d;
   outline: 0;
 }
+
+/* ==========================================================================
+   Mobile detail top-right pill now hosts TWO actions (Like + Watch together),
+   so lay them out in a horizontal pill instead of stacking both inside a single
+   circle (which made them overlap). Appended last so it wins over the earlier
+   single-button mobile rules.
+   ========================================================================== */
+@media (max-width: 899px) {
+  .detail-screen .action-pill {
+    left: auto;
+    right: 22px;
+    width: auto;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 6px;
+    border-radius: 999px;
+  }
+
+  .detail-screen .action-pill button,
+  .detail-screen .action-pill button:first-child {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  .detail-screen .action-pill svg {
+    width: 26px;
+    height: 26px;
+  }
+}
