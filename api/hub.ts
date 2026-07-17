@@ -31,6 +31,13 @@ import {
   saveAccount,
   verifyAccount,
 } from './_lib/accounts-core.js'
+import {
+  fetchDevices,
+  registerDevice,
+  removeDevice,
+  removeOtherDevices,
+  type DeviceRecord,
+} from './_lib/devices-core.js'
 
 type QueryValue = string | string[] | undefined
 
@@ -283,6 +290,51 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(400).json({ ok: false, error: 'Unknown action.' })
     } catch (error) {
       res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Accounts error.' })
+    }
+    return
+  }
+
+  // ---- devices (real logged-in device sessions per account) ----
+  if (kind === 'devices') {
+    res.setHeader('Cache-Control', 'no-store')
+    const action = qv(req.query.action) ?? ''
+    try {
+      if (req.method === 'GET' && action === 'list') {
+        const email = (qv(req.query.email) ?? '').trim().toLowerCase()
+        if (!email) {
+          res.status(400).json({ ok: false, error: 'email is required.', devices: [] })
+          return
+        }
+        res.status(200).json({ ok: true, configured: true, devices: await fetchDevices(config, email) })
+        return
+      }
+      const email = String(body.email ?? '').trim().toLowerCase()
+      if (!email) {
+        res.status(400).json({ ok: false, error: 'email is required.' })
+        return
+      }
+      if (action === 'register') {
+        const device = body.device as DeviceRecord | undefined
+        if (!device || typeof device.id !== 'string') {
+          res.status(400).json({ ok: false, error: 'device is required.' })
+          return
+        }
+        res.status(200).json({ ok: true, configured: true, devices: await registerDevice(config, email, device) })
+        return
+      }
+      if (action === 'remove') {
+        const id = String(body.id ?? '')
+        res.status(200).json({ ok: true, configured: true, devices: await removeDevice(config, email, id) })
+        return
+      }
+      if (action === 'removeOthers') {
+        const keepId = String(body.keepId ?? '')
+        res.status(200).json({ ok: true, configured: true, devices: await removeOtherDevices(config, email, keepId) })
+        return
+      }
+      res.status(400).json({ ok: false, error: 'Unknown action.' })
+    } catch (error) {
+      res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Devices error.' })
     }
     return
   }

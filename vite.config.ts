@@ -60,6 +60,13 @@ import {
   saveAccount,
   verifyAccount,
 } from './api/_lib/accounts-core'
+import {
+  fetchDevices,
+  registerDevice,
+  removeDevice,
+  removeOtherDevices,
+  type DeviceRecord,
+} from './api/_lib/devices-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -1271,6 +1278,71 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
   }
 }
 
+function devicesDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'devices-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/devices', async (req: IncomingMessage, res) => {
+        const config = supabaseConfigFromEnv(env)
+        if (!config) {
+          sendJson(res, 200, { ok: false, configured: false, devices: [] })
+          return
+        }
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const action = requestUrl.searchParams.get('action') ?? ''
+
+        try {
+          if (req.method === 'GET' && action === 'list') {
+            const email = (requestUrl.searchParams.get('email') ?? '').trim().toLowerCase()
+            if (!email) {
+              sendJson(res, 400, { ok: false, error: 'email is required.', devices: [] })
+              return
+            }
+            sendJson(res, 200, { ok: true, configured: true, devices: await fetchDevices(config, email) })
+            return
+          }
+
+          if (req.method === 'POST') {
+            const chunks: Buffer[] = []
+            for await (const chunk of req) {
+              chunks.push(chunk as Buffer)
+            }
+            const raw = Buffer.concat(chunks).toString('utf8')
+            const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+            const email = String(body.email ?? '').trim().toLowerCase()
+            if (!email) {
+              sendJson(res, 400, { ok: false, error: 'email is required.' })
+              return
+            }
+            if (action === 'register') {
+              const device = body.device as DeviceRecord | undefined
+              if (!device || typeof device.id !== 'string') {
+                sendJson(res, 400, { ok: false, error: 'device is required.' })
+                return
+              }
+              sendJson(res, 200, { ok: true, configured: true, devices: await registerDevice(config, email, device) })
+              return
+            }
+            if (action === 'remove') {
+              sendJson(res, 200, { ok: true, configured: true, devices: await removeDevice(config, email, String(body.id ?? '')) })
+              return
+            }
+            if (action === 'removeOthers') {
+              sendJson(res, 200, { ok: true, configured: true, devices: await removeOtherDevices(config, email, String(body.keepId ?? '')) })
+              return
+            }
+          }
+
+          sendJson(res, 400, { ok: false, error: 'Unknown action.' })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Supabase request failed.'
+          sendJson(res, 502, { ok: false, error: message })
+        }
+      })
+    },
+  }
+}
+
 function anikotoDevProxy(): Plugin {
   return {
     name: 'anikoto-dev-proxy',
@@ -1407,6 +1479,7 @@ export default defineConfig(({ mode }) => {
       posterDevProxy(env),
       watchPartyDevProxy(env),
       accountsDevProxy(env),
+      devicesDevProxy(env),
       tmdbDramaDevProxy(createTmdbWatchAuthChain(env)),
       tmdbEpisodesDevProxy(createTmdbWatchAuthChain(env)),
       movieGluDevProxy(

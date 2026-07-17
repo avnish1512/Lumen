@@ -105,6 +105,12 @@ import {
   type Account,
 } from './accounts-api'
 import {
+  fetchDevices as fetchDevicesApi,
+  registerDevice as registerDeviceApi,
+  removeDevice as removeDeviceApi,
+  removeOtherDevices as removeOtherDevicesApi,
+} from './devices-api'
+import {
   fetchLiveChannels,
   fetchLiveCategories,
   loadHlsJs,
@@ -360,7 +366,7 @@ type DeviceSession = {
   id: string
   name: string
   type: DeviceType
-  location: string
+  location?: string
   lastActive: number
   current?: boolean
 }
@@ -422,23 +428,26 @@ function currentDeviceId(): string {
   }
 }
 
-/**
- * Reads the device sessions for an account, ensuring the current device is
- * present and marked. On first use the list is seeded with a few illustrative
- * sessions so the Manage Devices screen has content to act on.
- */
-function readDeviceSessions(email: string | undefined): DeviceSession[] {
-  const selfId = currentDeviceId()
+/** The real current device (this browser). Always shown under "This Device". */
+function buildCurrentDevice(): DeviceSession {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
-  const current: DeviceSession = {
-    id: selfId,
+  return {
+    id: currentDeviceId(),
     name: detectDeviceName(ua),
     type: detectDeviceType(ua),
-    location: 'This device',
     lastActive: Date.now(),
     current: true,
   }
+}
 
+/**
+ * Local cache of the account's REAL device sessions — no fabricated entries.
+ * The backend (Supabase, via /api/devices) is the source of truth; this cache
+ * lets the screen render instantly and still show at least the current device
+ * when the backend is unavailable.
+ */
+function readCachedDevices(email: string | undefined): DeviceSession[] {
+  const current = buildCurrentDevice()
   let stored: DeviceSession[] = []
   try {
     const raw = window.localStorage.getItem(devicesKeyFor(email))
@@ -448,37 +457,33 @@ function readDeviceSessions(email: string | undefined): DeviceSession[] {
   } catch {
     stored = []
   }
-
-  if (stored.length === 0) {
-    const now = Date.now()
-    const day = 1000 * 60 * 60 * 24
-    stored = [
-      current,
-      { id: 'seed-isha', name: "Isha's iPhone", type: 'mobile', location: 'Delhi, IN', lastActive: now - 32 * day },
-      { id: 'seed-samsung', name: 'Samsung Phone', type: 'mobile', location: 'Mumbai, IN', lastActive: now - 14 * day },
-      { id: 'seed-vivo', name: 'Vivo Phone', type: 'mobile', location: 'Pune, IN', lastActive: now - 12 * day },
-      { id: 'seed-suyash', name: "Suyash's iPhone", type: 'mobile', location: 'Bengaluru, IN', lastActive: now - 3 * day },
-      { id: 'seed-win', name: 'Chrome Browser on Windows', type: 'desktop', location: 'Mumbai, IN', lastActive: now - 1 * day },
-      { id: 'seed-sonytv', name: 'Sony TV', type: 'tv', location: 'Living room', lastActive: now - 1000 * 60 * 60 * 3 },
-      { id: 'seed-androidtv', name: 'Android TV', type: 'tv', location: 'Bedroom', lastActive: now - 1000 * 60 * 60 * 5 },
-    ]
-  } else {
-    // Ensure the current device is present and refreshed, others untouched.
-    const others = stored
-      .filter((device) => device.id !== selfId)
-      .map((device) => ({ ...device, current: false }))
-    stored = [current, ...others]
-  }
-
-  return stored
+  const others = stored
+    .filter((device) => device.id !== current.id)
+    .map((device) => ({ ...device, current: false }))
+  return [current, ...others]
 }
 
-function saveDeviceSessions(email: string | undefined, sessions: DeviceSession[]) {
+function writeCachedDevices(email: string | undefined, sessions: DeviceSession[]) {
   try {
     window.localStorage.setItem(devicesKeyFor(email), JSON.stringify(sessions))
   } catch {
     // ignore quota / serialization errors
   }
+}
+
+/**
+ * Normalizes a device list (from backend or cache): marks the current device,
+ * refreshes its details, and always lists it first. Guarantees the current
+ * device appears even if the backend has not recorded it yet.
+ */
+function withCurrentDevice(list: DeviceSession[]): DeviceSession[] {
+  const current = buildCurrentDevice()
+  const known = list.find((device) => device.id === current.id)
+  const others = list
+    .filter((device) => device.id !== current.id)
+    .map((device) => ({ ...device, current: false }))
+  const self = known ? { ...known, ...current, current: true } : current
+  return [self, ...others]
 }
 
 /** "Last used" label in the grouped device list (Today / Yesterday / N Days Ago / N Months Ago). */
@@ -1898,6 +1903,24 @@ function App() {
     // Mark this profile as the one now loaded so the persistence effects above
     // are allowed to write its data.
     loadedProfileRef.current = currentUser?.name ?? null
+  }, [currentUser])
+
+  // Record this real device as a signed-in session for the account, so the
+  // "Manage Devices" screen reflects actual devices (not sample data). Runs
+  // whenever the signed-in account changes.
+  useEffect(() => {
+    const email = currentUser?.email
+    if (!email) {
+      return
+    }
+    const current = buildCurrentDevice()
+    void registerDeviceApi(email, {
+      id: current.id,
+      name: current.name,
+      type: current.type,
+      lastActive: current.lastActive,
+    })
+    writeCachedDevices(email, withCurrentDevice(readCachedDevices(email)))
   }, [currentUser])
 
   useEffect(() => {
@@ -5950,31 +5973,61 @@ function LoginScreen({
   }
 
   const openManageDevices = () => {
-    const sessions = readDeviceSessions(currentUser?.email)
-    saveDeviceSessions(currentUser?.email, sessions)
-    setDevices(sessions)
+    const email = currentUser?.email
+    // Render instantly from the local cache (always includes this real device).
+    setDevices(withCurrentDevice(readCachedDevices(email)))
     setDevicesOpen(true)
+    // Then refresh from the backend, which is the source of truth for the real
+    // devices signed in to this account.
+    if (email) {
+      void fetchDevicesApi(email).then((list) => {
+        const merged = withCurrentDevice(list)
+        setDevices(merged)
+        writeCachedDevices(email, merged)
+      })
+    }
   }
 
   // Log a single device out of the account. Logging out the current device
   // ends this session (signs the viewer out); logging out another device just
-  // removes its session from the list.
+  // removes its real session from the account.
   const logoutDevice = (id: string) => {
+    const email = currentUser?.email
     const target = devices.find((device) => device.id === id)
-    const remaining = devices.filter((device) => device.id !== id)
-    setDevices(remaining)
-    saveDeviceSessions(currentUser?.email, remaining)
     if (target?.current) {
+      if (email) {
+        void removeDeviceApi(email, id)
+      }
       setDevicesOpen(false)
       onLogout()
+      return
+    }
+    const remaining = withCurrentDevice(devices.filter((device) => device.id !== id))
+    setDevices(remaining)
+    writeCachedDevices(email, remaining)
+    if (email) {
+      void removeDeviceApi(email, id).then((list) => {
+        const merged = withCurrentDevice(list)
+        setDevices(merged)
+        writeCachedDevices(email, merged)
+      })
     }
   }
 
   // Log out of every other device, keeping only the current session.
   const logoutOtherDevices = () => {
-    const remaining = devices.filter((device) => device.current)
+    const email = currentUser?.email
+    const keepId = currentDeviceId()
+    const remaining = withCurrentDevice(devices.filter((device) => device.id === keepId))
     setDevices(remaining)
-    saveDeviceSessions(currentUser?.email, remaining)
+    writeCachedDevices(email, remaining)
+    if (email) {
+      void removeOtherDevicesApi(email, keepId).then((list) => {
+        const merged = withCurrentDevice(list)
+        setDevices(merged)
+        writeCachedDevices(email, merged)
+      })
+    }
   }
 
   const submitAccount = async () => {
