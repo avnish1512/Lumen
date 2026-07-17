@@ -451,10 +451,16 @@ function readDeviceSessions(email: string | undefined): DeviceSession[] {
 
   if (stored.length === 0) {
     const now = Date.now()
+    const day = 1000 * 60 * 60 * 24
     stored = [
       current,
-      { id: 'seed-tv', name: 'Samsung Smart TV', type: 'tv', location: 'Living room', lastActive: now - 1000 * 60 * 60 * 5 },
-      { id: 'seed-mobile', name: 'Chrome on Android', type: 'mobile', location: 'Mumbai, IN', lastActive: now - 1000 * 60 * 60 * 26 },
+      { id: 'seed-isha', name: "Isha's iPhone", type: 'mobile', location: 'Delhi, IN', lastActive: now - 32 * day },
+      { id: 'seed-samsung', name: 'Samsung Phone', type: 'mobile', location: 'Mumbai, IN', lastActive: now - 14 * day },
+      { id: 'seed-vivo', name: 'Vivo Phone', type: 'mobile', location: 'Pune, IN', lastActive: now - 12 * day },
+      { id: 'seed-suyash', name: "Suyash's iPhone", type: 'mobile', location: 'Bengaluru, IN', lastActive: now - 3 * day },
+      { id: 'seed-win', name: 'Chrome Browser on Windows', type: 'desktop', location: 'Mumbai, IN', lastActive: now - 1 * day },
+      { id: 'seed-sonytv', name: 'Sony TV', type: 'tv', location: 'Living room', lastActive: now - 1000 * 60 * 60 * 3 },
+      { id: 'seed-androidtv', name: 'Android TV', type: 'tv', location: 'Bedroom', lastActive: now - 1000 * 60 * 60 * 5 },
     ]
   } else {
     // Ensure the current device is present and refreshed, others untouched.
@@ -475,19 +481,17 @@ function saveDeviceSessions(email: string | undefined, sessions: DeviceSession[]
   }
 }
 
-/** Human-readable "last active" label for a device session. */
-function deviceLastActiveLabel(session: DeviceSession): string {
+/** "Last used" label in the grouped device list (Today / Yesterday / N Days Ago / N Months Ago). */
+function deviceLastUsedLabel(session: DeviceSession): string {
   if (session.current) {
-    return 'Active now'
+    return 'Today'
   }
-  const diff = Date.now() - session.lastActive
-  const minutes = Math.round(diff / 60000)
-  if (minutes < 1) return 'Active now'
-  if (minutes < 60) return `Active ${minutes} min ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `Active ${hours} hr ago`
-  const days = Math.round(hours / 24)
-  return `Active ${days} day${days === 1 ? '' : 's'} ago`
+  const days = Math.floor((Date.now() - session.lastActive) / (1000 * 60 * 60 * 24))
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 30) return `${days} Days Ago`
+  const months = Math.floor(days / 30)
+  return `${months} Month${months === 1 ? '' : 's'} Ago`
 }
 
 function readWatchHistory(): WatchHistory {
@@ -6255,52 +6259,78 @@ function LoginScreen({
         )}
 
         {devicesOpen && (
-          <div className="bff-overlay" role="dialog" aria-label="Manage devices">
-            <div className="bff-modal device-manage-modal">
-              <button className="bff-close" type="button" aria-label="Close" onClick={() => setDevicesOpen(false)}>
-                <X size={20} />
+          <div className="device-manage-screen" role="dialog" aria-label="Manage devices">
+            <div className="device-manage-topbar">
+              <button
+                className="device-back"
+                type="button"
+                aria-label="Back"
+                onClick={() => setDevicesOpen(false)}
+              >
+                <ChevronLeft size={24} />
               </button>
-              <h2 className="bff-title">Manage Devices</h2>
-              <p className="bff-sub">
-                These devices are currently signed in to your account. Sign out of
-                any you don't recognise to keep your account secure.
-              </p>
+            </div>
 
-              <div className="device-list">
-                {devices.map((device) => (
-                  <div key={device.id} className="device-row">
-                    <span className={`device-icon device-icon-${device.type}`}>
-                      {device.type === 'tv' && <Tv size={22} />}
-                      {device.type === 'mobile' && <Smartphone size={22} />}
-                      {device.type === 'tablet' && <Tablet size={22} />}
-                      {device.type === 'desktop' && <Monitor size={22} />}
-                    </span>
-                    <div className="device-info">
-                      <span className="device-name">
-                        {device.name}
-                        {device.current && <span className="device-current-tag">This device</span>}
-                      </span>
-                      <span className="device-meta">
-                        {device.location} • {deviceLastActiveLabel(device)}
-                      </span>
-                    </div>
-                    {device.current ? (
-                      <span className="device-current-badge">Current</span>
-                    ) : (
-                      <button
-                        className="device-logout"
-                        type="button"
-                        onClick={() => logoutDevice(device.id)}
-                      >
-                        <LogOut size={15} />
-                        <span>Log out</span>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+            <div className="device-manage-body">
+              {devices.filter((device) => device.current).length > 0 && (
+                <section className="device-group">
+                  <h2 className="device-group-title">This Device</h2>
+                  {devices
+                    .filter((device) => device.current)
+                    .map((device) => (
+                      <div key={device.id} className="device-row">
+                        <span className={`device-icon device-icon-${device.type}`}>
+                          {device.type === 'tv' && <Tv size={22} />}
+                          {device.type === 'mobile' && <Smartphone size={22} />}
+                          {device.type === 'tablet' && <Tablet size={22} />}
+                          {device.type === 'desktop' && <Monitor size={22} />}
+                        </span>
+                        <div className="device-info">
+                          <span className="device-name">{device.name}</span>
+                          <span className="device-meta">Last used : {deviceLastUsedLabel(device)}</span>
+                        </div>
+                        <button
+                          className="device-logout"
+                          type="button"
+                          onClick={() => logoutDevice(device.id)}
+                        >
+                          Log Out
+                        </button>
+                      </div>
+                    ))}
+                </section>
+              )}
 
-              {devices.some((device) => !device.current) && (
+              {devices.filter((device) => !device.current).length > 0 && (
+                <section className="device-group">
+                  <h2 className="device-group-title">Other Devices</h2>
+                  {devices
+                    .filter((device) => !device.current)
+                    .map((device) => (
+                      <div key={device.id} className="device-row">
+                        <span className={`device-icon device-icon-${device.type}`}>
+                          {device.type === 'tv' && <Tv size={22} />}
+                          {device.type === 'mobile' && <Smartphone size={22} />}
+                          {device.type === 'tablet' && <Tablet size={22} />}
+                          {device.type === 'desktop' && <Monitor size={22} />}
+                        </span>
+                        <div className="device-info">
+                          <span className="device-name">{device.name}</span>
+                          <span className="device-meta">Last used : {deviceLastUsedLabel(device)}</span>
+                        </div>
+                        <button
+                          className="device-logout"
+                          type="button"
+                          onClick={() => logoutDevice(device.id)}
+                        >
+                          Log Out
+                        </button>
+                      </div>
+                    ))}
+                </section>
+              )}
+
+              {devices.filter((device) => !device.current).length > 0 && (
                 <button
                   className="device-logout-all"
                   type="button"
