@@ -87,6 +87,10 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
+  background: transparent !important;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .wr-entry-icon-btn {
@@ -99,7 +103,11 @@
   color: var(--wr-text);
   border: 0;
   border-radius: 50%;
-  background: transparent;
+  /* Keep the trigger chrome-free (no dark square) so it matches the sibling
+     search / notification icons in the header. */
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
   cursor: pointer;
   transition: transform 160ms ease, background 160ms ease, color 160ms ease;
 }
@@ -113,7 +121,7 @@
 .wr-entry-icon-btn:hover,
 .wr-entry-icon-btn:focus-visible {
   color: #fff;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.14) !important;
   outline: 0;
 }
 
@@ -125,7 +133,7 @@
 .watch-recommender.netflix-theme .wr-entry-icon-btn:hover,
 .watch-recommender.netflix-theme .wr-entry-icon-btn:focus-visible {
   color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.12) !important;
 }
 
 /* --------------------------------------------------------------------------
