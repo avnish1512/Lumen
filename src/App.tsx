@@ -111,10 +111,15 @@ import {
   removeOtherDevices as removeOtherDevicesApi,
 } from './devices-api'
 import {
-  fetchLiveChannels,
-  fetchLiveCategories,
-  loadHlsJs,
-  type LiveChannel,
+  fetchLiveSports,
+  fetchLiveMatches,
+  fetchFirstAvailableStreams,
+  liveBadgeUrl,
+  liveMatchPoster,
+  type LiveSport,
+  type LiveMatch,
+  type LiveStream,
+  type LiveMatchScope,
 } from './livetv'
 import { topPosterUrl, hasTopPoster, proxiedAnimeImage } from './posters'
 import { fetchTrailerYoutubeId } from './kinocheck'
@@ -8385,113 +8390,18 @@ function LoadingStrip({ label }: { label: string }) {
   )
 }
 
-function LiveTvPlayer({ channel }: { channel: LiveChannel }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    const video = videoRef.current
-
-    if (!video || !channel.url) {
-      return
-    }
-
-    let cancelled = false
-    let hls: { destroy: () => void } | null = null
-
-    setLoading(true)
-    setError('')
-
-    const start = () => {
-      video.play().catch(() => {
-        // Autoplay may be blocked until the user interacts; controls are shown.
-      })
-    }
-
-    async function setup() {
-      // Safari / iOS play HLS natively without hls.js.
-      if (video!.canPlayType('application/vnd.apple.mpegurl')) {
-        video!.src = channel.url
-        setLoading(false)
-        start()
-        return
-      }
-
-      try {
-        const Hls = await loadHlsJs()
-
-        if (cancelled) {
-          return
-        }
-
-        if (Hls && Hls.isSupported()) {
-          hls = new Hls({ enableWorker: true, lowLatencyMode: true })
-          const instance = hls as unknown as {
-            loadSource: (u: string) => void
-            attachMedia: (v: HTMLVideoElement) => void
-            on: (event: string, cb: (e: unknown, data: { fatal?: boolean }) => void) => void
-          }
-          instance.loadSource(channel.url)
-          instance.attachMedia(video!)
-          instance.on(Hls.Events.MANIFEST_PARSED, () => {
-            setLoading(false)
-            start()
-          })
-          instance.on(Hls.Events.ERROR, (_event: unknown, data: { fatal?: boolean }) => {
-            if (data.fatal) {
-              setError('This channel is offline or blocked in your region.')
-              setLoading(false)
-            }
-          })
-        } else {
-          // Last resort: let the browser try the URL directly.
-          video!.src = channel.url
-          setLoading(false)
-          start()
-        }
-      } catch {
-        if (!cancelled) {
-          setError('Could not load the live TV player.')
-          setLoading(false)
-        }
-      }
-    }
-
-    void setup()
-
-    return () => {
-      cancelled = true
-      if (hls) {
-        hls.destroy()
-      }
-      video.removeAttribute('src')
-      video.load()
-    }
-  }, [channel.url])
-
+function LiveTvPlayer({ stream, title }: { stream: LiveStream; title: string }) {
   return (
     <div className="livetv-player-frame">
-      <video
-        ref={videoRef}
-        className="livetv-video"
-        controls
-        autoPlay
-        muted
-        playsInline
+      <iframe
+        key={stream.id}
+        className="livetv-embed"
+        src={stream.embedUrl}
+        title={title}
+        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+        allowFullScreen
+        referrerPolicy="no-referrer"
       />
-      {loading && !error && (
-        <div className="livetv-player-overlay">
-          <LoaderCircle className="spin-icon" />
-          <p>Tuning in to {channel.name}…</p>
-        </div>
-      )}
-      {error && (
-        <div className="livetv-player-overlay">
-          <AlertCircle />
-          <p>{error}</p>
-        </div>
-      )}
     </div>
   )
 }
@@ -8503,101 +8413,170 @@ type LiveTvScreenProps = {
   profiles: UserProfile[]
 }
 
-const LIVE_TV_RESULT_LIMIT = 200
+function formatMatchTime(date: number): string {
+  if (!date) {
+    return ''
+  }
+  try {
+    return new Date(date).toLocaleString(undefined, {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}
+
+function LiveMatchCard({
+  match,
+  active,
+  onSelect,
+}: {
+  match: LiveMatch
+  active: boolean
+  onSelect: (match: LiveMatch) => void
+}) {
+  const [posterFailed, setPosterFailed] = useState(false)
+  const poster = posterFailed ? '' : liveMatchPoster(match)
+  const home = match.teams?.home
+  const away = match.teams?.away
+  const isLiveNow = match.date <= Date.now()
+
+  return (
+    <button
+      type="button"
+      className={`livetv-match-card${active ? ' active' : ''}`}
+      onClick={() => onSelect(match)}
+      title={match.title}
+    >
+      <span className="livetv-match-thumb">
+        {poster ? (
+          <img
+            src={poster}
+            alt=""
+            loading="lazy"
+            onError={() => setPosterFailed(true)}
+          />
+        ) : (
+          <span className="livetv-match-badges">
+            {home?.badge && <img src={liveBadgeUrl(home.badge)} alt="" loading="lazy" />}
+            <span className="livetv-match-vs">vs</span>
+            {away?.badge && <img src={liveBadgeUrl(away.badge)} alt="" loading="lazy" />}
+          </span>
+        )}
+        {isLiveNow && <span className="livetv-card-live">● LIVE</span>}
+        {match.popular && !isLiveNow && <span className="livetv-card-hot">HOT</span>}
+      </span>
+      <span className="livetv-match-body">
+        <span className="livetv-match-title">{match.title}</span>
+        <span className="livetv-match-meta">
+          {match.category}
+          {match.date ? ` · ${formatMatchTime(match.date)}` : ''}
+        </span>
+      </span>
+    </button>
+  )
+}
 
 function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScreenProps) {
-  const [channels, setChannels] = useState<LiveChannel[]>([])
-  const [categoryNames, setCategoryNames] = useState<Map<string, string>>(new Map())
+  const [sports, setSports] = useState<LiveSport[]>([])
+  const [scope, setScope] = useState<LiveMatchScope>('live')
+  const [matches, setMatches] = useState<LiveMatch[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
-  const [activeCategory, setActiveCategory] = useState('all')
-  const [activeCountry, setActiveCountry] = useState('all')
-  const [selected, setSelected] = useState<LiveChannel | null>(null)
 
+  const [selectedMatch, setSelectedMatch] = useState<LiveMatch | null>(null)
+  const [streams, setStreams] = useState<LiveStream[]>([])
+  const [selectedStream, setSelectedStream] = useState<LiveStream | null>(null)
+  const [streamsLoading, setStreamsLoading] = useState(false)
+  const [streamsError, setStreamsError] = useState('')
+
+  // Load the sport categories once.
   useEffect(() => {
     let cancelled = false
+    void fetchLiveSports().then((list) => {
+      if (!cancelled) {
+        setSports(list)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
+  // Load matches whenever the scope (Live / Today / a sport) changes.
+  useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError('')
 
-    Promise.all([fetchLiveChannels(), fetchLiveCategories()])
-      .then(([list, categories]) => {
+    fetchLiveMatches(scope)
+      .then((list) => {
         if (cancelled) {
           return
         }
-        setChannels(list)
-        setCategoryNames(categories)
-        setSelected((current) => current ?? list[0] ?? null)
+        setMatches(list)
         setLoading(false)
       })
       .catch((err: unknown) => {
         if (cancelled) {
           return
         }
-        setError(err instanceof Error ? err.message : 'Could not load live channels.')
+        setError(err instanceof Error ? err.message : 'Could not load live matches.')
+        setMatches([])
         setLoading(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [scope])
 
-  const countries = useMemo(() => {
-    const map = new Map<string, { name: string; flag: string; count: number }>()
-    for (const channel of channels) {
-      if (!channel.country) continue
-      const existing = map.get(channel.country)
-      if (existing) {
-        existing.count += 1
-      } else {
-        map.set(channel.country, { name: channel.countryName, flag: channel.flag, count: 1 })
-      }
-    }
-    return Array.from(map.entries())
-      .map(([code, info]) => ({ code, ...info }))
-      .sort((a, b) => b.count - a.count)
-  }, [channels])
-
-  const categories = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const channel of channels) {
-      for (const category of channel.categories) {
-        counts.set(category, (counts.get(category) ?? 0) + 1)
-      }
-    }
-    return Array.from(counts.entries())
-      .map(([id, count]) => ({ id, name: categoryNames.get(id) ?? id, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 14)
-  }, [channels, categoryNames])
-
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-
-    return channels.filter((channel) => {
-      if (activeCountry !== 'all' && channel.country !== activeCountry) {
-        return false
-      }
-      if (activeCategory !== 'all' && !channel.categories.includes(activeCategory)) {
-        return false
-      }
-      if (normalizedQuery && !channel.name.toLowerCase().includes(normalizedQuery)) {
-        return false
-      }
-      return true
-    })
-  }, [channels, activeCategory, activeCountry, query])
-
-  const visible = filtered.slice(0, LIVE_TV_RESULT_LIMIT)
-
-  const pickChannel = (channel: LiveChannel) => {
-    setSelected(channel)
+  const pickMatch = (match: LiveMatch) => {
+    setSelectedMatch(match)
+    setSelectedStream(null)
+    setStreams([])
+    setStreamsError('')
+    setStreamsLoading(true)
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     })
+
+    void fetchFirstAvailableStreams(match)
+      .then((list) => {
+        setStreams(list)
+        setSelectedStream(list[0] ?? null)
+        if (list.length === 0) {
+          setStreamsError('No live stream is available for this event yet.')
+        }
+        setStreamsLoading(false)
+      })
+      .catch(() => {
+        setStreamsError('Could not load the stream for this event.')
+        setStreamsLoading(false)
+      })
   }
+
+  const filtered = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) {
+      return matches
+    }
+    return matches.filter(
+      (match) =>
+        match.title.toLowerCase().includes(normalizedQuery) ||
+        match.category.toLowerCase().includes(normalizedQuery),
+    )
+  }, [matches, query])
+
+  const scopeLabel =
+    scope === 'live'
+      ? 'Live now'
+      : scope === 'all-today'
+        ? "Today's events"
+        : sports.find((s) => s.id === scope)?.name ?? 'Matches'
 
   return (
     <section className="screen livetv-screen">
@@ -8616,24 +8595,43 @@ function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScre
         </div>
       </header>
 
-      {selected && !loading && !error && (
+      {selectedMatch && (
         <div className="livetv-now-playing">
-          <LiveTvPlayer key={selected.id} channel={selected} />
+          {streamsLoading ? (
+            <div className="livetv-player-frame livetv-player-status">
+              <LoaderCircle className="spin-icon" />
+              <p>Loading stream for {selectedMatch.title}…</p>
+            </div>
+          ) : selectedStream ? (
+            <LiveTvPlayer stream={selectedStream} title={selectedMatch.title} />
+          ) : (
+            <div className="livetv-player-frame livetv-player-status">
+              <AlertCircle />
+              <p>{streamsError || 'No stream available.'}</p>
+            </div>
+          )}
           <div className="livetv-now-meta">
             <span className="livetv-live-badge">● LIVE</span>
-            <h2>
-              <span className="livetv-flag">{selected.flag}</span> {selected.name}
-            </h2>
+            <h2>{selectedMatch.title}</h2>
             <p>
-              {selected.countryName}
-              {selected.quality ? ` · ${selected.quality}` : ''}
-              {selected.categories.length > 0
-                ? ` · ${selected.categories
-                    .map((id) => categoryNames.get(id) ?? id)
-                    .slice(0, 3)
-                    .join(', ')}`
-                : ''}
+              {selectedMatch.category}
+              {selectedMatch.date ? ` · ${formatMatchTime(selectedMatch.date)}` : ''}
             </p>
+            {streams.length > 1 && (
+              <div className="livetv-stream-picker">
+                {streams.map((stream) => (
+                  <button
+                    key={stream.id}
+                    type="button"
+                    className={`livetv-stream-chip${selectedStream?.id === stream.id ? ' active' : ''}`}
+                    onClick={() => setSelectedStream(stream)}
+                  >
+                    {stream.source} #{stream.streamNo} · {stream.language || 'Feed'}
+                    {stream.hd ? ' · HD' : ''}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -8644,41 +8642,35 @@ function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScre
           <input
             type="search"
             value={query}
-            placeholder="Search channels"
+            placeholder="Search live events"
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <select
-          className="livetv-country-select"
-          value={activeCountry}
-          onChange={(event) => setActiveCountry(event.target.value)}
-          aria-label="Filter by country"
-        >
-          <option value="all">All countries</option>
-          {countries.map((country) => (
-            <option key={country.code} value={country.code}>
-              {country.flag} {country.name} ({country.count})
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="livetv-category-chips">
         <button
           type="button"
-          className={activeCategory === 'all' ? 'active' : ''}
-          onClick={() => setActiveCategory('all')}
+          className={scope === 'live' ? 'active' : ''}
+          onClick={() => setScope('live')}
         >
-          All
+          Live now
         </button>
-        {categories.map((category) => (
+        <button
+          type="button"
+          className={scope === 'all-today' ? 'active' : ''}
+          onClick={() => setScope('all-today')}
+        >
+          Today
+        </button>
+        {sports.map((sport) => (
           <button
-            key={category.id}
+            key={sport.id}
             type="button"
-            className={activeCategory === category.id ? 'active' : ''}
-            onClick={() => setActiveCategory(category.id)}
+            className={scope === sport.id ? 'active' : ''}
+            onClick={() => setScope(sport.id)}
           >
-            {category.name}
+            {sport.name}
           </button>
         ))}
       </div>
@@ -8686,7 +8678,7 @@ function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScre
       {loading ? (
         <div className="livetv-status">
           <LoaderCircle className="spin-icon" />
-          <p>Loading live channels from iptv-org…</p>
+          <p>Loading {scopeLabel.toLowerCase()}…</p>
         </div>
       ) : error ? (
         <div className="livetv-status">
@@ -8696,27 +8688,21 @@ function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScre
       ) : (
         <>
           <div className="livetv-result-count">
-            {filtered.length} channel{filtered.length === 1 ? '' : 's'}
-            {filtered.length > visible.length ? ` · showing first ${visible.length}` : ''}
+            {scopeLabel} · {filtered.length} event{filtered.length === 1 ? '' : 's'}
           </div>
-          <div className="livetv-grid">
-            {visible.map((channel) => (
-              <button
-                key={channel.id}
-                type="button"
-                className={`livetv-card${selected?.id === channel.id ? ' active' : ''}`}
-                onClick={() => pickChannel(channel)}
-                title={channel.name}
-              >
-                <span className="livetv-card-flag">{channel.flag}</span>
-                <span className="livetv-card-name">{channel.name}</span>
-                <span className="livetv-card-meta">{channel.countryName}</span>
-              </button>
+          <div className="livetv-grid livetv-match-grid">
+            {filtered.map((match) => (
+              <LiveMatchCard
+                key={match.id}
+                match={match}
+                active={selectedMatch?.id === match.id}
+                onSelect={pickMatch}
+              />
             ))}
           </div>
-          {visible.length === 0 && (
+          {filtered.length === 0 && (
             <div className="livetv-status">
-              <p>No channels match your filters.</p>
+              <p>No live events right now. Try another sport or check back later.</p>
             </div>
           )}
         </>
