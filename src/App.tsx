@@ -617,19 +617,6 @@ const seasonEpisodeCounts: Record<string, number[]> = {
   tt0413573: [9, 27, 25, 17, 24, 24, 22, 24, 24, 24, 25, 24, 24, 24, 25, 21, 17, 20, 20],
 }
 
-const episodeTitlePool = [
-  'Aftermath',
-  'Departure',
-  'Signals',
-  'Crossing',
-  'The Search',
-  'Nightfall',
-  'Turning Point',
-  'Reckoning',
-  'The Return',
-  'Final Move',
-]
-
 function seasonsFor(movie: Movie) {
   if (movie.isAnime) {
     // AniList anime use a single continuous season with absolute episode
@@ -667,8 +654,10 @@ function episodeRuntime(movie: Movie, _season: number, _episode: number) {
   return ''
 }
 
-function episodeTitle(season: number, episode: number) {
-  return episodeTitlePool[(season * 3 + episode - 1) % episodeTitlePool.length]
+function episodeTitle(_season: number, episode: number) {
+  // No real episode title available — use a neutral, honest label rather than a
+  // fabricated name that looks like a real episode title.
+  return `Episode ${episode}`
 }
 
 function episodeSynopsis(movie: Movie, season: number, episode: number) {
@@ -4906,15 +4895,20 @@ function SeasonEpisodeSection({
             const runtime =
               data?.runtime || episodeRuntime(movie, selectedSeason, episode)
 
-            // "Coming soon" detection: a future TMDB air_date, or the anime's
-            // next-airing episode.
+            // "Coming soon" detection: a future TMDB air_date, or — for anime —
+            // any episode at or after the next-airing one (everything from the
+            // next episode onward hasn't aired yet, not just the single next).
             const animeUpcoming =
-              movie.isAnime && movie.nextEpisode?.number === episode
+              movie.isAnime &&
+              typeof movie.nextEpisode?.number === 'number' &&
+              episode >= movie.nextEpisode.number
             const tmdbUpcoming =
               !!data?.airDate && new Date(data.airDate).getTime() > Date.now()
             const upcoming = animeUpcoming || tmdbUpcoming
+            // Only the exact next-airing anime episode has a known date; later
+            // unaired episodes just show "Coming soon" without a (wrong) date.
             const comingDate = animeUpcoming
-              ? movie.nextEpisode?.airingAt
+              ? episode === movie.nextEpisode?.number && movie.nextEpisode?.airingAt
                 ? formatAirDate(movie.nextEpisode.airingAt * 1000)
                 : ''
               : data?.airDate
