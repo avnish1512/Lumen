@@ -2595,12 +2595,26 @@ function App() {
   }, [mapAniListToMovie, designMode, searchMode, movies, tvShows, anime])
 
   useEffect(() => {
+    const onWatchOrDetail = screen === 'watch' || screen === 'detail'
     if (
-      screen !== 'watch' ||
+      !onWatchOrDetail ||
       !selectedMovie ||
       selectedMovie.tmdbId ||
       streamLoading ||
       streamHydrateAttemptedRef.current.has(selectedMovie.id)
+    ) {
+      return
+    }
+
+    // On the detail screen, resolve the TMDB id ahead of playback only for
+    // (non-anime) TV shows — this is what lets the real per-episode stills and
+    // titles load (e.g. Breaking Bad opened from OMDb, which has no tmdbId yet).
+    // Anime get their episodes from AniList, and movies don't need this until
+    // the watch screen.
+    if (
+      screen === 'detail' &&
+      (selectedMovie.isAnime ||
+        !(selectedMovie.tmdbType === 'tv' || isTvShow(selectedMovie)))
     ) {
       return
     }
