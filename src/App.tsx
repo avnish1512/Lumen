@@ -986,13 +986,15 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
     : `${episodeCount || '?'} Episode${episodeCount === 1 ? '' : 's'}`
 
   // Per-episode artwork/titles from AniList (present on the details response).
+  // Keep every entry in episode order (do NOT filter out ones missing a
+  // thumbnail) so that `animeEpisodes[episode - 1]` stays aligned to the real
+  // episode number. Filtering shifted the array and made episodes show the
+  // wrong (or the show's main) poster.
   const animeEpisodes = Array.isArray(anime.streamingEpisodes)
-    ? anime.streamingEpisodes
-        .filter((entry: any) => entry?.thumbnail)
-        .map((entry: any) => ({
-          title: String(entry.title ?? '').trim(),
-          thumbnail: String(entry.thumbnail ?? ''),
-        }))
+    ? anime.streamingEpisodes.map((entry: any) => ({
+        title: String(entry?.title ?? '').trim(),
+        thumbnail: String(entry?.thumbnail ?? ''),
+      }))
     : undefined
 
   const nextEpisode =
@@ -1272,11 +1274,10 @@ function App() {
     if (!savedUser) {
       return 'login'
     }
-    // On mobile, always open the "Choose your profile" screen (Netflix-style)
-    // so the viewer confirms which independent profile they're using.
-    if (typeof window !== 'undefined' && window.innerWidth <= 899) {
-      return 'profiles'
-    }
+    // Restore the actual screen the viewer was on (from the URL hash) after a
+    // refresh, on every device. A returning, already-signed-in user keeps their
+    // last-selected profile; the "Choose your profile" screen stays reachable
+    // from the profile menu instead of interrupting every refresh.
     return getInitialScreen()
   })
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(readCurrentUser)
@@ -4477,7 +4478,11 @@ function DetailScreen({
           </div>
 
           {error && <InlineAlert message={error} />}
-          {isLoading && <LoadingStrip label="Loading full details" />}
+          {/* The card data (poster, title, synopsis, genres) is already shown,
+              so only surface the blocking strip when there is genuinely nothing
+              to display yet. Enrichment (cast, ratings, episodes) hydrates in
+              the background without a full-screen loader. */}
+          {isLoading && !movie.synopsis && <LoadingStrip label="Loading full details" />}
         </div>
 
         {!isNetflix && (

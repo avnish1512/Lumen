@@ -113,13 +113,13 @@ function mapAniListToMovie(anime: AniListAnime, rank = 1): Movie {
     ? 'Movie'
     : `${episodeCount || '?'} Episode${episodeCount === 1 ? '' : 's'}`
 
+  // Keep every entry in episode order (do not drop ones without a thumbnail)
+  // so index alignment with the real episode number is preserved.
   const animeEpisodes = Array.isArray(anime.streamingEpisodes)
-    ? anime.streamingEpisodes
-        .filter((entry) => entry?.thumbnail)
-        .map((entry) => ({
-          title: String(entry.title ?? '').trim(),
-          thumbnail: String(entry.thumbnail ?? ''),
-        }))
+    ? anime.streamingEpisodes.map((entry) => ({
+        title: String(entry?.title ?? '').trim(),
+        thumbnail: String(entry?.thumbnail ?? ''),
+      }))
     : undefined
 
   const nextEpisode =
