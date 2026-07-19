@@ -13604,6 +13604,25 @@ a.watch-option-card {
   border: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 200;
   animation: seasonDdIn 0.14s ease-out;
+  /* Show about four seasons, then scroll the rest. */
+  max-height: 248px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.season-dd-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.season-dd-menu::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.season-dd-menu::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 @keyframes seasonDdIn {
@@ -13615,6 +13634,7 @@ a.watch-option-card {
   display: flex;
   align-items: center;
   width: 100%;
+  flex: 0 0 auto;
   padding: 14px 18px;
   border: 0;
   border-radius: 12px;
