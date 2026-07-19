@@ -64,6 +64,9 @@ export type Movie = {
   isAnime?: boolean
   animeFormat?: string
   episodeCount?: number
+  // Real per-episode duration in minutes (AniList `duration`), used to show an
+  // accurate episode runtime instead of a fabricated one.
+  episodeRuntimeMinutes?: number
   // Per-episode artwork/titles from AniList (streamingEpisodes), in episode
   // order. Used to give anime their own episode thumbnails.
   animeEpisodes?: { title: string; thumbnail: string }[]

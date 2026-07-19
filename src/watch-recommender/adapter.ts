@@ -140,6 +140,7 @@ function mapAniListToMovie(anime: AniListAnime, rank = 1): Movie {
     isAnime: true,
     animeFormat,
     episodeCount,
+    episodeRuntimeMinutes: typeof anime.duration === 'number' ? anime.duration : undefined,
     animeEpisodes,
     nextEpisode,
     trailerYoutubeId,

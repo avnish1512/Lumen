@@ -18,6 +18,7 @@ export type AniListAnime = {
   genres?: string[];
   seasonYear?: number;
   episodes?: number;
+  duration?: number;
   nextAiringEpisode?: {
     episode?: number;
     airingAt?: number;
@@ -89,6 +90,7 @@ export async function searchAnime(query: string, page = 1, perPage = 20): Promis
           genres
           seasonYear
           episodes
+          duration
           nextAiringEpisode {
             episode
           }
@@ -127,6 +129,7 @@ export async function getAnimeDetails(id: number): Promise<AniListAnime> {
         genres
         seasonYear
         episodes
+        duration
         nextAiringEpisode {
           episode
           airingAt
@@ -226,6 +229,7 @@ export async function fetchAnimeByOptions({
           genres
           seasonYear
           episodes
+          duration
           nextAiringEpisode {
             episode
           }
@@ -277,6 +281,7 @@ export async function fetchAnimeListByIds(ids: number[]): Promise<AniListAnime[]
           genres
           seasonYear
           episodes
+          duration
           nextAiringEpisode {
             episode
           }

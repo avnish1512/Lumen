@@ -652,14 +652,19 @@ function seasonsFor(movie: Movie) {
   }))
 }
 
-function episodeRuntime(movie: Movie, season: number, episode: number) {
+function episodeRuntime(movie: Movie, _season: number, _episode: number) {
+  // Anime carry a real per-episode duration from AniList; use it directly.
+  if (movie.isAnime && typeof movie.episodeRuntimeMinutes === 'number' && movie.episodeRuntimeMinutes > 0) {
+    return `${movie.episodeRuntimeMinutes}m`
+  }
+  // Otherwise, only surface a real minutes value parsed from the title's
+  // runtime. Never fabricate a time — an unknown runtime shows nothing rather
+  // than a made-up number.
   const minutesMatch = movie.runtime.match(/(\d+)\s*min/i)
-
   if (minutesMatch) {
     return `${Number(minutesMatch[1])}m`
   }
-
-  return `${42 + ((season * 7 + episode * 5 + movie.id.length) % 18)}m`
+  return ''
 }
 
 function episodeTitle(season: number, episode: number) {
@@ -1008,6 +1013,7 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
     isAnime: true,
     animeFormat,
     episodeCount,
+    episodeRuntimeMinutes: typeof anime.duration === 'number' ? anime.duration : undefined,
     animeEpisodes,
     nextEpisode,
     trailerYoutubeId,
@@ -4940,10 +4946,12 @@ function SeasonEpisodeSection({
                       : overview}
                   </em>
                   <span className="episode-foot">
-                    <span className="episode-time">
-                      <RefreshCcw />
-                      {upcoming ? (comingDate || 'Coming soon') : runtime}
-                    </span>
+                    {(upcoming || runtime) && (
+                      <span className="episode-time">
+                        <RefreshCcw />
+                        {upcoming ? (comingDate || 'Coming soon') : runtime}
+                      </span>
+                    )}
                     <MoreHorizontal />
                   </span>
                 </span>
