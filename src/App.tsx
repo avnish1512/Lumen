@@ -6594,9 +6594,8 @@ function LoginScreen({
 
       <section className="login-content">
         <div className="glass-card login-card">
-          <div className="logo-container">
-            <div className="apple-tv-logo-symbol">L</div>
-            <h2>Lumen</h2>
+          <div className="logo-container logo-container-inline">
+            <img src="/lumen-logo.png" alt="Lumen" className="lumen-logo-img" />
           </div>
 
           {error && <div className="login-error-msg">{error}</div>}
@@ -6640,33 +6639,41 @@ function LoginScreen({
                   <span>Authenticating...</span>
                 </>
               ) : (
-                <span>Sign In with Email</span>
+                <span>Login</span>
               )}
             </button>
           </form>
 
-          <div className="divider-or">
-            <span>or</span>
-          </div>
-
-          <div className="social-login-group">
-            <button 
-              className="social-btn apple-btn" 
-              type="button" 
-              onClick={() => handleSocialLogin('Apple')}
-              disabled={loading}
-            >
-              <span className="social-icon"></span>
-              <span>Sign In with Apple</span>
-            </button>
-            <button 
-              className="social-btn google-btn" 
-              type="button" 
+          <div className="social-login-icons">
+            <button
+              className="social-icon-btn"
+              type="button"
               onClick={() => handleSocialLogin('Google')}
               disabled={loading}
+              aria-label="Sign in with Google"
             >
-              <span className="social-icon">G</span>
-              <span>Sign In with Google</span>
+              <span className="social-icon-g">G</span>
+            </button>
+            <button
+              className="social-icon-btn"
+              type="button"
+              onClick={() => handleSocialLogin('Apple')}
+              disabled={loading}
+              aria-label="Sign in with Apple"
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                <path d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.9-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.94-3.94.94-.82 0-2.06-.92-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.82 3.16-.47 7.84 1.3 10.41.87 1.26 1.9 2.67 3.25 2.62 1.3-.05 1.79-.84 3.36-.84 1.56 0 2.01.84 3.38.81 1.4-.02 2.28-1.28 3.13-2.55.99-1.46 1.4-2.87 1.42-2.94-.03-.01-2.72-1.04-2.75-4.13z" />
+                <path d="M14.9 4.7c.72-.87 1.2-2.08 1.07-3.28-1.03.04-2.28.69-3.02 1.56-.66.77-1.24 2-1.09 3.18 1.15.09 2.32-.59 3.04-1.46z" />
+              </svg>
+            </button>
+            <button
+              className="social-icon-btn"
+              type="button"
+              onClick={() => setMobileEmailOpen(true)}
+              disabled={loading}
+              aria-label="Sign in with email"
+            >
+              <Mail size={20} />
             </button>
           </div>
         </div>
