@@ -8420,7 +8420,7 @@ body:has(.login-screen) {
 .login-card,
 .netflix-theme .login-card {
   max-width: 550px;
-  min-height: 84vh;
+  min-height: min(84vh, calc(100dvh - 96px));
   padding: 60px 52px;
   border-radius: 32px;
   display: flex;
@@ -8842,6 +8842,12 @@ body:has(.login-screen) {
 
   /* Account view: no scroll at all — the compact card fits within the screen. */
   .login-screen:has(.profile-card) {
+    overflow: hidden;
+  }
+
+  /* Sign-in view: the tall frosted card is sized to fit the viewport, so the
+     page should never scroll. */
+  .login-screen:has(.login-card) {
     overflow: hidden;
   }
 
@@ -9627,6 +9633,19 @@ body:has(.login-screen) {
   border: 1px solid #2f2f2f !important;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
   backdrop-filter: none !important;
+}
+
+/* Keep the login card as a transparent frosted panel in every theme
+   (higher specificity than `.netflix-theme .glass-card` above, so it wins). */
+.netflix-theme .glass-card.login-card {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  border-radius: 32px !important;
+  box-shadow:
+    0 18px 60px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25) !important;
+  backdrop-filter: blur(14px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(120%) !important;
 }
 
 /* Netflix Accent Buttons */
