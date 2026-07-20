@@ -8249,7 +8249,7 @@ a.watch-option-card {
 .login-screen {
   position: fixed;
   inset: 0;
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   height: 100dvh;
   display: flex;
@@ -8258,6 +8258,12 @@ a.watch-option-card {
   overflow: hidden;
   background-color: #000;
   z-index: 9999;
+}
+
+/* The login is a fixed full-screen overlay — stop the page behind it from
+   adding its own (side) scrollbar so it reads as a single fixed page. */
+body:has(.login-screen) {
+  overflow: hidden;
 }
 
 /* Background: rotating backroll images (dimmed a touch for card readability). */
