@@ -8274,6 +8274,7 @@ body:has(.login-screen) {
   background: #000;
   filter: brightness(0.78);
   pointer-events: none;
+  overflow: hidden;
 }
 
 /* Rotating desktop-login backdrop. Each slide cross-fades in/out. Rendered as a
@@ -8285,6 +8286,7 @@ body:has(.login-screen) {
   z-index: 0;
   filter: brightness(0.82);
   pointer-events: none;
+  overflow: hidden;
 }
 
 /* Slight dark wash so the glass card and its text stay readable. */
@@ -8301,6 +8303,7 @@ body:has(.login-screen) {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+  background-attachment: fixed;
   opacity: 0;
   transform: scale(1.04);
   transition: opacity 1.1s ease-in-out, transform 3.2s ease-out;
