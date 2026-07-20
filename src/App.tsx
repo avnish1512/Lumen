@@ -138,6 +138,46 @@ for (const [path, url] of Object.entries(assetModules)) {
   avatarAssets[key] = url
 }
 
+// Rotating desktop-login background images, loaded from src/assets/backroll/.
+const backrollImages: string[] = Object.keys(avatarAssets)
+  .filter((key) => key.startsWith('backroll/'))
+  .sort()
+  .map((key) => avatarAssets[key])
+
+/**
+ * Full-bleed rotating backdrop for the desktop login. Cross-fades through every
+ * image in `src/assets/backroll/`, advancing once every 3 seconds.
+ */
+function LoginBackdrop() {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    if (backrollImages.length <= 1) {
+      return
+    }
+    const timer = window.setInterval(() => {
+      setIndex((current) => (current + 1) % backrollImages.length)
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  if (backrollImages.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="login-backdrop" aria-hidden="true">
+      {backrollImages.map((src, i) => (
+        <div
+          key={src}
+          className={`login-backdrop-slide${i === index ? ' active' : ''}`}
+          style={{ backgroundImage: `url(${src})` }}
+        />
+      ))}
+    </div>
+  )
+}
+
 type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles' | 'drama' | 'livetv'
 type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search' | 'Drama' | 'Live TV'
 type SavedMovies = Record<string, Movie>
@@ -6428,6 +6468,7 @@ function LoginScreen({
   return (
     <section className="screen login-screen">
       <div className="login-background">
+        <LoginBackdrop />
         <div className="blob blob-purple"></div>
         <div className="blob blob-blue"></div>
         <div className="blob blob-cyan"></div>
