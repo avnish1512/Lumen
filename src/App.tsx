@@ -6467,8 +6467,8 @@ function LoginScreen({
 
   return (
     <section className="screen login-screen">
+      <LoginBackdrop />
       <div className="login-background">
-        <LoginBackdrop />
         <div className="blob blob-purple"></div>
         <div className="blob blob-blue"></div>
         <div className="blob blob-cyan"></div>

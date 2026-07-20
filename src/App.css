@@ -8270,11 +8270,23 @@ a.watch-option-card {
   pointer-events: none;
 }
 
-/* Rotating desktop-login backdrop. Each slide cross-fades in/out. */
+/* Rotating desktop-login backdrop. Each slide cross-fades in/out. Rendered as a
+   direct child of .login-screen so it stays visible in every skin (the Anime/
+   Netflix theme hides .login-background). */
 .login-backdrop {
   position: absolute;
   inset: 0;
   z-index: 0;
+  filter: brightness(0.82);
+  pointer-events: none;
+}
+
+/* Slight dark wash so the glass card and its text stay readable. */
+.login-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.42));
 }
 
 .login-backdrop-slide {
@@ -8395,13 +8407,15 @@ a.watch-option-card {
 }
 
 /* The centered login card is more see-through so the rotating backdrop shows
-   through it (glassmorphism), matching the reference design. */
-.login-card {
-  background: rgba(16, 16, 22, 0.42);
-  border-color: rgba(255, 255, 255, 0.16);
+   through it (glassmorphism), matching the reference design. The `!important`
+   wins over the Anime/Netflix theme's solid glass-card override. */
+.login-card,
+.netflix-theme .login-card {
+  background: rgba(16, 16, 22, 0.42) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
   box-shadow:
     0 18px 60px rgba(0, 0, 0, 0.5),
-    inset 0 1px 1px rgba(255, 255, 255, 0.14);
+    inset 0 1px 1px rgba(255, 255, 255, 0.14) !important;
   backdrop-filter: blur(30px) saturate(160%);
   -webkit-backdrop-filter: blur(30px) saturate(160%);
 }
@@ -13951,10 +13965,11 @@ a.watch-option-card {
     background-size: cover;
   }
 
-  /* Hide the desktop glass card + header on mobile. */
+  /* Hide the desktop glass card + header + rotating backdrop on mobile. */
   .login-screen .login-header,
   .login-screen .login-content,
-  .login-screen .login-background {
+  .login-screen .login-background,
+  .login-screen .login-backdrop {
     display: none;
   }
 
