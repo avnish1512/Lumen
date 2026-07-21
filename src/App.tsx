@@ -6188,6 +6188,20 @@ function LoginScreen({
     }, 1200)
   }
 
+  const handleRequestAccess = () => {
+    const subject = 'Lumen login access request'
+    const body = [
+      'Hi,',
+      '',
+      'I would like to request a login ID and password for Lumen.',
+      email ? `My email: ${email}` : 'My email: ',
+      '',
+      'Thanks.',
+    ].join('\n')
+    const mailto = `mailto:avnishpc00@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    window.open(mailto, '_blank')
+  }
+
   if (currentUser) {
     const designName = designMode === 'netflix' ? 'Anime' : 'Lumen'
     const planName = designMode === 'netflix' ? 'Anime Premium 4K' : 'Lumen Premium 4K'
@@ -6646,20 +6660,20 @@ function LoginScreen({
 
           <div className="social-login-icons">
             <button
-              className="social-icon-btn"
+              className="social-icon-btn social-icon-btn-disabled"
               type="button"
-              onClick={() => handleSocialLogin('Google')}
-              disabled={loading}
-              aria-label="Sign in with Google"
+              disabled
+              aria-label="Sign in with Google (unavailable)"
+              title="Google sign-in is currently unavailable"
             >
               <span className="social-icon-g">G</span>
             </button>
             <button
-              className="social-icon-btn"
+              className="social-icon-btn social-icon-btn-disabled"
               type="button"
-              onClick={() => handleSocialLogin('Apple')}
-              disabled={loading}
-              aria-label="Sign in with Apple"
+              disabled
+              aria-label="Sign in with Apple (unavailable)"
+              title="Apple sign-in is currently unavailable"
             >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
                 <path d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.9-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.94-3.94.94-.82 0-2.06-.92-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.82 3.16-.47 7.84 1.3 10.41.87 1.26 1.9 2.67 3.25 2.62 1.3-.05 1.79-.84 3.36-.84 1.56 0 2.01.84 3.38.81 1.4-.02 2.28-1.28 3.13-2.55.99-1.46 1.4-2.87 1.42-2.94-.03-.01-2.72-1.04-2.75-4.13z" />
@@ -6669,9 +6683,10 @@ function LoginScreen({
             <button
               className="social-icon-btn"
               type="button"
-              onClick={() => setMobileEmailOpen(true)}
+              onClick={handleRequestAccess}
               disabled={loading}
-              aria-label="Sign in with email"
+              aria-label="Request login access by email"
+              title="Request login ID and password by email"
             >
               <Mail size={20} />
             </button>
