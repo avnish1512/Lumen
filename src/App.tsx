@@ -83,6 +83,7 @@ import {
   type TmdbWatchAvailability,
   type TmdbWatchProvider,
 } from './tmdb'
+import { HlsPlayer } from './HlsPlayer'
 import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds } from './anilist'
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
@@ -345,8 +346,6 @@ function isStreamProvider(value: string | null): value is StreamProvider {
   return (
     value === 'rivestream' ||
     value === 'vidsync' ||
-    value === 'vidlink' ||
-    value === 'multiembed' ||
     value === 'multiembed-vip' ||
     value === 'vidking' ||
     value === 'megaplay' ||
@@ -5400,8 +5399,10 @@ function WatchScreen({
   const currentProvider =
     streamProviderOptions.find((provider) => provider.id === activeProviderId) ??
     streamProviderOptions[0]
-  const opensExternally =
-    activeProviderId === 'multiembed' || activeProviderId === 'multiembed-vip'
+  const opensExternally = activeProviderId === 'multiembed-vip'
+  // Direct HLS (.m3u8) sources play in a native <video> via hls.js; everything
+  // else is an embed player and stays in the iframe.
+  const isHlsStream = /\.m3u8(\?|#|$)/i.test(streamUrl)
 
   const fallbackWatchSeasons = useMemo(() => seasonsFor(movie), [movie])
   const [tmdbWatchSeasons, setTmdbWatchSeasons] = useState<
@@ -5498,7 +5499,18 @@ function WatchScreen({
       <DetailTopBar onBack={onBack} dark />
 
       <section className="stream-player-section">
-        {streamUrl && !opensExternally ? (
+        {streamUrl && isHlsStream ? (
+          <HlsPlayer
+            className="stream-player"
+            src={streamUrl}
+            poster={movie.still}
+            title={`${movie.title} stream`}
+            autoPlay
+            controls
+            onPlay={() => onStartWatching(movie)}
+            onError={() => {}}
+          />
+        ) : streamUrl && !opensExternally ? (
           <iframe
             className="stream-player"
             src={streamUrl}

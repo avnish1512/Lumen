@@ -11,8 +11,6 @@ export type TmdbMatch = {
 export type StreamProvider =
   | 'rivestream'
   | 'vidsync'
-  | 'vidlink'
-  | 'multiembed'
   | 'multiembed-vip'
   | 'vidking'
   | 'megaplay'
@@ -124,18 +122,6 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'Old Server',
     logo: 'VS',
     description: 'With ads',
-  },
-  {
-    id: 'vidlink',
-    name: 'VidLink',
-    logo: 'VL',
-    description: 'Fast player',
-  },
-  {
-    id: 'multiembed',
-    name: 'MultiEmbed',
-    logo: 'ME',
-    description: 'Local player',
   },
   {
     id: 'multiembed-vip',
@@ -565,19 +551,6 @@ export function buildStreamUrl(
     }
 
     return `https://www.vidking.net/embed/movie/${movie.tmdbId}?color=${color}&autoPlay=true`
-  }
-
-  if (provider === 'vidlink') {
-    if (movie.tmdbType === 'tv') {
-      const season = movie.streamSeason ?? 1
-      const episode = movie.streamEpisode ?? 1
-      return `https://vidlink.pro/embed/tv/${movie.tmdbId}/${season}/${episode}?primaryColor=ff3b30`
-    }
-    return `https://vidlink.pro/embed/movie/${movie.tmdbId}?primaryColor=ff3b30`
-  }
-
-  if (provider === 'multiembed') {
-    return buildSuperEmbedPlayerUrl(movie)
   }
 
   if (provider === 'multiembed-vip') {

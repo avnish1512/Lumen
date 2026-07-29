@@ -21,6 +21,7 @@
     "@consumet/extensions": "^1.8.8",
     "@expo/metro-runtime": "~6.1.2",
     "expo": "~54.0.35",
+    "hls.js": "^1.6.16",
     "lucide-react": "^1.17.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
