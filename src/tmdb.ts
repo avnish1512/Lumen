@@ -522,17 +522,31 @@ export function buildStreamUrl(
   provider: StreamProvider = defaultStreamProvider,
 ) {
   if (provider === 'megaplay' || provider === 'animeplay') {
-    // Both accept the AniList id directly, same path format:
-    //   https://megaplay.buzz/stream/ani/{anilist-id}/{ep-num}/{language}
-    //   https://animeplay.cfd/stream/ani/{anilist-id}/{ep-num}/{language}
+    // Both anime players resolve straight from the AniList id + episode, which
+    // is all the app carries for anime (there is no HiAnime/TMDB id here).
+    //
+    // NOTE: the old megaplay.buzz/animeplay.cfd `/stream/ani/{anilistId}` paths
+    // are dead — they expect a HiAnime episode id and now return a 410 error.
+    // Two separate anime servers, both AniList-native and sub/dub aware:
+    //   MegaPlay  -> https://vidnest.fun/anime/{anilistId}/{ep}/{sub|dub}
+    //   AnimePlay -> https://animeplay.cfd/stream/ani/{anilistId}/{ep}/{sub|dub}
+    //
+    // animeplay.cfd is a thin wrapper around megaplay.buzz that supplies the
+    // Referer megaplay requires, so it still plays even though the app's stream
+    // iframe uses referrerPolicy="no-referrer". (Direct megaplay.buzz would
+    // 410 under no-referrer, which is why MegaPlay uses VidNest instead.)
     if (!movie.anilistId) {
       return ''
     }
 
     const ep = movie.streamEpisode ?? 1
     const language = movie.streamLanguage === 'dub' ? 'dub' : 'sub'
-    const host = provider === 'animeplay' ? 'animeplay.cfd' : 'megaplay.buzz'
-    return `https://${host}/stream/ani/${movie.anilistId}/${ep}/${language}`
+
+    if (provider === 'animeplay') {
+      return `https://animeplay.cfd/stream/ani/${movie.anilistId}/${ep}/${language}`
+    }
+
+    return `https://vidnest.fun/anime/${movie.anilistId}/${ep}/${language}`
   }
 
   if (!movie.tmdbId) {

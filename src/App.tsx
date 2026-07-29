@@ -5447,8 +5447,9 @@ function WatchScreen({
     const handleMessage = (event: MessageEvent) => {
       if (
         typeof event.origin === 'string' &&
-        !event.origin.includes('megaplay.buzz') &&
-        !event.origin.includes('animeplay.cfd')
+        !event.origin.includes('vidnest.fun') &&
+        !event.origin.includes('animeplay.cfd') &&
+        !event.origin.includes('megaplay.buzz')
       ) {
         return
       }
