@@ -48,10 +48,13 @@ import {
   Smartphone,
   Monitor,
   Tablet,
-  ArrowLeftRight,
   CircleHelp,
   CircleUserRound,
   UserCog,
+  Crown,
+  Lock,
+  Delete,
+  KeyRound,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -71,6 +74,8 @@ import {
   fetchTmdbWatchAvailability,
   fetchWatchmodeCastCrew,
   fetchKoreanChineseDramas,
+  fetchMatureCollection,
+  type LordRail,
   searchTmdb,
   fetchSeasonEpisodes,
   fetchTvSeasons,
@@ -179,9 +184,36 @@ function LoginBackdrop() {
   )
 }
 
-type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles' | 'drama' | 'livetv'
+type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles' | 'drama' | 'livetv' | 'lord'
 type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search' | 'Drama' | 'Live TV'
 type SavedMovies = Record<string, Movie>
+
+// 4-digit PIN that unlocks the hidden "Lord" profile. Change this value (or the
+// localStorage key 'lord_pin') to set your own code.
+const DEFAULT_LORD_PIN = '1408'
+function getLordPin(): string {
+  try {
+    const stored = localStorage.getItem('lord_pin')
+    if (stored && /^\d{4}$/.test(stored)) {
+      return stored
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return DEFAULT_LORD_PIN
+}
+
+function setLordPin(newPin: string): boolean {
+  if (/^\d{4}$/.test(newPin)) {
+    try {
+      localStorage.setItem('lord_pin', newPin)
+      return true
+    } catch {
+      return false
+    }
+  }
+  return false
+}
 type WatchHistoryEntry = {
   movie: Movie
   updatedAt: number
@@ -349,7 +381,8 @@ function isStreamProvider(value: string | null): value is StreamProvider {
     value === 'multiembed-vip' ||
     value === 'vidking' ||
     value === 'megaplay' ||
-    value === 'animeplay'
+    value === 'animeplay' ||
+    value === 'oceanplay'
   )
 }
 
@@ -662,6 +695,11 @@ const seasonEpisodeCounts: Record<string, number[]> = {
 }
 
 function seasonsFor(movie: Movie) {
+  if (movie.isHentaiOcean) {
+    const total = movie.hentaiEpisodes?.length || movie.episodeCount || 1
+    return [{ season: 1, episodeCount: total }]
+  }
+
   if (movie.isAnime) {
     // AniList anime use a single continuous season with absolute episode
     // numbering, which is what the anime stream providers expect.
@@ -836,6 +874,14 @@ function continueRuntimeLabel(movie: Movie) {
 }
 
 function isTvShow(movie: Movie) {
+  if (movie.isHentaiOcean) {
+    return (
+      (movie.hentaiEpisodes?.length ?? 0) > 1 ||
+      (movie.episodeCount ?? 0) > 1 ||
+      movie.type.toLowerCase() === 'series'
+    )
+  }
+
   if (movie.isAnime) {
     const fmt = (movie.animeFormat ?? '').toUpperCase()
 
@@ -1524,7 +1570,12 @@ function App() {
   const continueWatching = useMemo(
     () =>
       Object.values(watchHistory)
-        .filter((entry) => entry.progress < 100)
+        .filter(
+          (entry) =>
+            entry.progress < 100 &&
+            !entry.movie.isHentaiOcean &&
+            !entry.movie.genres.some((g) => g.toLowerCase() === 'hentai'),
+        )
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
         .map((entry, index) => ({
@@ -1706,6 +1757,34 @@ function App() {
     setLoginBackScreen(screen)
     setTempUser(currentUser)
     setScreen('profiles')
+  }
+
+  // "Lord" hidden profile: tapping the menu item asks for a 4-digit PIN; a
+  // correct PIN opens the mature (R-rated, non-explicit) collection screen.
+  const [showLordPin, setShowLordPin] = useState(false)
+  const [showSetLordPin, setShowSetLordPin] = useState(false)
+  const [lordMovies, setLordMovies] = useState<Movie[]>([])
+  const [lordRails, setLordRails] = useState<LordRail[]>([])
+  const [lordLoading, setLordLoading] = useState(false)
+  const [lordBackScreen, setLordBackScreen] = useState<Screen>('home')
+
+  const openLord = () => {
+    setShowLordPin(true)
+  }
+
+  const unlockLord = () => {
+    setShowLordPin(false)
+    setLordBackScreen(screen)
+    setScreen('lord')
+    if (lordMovies.length === 0) {
+      setLordLoading(true)
+      void fetchMatureCollection()
+        .then(({ movies, rails }) => {
+          setLordMovies(movies)
+          setLordRails(rails)
+        })
+        .finally(() => setLordLoading(false))
+    }
   }
 
   const signOut = () => {
@@ -2217,7 +2296,7 @@ function App() {
 
   const hydrateStreamingMovie = useCallback(
     async (movie: Movie) => {
-      if (movie.tmdbId) {
+      if (movie.tmdbId || movie.isHentaiOcean || movie.isFull) {
         return movie
       }
 
@@ -2769,10 +2848,11 @@ function App() {
           onProfile={openProfileOrLogin}
           onSelectProfile={switchToProfile}
           onManageProfiles={openManageProfiles}
-          onTransferProfile={openManageProfiles}
+          onTransferProfile={openLord}
           onAccount={openProfileOrLogin}
           onHelp={openHelpCenter}
           onSignOut={signOut}
+          onSetLordPin={() => setShowSetLordPin(true)}
           profiles={profiles}
           designMode={designMode}
         />
@@ -2812,10 +2892,11 @@ function App() {
           onProfile={openProfileOrLogin}
           onSelectProfile={switchToProfile}
           onManageProfiles={openManageProfiles}
-          onTransferProfile={openManageProfiles}
+          onTransferProfile={openLord}
           onAccount={openProfileOrLogin}
           onHelp={openHelpCenter}
           onSignOut={signOut}
+          onSetLordPin={() => setShowSetLordPin(true)}
           profiles={profiles}
           designMode={designMode}
         />
@@ -2971,6 +3052,7 @@ function App() {
             setTempUser(currentUser)
             setScreen('profiles')
           }}
+          onSetLordPin={() => setShowSetLordPin(true)}
           profiles={profiles}
           designMode={designMode}
         />
@@ -3004,8 +3086,42 @@ function App() {
         />
       )}
 
+      {screen === 'lord' && (
+        <LordScreen
+          movies={lordMovies}
+          rails={lordRails}
+          loading={lordLoading}
+          currentUser={currentUser}
+          profiles={profiles}
+          onOpenDetail={openDetail}
+          onPlay={openWatch}
+          onSelectProfile={switchToProfile}
+          onBack={() => setScreen(lordBackScreen)}
+        />
+      )}
+
+      {showLordPin && (
+        <LordPinModal
+          expectedPin={getLordPin()}
+          currentUser={currentUser}
+          onSuccess={unlockLord}
+          onClose={() => setShowLordPin(false)}
+          onOpenSetLordPin={() => {
+            setShowLordPin(false)
+            setShowSetLordPin(true)
+          }}
+        />
+      )}
+
+      {showSetLordPin && (
+        <SetLordPinModal
+          onClose={() => setShowSetLordPin(false)}
+          onSuccess={() => setShowSetLordPin(false)}
+        />
+      )}
+
       {((designMode === 'netflix' && (screen === 'home' || screen === 'drama' || screen === 'livetv' || screen === 'search' || screen === 'library')) ||
-        (designMode === 'apple' && screen !== 'search' && screen !== 'login' && screen !== 'profiles')) && (
+        (designMode === 'apple' && screen !== 'search' && screen !== 'login' && screen !== 'profiles' && screen !== 'lord')) && (
         <BottomNav
           active={activeTab}
           onHome={() => setScreen('home')}
@@ -3029,7 +3145,7 @@ function App() {
           designMode={designMode}
         />
       )}
-      {screen !== 'detail' && screen !== 'watch' && screen !== 'login' && screen !== 'profiles' && (
+      {screen !== 'detail' && screen !== 'watch' && screen !== 'login' && screen !== 'profiles' && screen !== 'lord' && (
         <DesktopNav
           active={activeTab}
           onHome={() => setScreen('home')}
@@ -3043,7 +3159,7 @@ function App() {
           onProfile={openProfileOrLogin}
           onSelectProfile={switchToProfile}
           onManageProfiles={openManageProfiles}
-          onTransferProfile={openManageProfiles}
+          onTransferProfile={openLord}
           onHelp={openHelpCenter}
           onGoAnime={() => {
             setScreen('home')
@@ -3357,6 +3473,7 @@ type HomeScreenProps = {
   onAccount?: () => void
   onHelp?: () => void
   onSignOut?: () => void
+  onSetLordPin?: () => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
   screen?: Screen
@@ -3391,6 +3508,7 @@ function HomeScreen({
   onAccount,
   onHelp,
   onSignOut,
+  onSetLordPin,
   profiles,
   designMode,
   screen,
@@ -3602,6 +3720,7 @@ function HomeScreen({
                     onAccount={onAccount}
                     onHelp={onHelp}
                     onSignOut={onSignOut}
+                    onSetLordPin={onSetLordPin}
                   />
                 ) : (
                   <button
@@ -3648,6 +3767,7 @@ function HomeScreen({
                   onAccount={onAccount}
                   onHelp={onHelp}
                   onSignOut={onSignOut}
+                  onSetLordPin={onSetLordPin}
                 />
               ) : (
                 <button
@@ -4924,18 +5044,22 @@ function SeasonEpisodeSection({
             const animeEp = movie.isAnime
               ? movie.animeEpisodes?.[episode - 1]
               : undefined
-            // Prefer the real episode still: TMDB still → AniList episode
+            const hentaiEp = movie.isHentaiOcean
+              ? movie.hentaiEpisodes?.[episode - 1]
+              : undefined
+            // Prefer the real episode still: TMDB still → AniList episode → Hentai Ocean episode
             // thumbnail → fall back to the show art (proxied for anime).
             const cover =
               data?.still ||
               animeEp?.thumbnail ||
+              hentaiEp?.thumbnail ||
               (movie.isAnime
                 ? proxiedAnimeImage(movie.still || movie.hero || movie.poster)
                 : movie.still || movie.hero || movie.poster)
             const name =
-              data?.name || animeEp?.title || episodeTitle(selectedSeason, episode)
+              data?.name || animeEp?.title || hentaiEp?.title || episodeTitle(selectedSeason, episode)
             const overview =
-              data?.overview || episodeSynopsis(movie, selectedSeason, episode)
+              data?.overview || (movie.isHentaiOcean ? `Episode ${episode} of ${movie.title}` : episodeSynopsis(movie, selectedSeason, episode))
             const runtime =
               data?.runtime || episodeRuntime(movie, selectedSeason, episode)
 
@@ -5356,9 +5480,14 @@ function WatchScreen({
   // A TMDB title (drama, K/C-drama, regular movie/series) is anything that
   // isn't flagged as anime and has no AniList id but does have a TMDB id. These
   // must stream from the TMDB-based providers, never the AniList anime players.
-  const isTmdbTitle = !movie.isAnime && !movie.anilistId && !!movie.tmdbId
+  const isHentai = Boolean(
+    movie.isHentaiOcean ||
+      movie.genres.some((g) => g.toLowerCase() === 'hentai'),
+  )
+  const isTmdbTitle = !isHentai && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
   const isAnimeMovie =
     !isTmdbTitle &&
+    !isHentai &&
     (movie.isAnime ||
       movie.type === 'Anime' ||
       movie.genres.includes('Anime') ||
@@ -5367,15 +5496,15 @@ function WatchScreen({
 
   const animeProviderIds: StreamProvider[] = ['megaplay', 'animeplay']
 
-  const activeProviderId = isAnimeMovie
-    ? animeProviderIds.includes(streamProvider)
-      ? streamProvider
-      : 'megaplay'
-    : // Non-anime (drama / movie / TV): never use an AniList-only provider —
-      // fall back to the TMDB player so the TMDB id is used to stream.
-      animeProviderIds.includes(streamProvider)
-      ? 'vidking'
-      : streamProvider
+  const activeProviderId = isHentai
+    ? 'oceanplay'
+    : isAnimeMovie
+      ? animeProviderIds.includes(streamProvider)
+        ? streamProvider
+        : 'megaplay'
+      : animeProviderIds.includes(streamProvider)
+        ? 'vidking'
+        : streamProvider
 
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
   const [episode, setEpisode] = useState(movie.streamEpisode ?? 1)
@@ -5650,10 +5779,13 @@ function WatchScreen({
 
           <div className="server-selector" role="radiogroup" aria-label="Streaming server">
             {(() => {
-              const filteredOptions = streamProviderOptions.filter((provider) => {
-                const isAnimeProvider = animeProviderIds.includes(provider.id)
-                return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
-              })
+              const filteredOptions = isHentai
+                ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                : streamProviderOptions.filter((provider) => {
+                    if (provider.id === 'oceanplay') return false
+                    const isAnimeProvider = animeProviderIds.includes(provider.id)
+                    return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
+                  })
 
               return filteredOptions.map((provider) => {
                 const isActive = provider.id === activeProviderId
@@ -5998,6 +6130,7 @@ type LoginScreenProps = {
   onLogout: () => void
   onBack: () => void
   onSwitchProfile: () => void
+  onSetLordPin?: () => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
 }
@@ -6008,6 +6141,7 @@ function LoginScreen({
   onLogout,
   onBack,
   onSwitchProfile,
+  onSetLordPin,
   profiles,
   designMode,
 }: LoginScreenProps) {
@@ -6291,6 +6425,15 @@ function LoginScreen({
                   <span className="account-row-left">
                     <UserCog size={18} />
                     <span>Manage Account</span>
+                  </span>
+                  <ChevronRight size={18} />
+                </button>
+              )}
+              {onSetLordPin && (
+                <button className="account-row" type="button" onClick={onSetLordPin}>
+                  <span className="account-row-left">
+                    <KeyRound size={18} />
+                    <span>Change Lord Password</span>
                   </span>
                   <ChevronRight size={18} />
                 </button>
@@ -7809,14 +7952,32 @@ function MovieRail({ title, movies, compact, landscape, onOpenDetail }: MovieRai
           <ChevronRight />
         </button>
       </div>
-      <div ref={rowRef} className={compact ? 'poster-row compact' : 'poster-row'}>
-        {movies.map((movie) => (
-          <PosterCard
-            key={movie.id}
-            movie={movie}
-            onOpenDetail={onOpenDetail}
-          />
-        ))}
+      <div className="rail-viewport">
+        <button
+          className="rail-arrow rail-arrow-prev"
+          type="button"
+          aria-label={`Scroll ${title} left`}
+          onClick={scrollRowBack}
+        >
+          <ChevronLeft />
+        </button>
+        <div ref={rowRef} className={compact ? 'poster-row compact' : 'poster-row'}>
+          {movies.map((movie) => (
+            <PosterCard
+              key={movie.id}
+              movie={movie}
+              onOpenDetail={onOpenDetail}
+            />
+          ))}
+        </div>
+        <button
+          className="rail-arrow rail-arrow-next"
+          type="button"
+          aria-label={`Scroll ${title} right`}
+          onClick={scrollRow}
+        >
+          <ChevronRight />
+        </button>
       </div>
     </section>
   )
@@ -7875,6 +8036,13 @@ function ContinueWatchingRail({
   const scrollRow = () => {
     rowRef.current?.scrollBy({
       left: rowRef.current.clientWidth * 0.86,
+      behavior: 'smooth',
+    })
+  }
+
+  const scrollRowBack = () => {
+    rowRef.current?.scrollBy({
+      left: -(rowRef.current.clientWidth * 0.86),
       behavior: 'smooth',
     })
   }
@@ -7967,44 +8135,64 @@ function ContinueWatchingRail({
         </button>
       </div>
 
-      <div ref={rowRef} className="continue-row">
-        {movies.map((movie) => (
-          <article className="continue-card-shell" key={movie.id}>
-            <button
-              className="continue-card"
-              type="button"
-              aria-label={`Open ${movie.title}`}
-              onClick={() => onOpenDetail(movie)}
-            >
-              <img
-                src={movie.poster || fallbackPosterForRank(movie.rank)}
-                alt=""
-                onError={(event) => {
-                  event.currentTarget.src = fallbackPosterForRank(movie.rank)
-                }}
-              />
-              <span className="continue-tv-mark">tv</span>
-              <span className="continue-bottom">
-                <Play fill="currentColor" strokeWidth={0} />
-                <span className="continue-progress" aria-hidden="true">
-                  <span style={{ width: `${movie.progress}%` }} />
+      <div className="rail-viewport">
+        <button
+          className="rail-arrow rail-arrow-prev"
+          type="button"
+          aria-label={`Scroll ${title} left`}
+          onClick={scrollRowBack}
+        >
+          <ChevronLeft />
+        </button>
+
+        <div ref={rowRef} className="continue-row">
+          {movies.map((movie) => (
+            <article className="continue-card-shell" key={movie.id}>
+              <button
+                className="continue-card"
+                type="button"
+                aria-label={`Open ${movie.title}`}
+                onClick={() => onOpenDetail(movie)}
+              >
+                <img
+                  src={movie.poster || fallbackPosterForRank(movie.rank)}
+                  alt=""
+                  onError={(event) => {
+                    event.currentTarget.src = fallbackPosterForRank(movie.rank)
+                  }}
+                />
+                <span className="continue-tv-mark">tv</span>
+                <span className="continue-bottom">
+                  <Play fill="currentColor" strokeWidth={0} />
+                  <span className="continue-progress" aria-hidden="true">
+                    <span style={{ width: `${movie.progress}%` }} />
+                  </span>
+                  <span className="continue-time">
+                    {continueRuntimeLabel(movie)}
+                  </span>
                 </span>
-                <span className="continue-time">
-                  {continueRuntimeLabel(movie)}
-                </span>
-              </span>
-            </button>
-            <button
-              className="continue-more-button"
-              type="button"
-              aria-label={`More actions for ${movie.title}`}
-              aria-expanded={menuState?.movie.id === movie.id}
-              onClick={(event) => openMenu(event, movie)}
-            >
-              <MoreHorizontal />
-            </button>
-          </article>
-        ))}
+              </button>
+              <button
+                className="continue-more-button"
+                type="button"
+                aria-label={`More actions for ${movie.title}`}
+                aria-expanded={menuState?.movie.id === movie.id}
+                onClick={(event) => openMenu(event, movie)}
+              >
+                <MoreHorizontal />
+              </button>
+            </article>
+          ))}
+        </div>
+
+        <button
+          className="rail-arrow rail-arrow-next"
+          type="button"
+          aria-label={`Scroll ${title} right`}
+          onClick={scrollRow}
+        >
+          <ChevronRight />
+        </button>
       </div>
 
       {activeMenuMovie && menuState && (
@@ -9039,6 +9227,462 @@ type ProfileMenuProps = {
   onAccount: () => void
   onHelp: () => void
   onSignOut: () => void
+  onSetLordPin?: () => void
+}
+
+type LordPinModalProps = {
+  expectedPin: string
+  currentUser?: UserInfo | null
+  onSuccess: () => void
+  onClose: () => void
+  onOpenSetLordPin?: () => void
+}
+
+// 4-digit PIN entry that guards the hidden "Lord" profile.
+function LordPinModal({
+  expectedPin,
+  currentUser,
+  onSuccess,
+  onClose,
+  onOpenSetLordPin,
+}: LordPinModalProps) {
+  const [digits, setDigits] = useState('')
+  const [error, setError] = useState(false)
+  const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
+
+  const submit = useCallback(
+    (pin: string) => {
+      if (pin === expectedPin) {
+        onSuccess()
+      } else {
+        setError(true)
+        setTimeout(() => {
+          setDigits('')
+          setError(false)
+        }, 500)
+      }
+    },
+    [expectedPin, onSuccess],
+  )
+
+  const pressKey = (key: string) => {
+    if (digits.length >= 4) {
+      return
+    }
+    const next = digits + key
+    setDigits(next)
+    if (next.length === 4) {
+      submit(next)
+    }
+  }
+
+  const backspace = () => setDigits((value) => value.slice(0, -1))
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      } else if (/^\d$/.test(event.key)) {
+        pressKey(event.key)
+      } else if (event.key === 'Backspace') {
+        backspace()
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  })
+
+  return (
+    <div className="lord-pin-overlay" role="dialog" aria-modal="true" aria-label="Enter Lord PIN">
+      <div className="lord-pin-card">
+        <button className="lord-pin-close" type="button" onClick={onClose} aria-label="Close">
+          <X size={22} />
+        </button>
+        <div className="lord-pin-icon">
+          <Lock size={28} />
+        </div>
+        <h2>Enter PIN</h2>
+        <p>This profile is locked.</p>
+        <div className={`lord-pin-dots${error ? ' is-error' : ''}`}>
+          {[0, 1, 2, 3].map((index) => (
+            <span
+              key={index}
+              className={`lord-pin-dot${index < digits.length ? ' is-filled' : ''}`}
+            />
+          ))}
+        </div>
+        <div className="lord-pin-pad">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => (
+            <button key={key} type="button" className="lord-pin-key" onClick={() => pressKey(key)}>
+              {key}
+            </button>
+          ))}
+          <span className="lord-pin-key lord-pin-key-empty" aria-hidden="true" />
+          <button type="button" className="lord-pin-key" onClick={() => pressKey('0')}>
+            0
+          </button>
+          <button
+            type="button"
+            className="lord-pin-key lord-pin-key-action"
+            onClick={backspace}
+            aria-label="Delete"
+          >
+            <Delete size={22} />
+          </button>
+        </div>
+        {isAdmin && onOpenSetLordPin && (
+          <button
+            type="button"
+            className="lord-pin-change-btn"
+            onClick={onOpenSetLordPin}
+          >
+            <KeyRound size={14} /> Admin: Change Password
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type SetLordPinModalProps = {
+  onClose: () => void
+  onSuccess: (newPin: string) => void
+}
+
+function SetLordPinModal({ onClose, onSuccess }: SetLordPinModalProps) {
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = (event?: FormEvent) => {
+    if (event) event.preventDefault()
+    const trimmed = pin.trim()
+    if (!/^\d{4}$/.test(trimmed)) {
+      setError('Please enter a valid 4-digit numeric PIN.')
+      return
+    }
+    const ok = setLordPin(trimmed)
+    if (ok) {
+      setError('')
+      setSaved(true)
+      setTimeout(() => {
+        onSuccess(trimmed)
+      }, 700)
+    } else {
+      setError('Could not save password.')
+    }
+  }
+
+  return (
+    <div className="bff-overlay" role="dialog" aria-modal="true" aria-label="Change Lord Password">
+      <div className="bff-modal account-manage-modal">
+        <button className="bff-close" type="button" aria-label="Close" onClick={onClose}>
+          <X size={20} />
+        </button>
+        <h2 className="bff-title">{saved ? 'Password Updated!' : 'Change Lord Password'}</h2>
+        <p className="bff-sub">
+          {saved
+            ? 'Your new 4-digit PIN is active.'
+            : 'Enter a 4-digit numeric PIN to protect the Lord profile.'}
+        </p>
+
+        {!saved ? (
+          <form className="account-manage-form" onSubmit={handleSave}>
+            <input
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              className="account-manage-input"
+              placeholder="Enter 4-digit PIN (e.g. 1408)"
+              value={pin}
+              autoFocus
+              onChange={(event) => {
+                const val = event.target.value.replace(/\D/g, '').slice(0, 4)
+                setPin(val)
+                setError('')
+              }}
+            />
+            <button className="account-manage-save" type="submit" disabled={pin.length < 4}>
+              Save
+            </button>
+          </form>
+        ) : (
+          <div className="bff-status" style={{ color: '#34c759', fontWeight: 600 }}>
+            ✓ Lord password changed successfully!
+          </div>
+        )}
+
+        {error && <p className="bff-status">{error}</p>}
+      </div>
+    </div>
+  )
+}
+
+type LordScreenProps = {
+  movies: Movie[]
+  rails: LordRail[]
+  loading: boolean
+  currentUser: UserInfo | null
+  profiles: UserProfile[]
+  onOpenDetail: (movie: Movie) => void
+  onPlay: (movie: Movie) => void
+  onSelectProfile: (name: string) => void
+  onBack: () => void
+}
+
+// Standalone hero + rails layout for the unlocked "Lord" profile.
+function LordScreen({
+  movies,
+  rails,
+  loading,
+  onOpenDetail,
+  onPlay,
+  onBack,
+}: LordScreenProps) {
+  const hero = movies[0] ?? null
+
+  const [query, setQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+
+  const matches = useMemo(() => {
+    const trimmed = query.trim().toLowerCase()
+    if (!trimmed) {
+      return []
+    }
+    return movies
+      .filter((movie) => movie.title.toLowerCase().includes(trimmed))
+      .slice(0, 8)
+  }, [query, movies])
+
+  const showDropdown = searchFocused && query.trim().length > 0
+
+  const pickMatch = (movie: Movie) => {
+    setQuery('')
+    setSearchFocused(false)
+    onOpenDetail(movie)
+  }
+
+  return (
+    <section className="screen lord-screen">
+      <header className="lord-topbar">
+        <div className="lord-topbar-left">
+          <button
+            className="lord-incognito-btn"
+            type="button"
+            onClick={onBack}
+            title="Incognito Mode - Click to Go Back"
+            aria-label="Incognito Mode - Click to Go Back"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M2 10h20" />
+              <path d="M12 2a7 7 0 0 0-7 7h14a7 7 0 0 0-7-7z" />
+              <circle cx="6.5" cy="16.5" r="2.5" />
+              <circle cx="17.5" cy="16.5" r="2.5" />
+              <path d="M9 16.5h6" />
+            </svg>
+            <span>Incognito</span>
+          </button>
+        </div>
+
+        <div className="lord-topbar-right">
+          <div className={`lord-search${searchFocused ? ' is-focused' : ''}`}>
+            <div className="lord-search-bar">
+              <Search size={18} />
+              <input
+                type="text"
+                className="lord-search-input"
+                placeholder="Titles, genres…"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                aria-label="Search titles"
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="lord-search-clear"
+                  onClick={() => setQuery('')}
+                  aria-label="Clear search"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {showDropdown && (
+              <ul className="lord-search-results" role="listbox">
+                {matches.length === 0 ? (
+                  <li className="lord-search-empty">No matches</li>
+                ) : (
+                  matches.map((movie) => (
+                    <li key={movie.id}>
+                      <button
+                        type="button"
+                        className="lord-search-result"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => pickMatch(movie)}
+                      >
+                        <img
+                          src={movie.poster || movie.still || movie.hero}
+                          alt=""
+                          loading="lazy"
+                          onError={(event) => {
+                            ;(event.target as HTMLImageElement).style.visibility = 'hidden'
+                          }}
+                        />
+                        <span className="lord-search-result-text">
+                          <span className="lord-search-result-title">{movie.title}</span>
+                          <span className="lord-search-result-meta">
+                            {movie.year} · {movie.type}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {loading ? (
+        <div className="lord-empty">
+          <LoaderCircle className="spin-icon" />
+          <p>Loading collection…</p>
+        </div>
+      ) : !hero ? (
+        <div className="lord-empty">
+          <Crown size={40} />
+          <p>No titles available right now.</p>
+        </div>
+      ) : (
+        <>
+          <div
+            className="lord-hero"
+            style={{
+              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 55%, #000 100%), linear-gradient(90deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 60%), url(${hero.hero || hero.still || hero.poster})`,
+            }}
+          >
+            <div className="lord-hero-content">
+              <span className="lord-hero-badge">
+                <Crown size={14} /> Lord
+              </span>
+              <h1 className="lord-hero-title">{hero.title}</h1>
+              <p className="lord-hero-meta">
+                {hero.year} · {hero.type}
+                {hero.rating && hero.rating !== 'N/A' ? ` · ★ ${hero.rating}` : ''}
+              </p>
+              <p className="lord-hero-synopsis">{hero.synopsis}</p>
+              <div className="lord-hero-actions">
+                <button className="lord-hero-play" type="button" onClick={() => onPlay(hero)}>
+                  <Play fill="currentColor" strokeWidth={0} size={20} />
+                  <span>Play</span>
+                </button>
+                <button
+                  className="lord-hero-info"
+                  type="button"
+                  onClick={() => onOpenDetail(hero)}
+                >
+                  <Info size={20} />
+                  <span>More Info</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="lord-rails">
+            {rails.map((rail) => (
+              <LordRailRow
+                key={rail.title}
+                rail={rail}
+                onOpenDetail={onOpenDetail}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function LordRailRow({
+  rail,
+  onOpenDetail,
+}: {
+  rail: LordRail
+  onOpenDetail: (movie: Movie) => void
+}) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  const scrollRow = (direction: 1 | -1) => {
+    const row = rowRef.current
+    if (row) {
+      row.scrollBy({
+        left: direction * (row.clientWidth * 0.75),
+        behavior: 'smooth',
+      })
+    }
+  }
+
+  return (
+    <div className="lord-rail">
+      <h2 className="lord-rail-title">{rail.title}</h2>
+      <div className="lord-rail-viewport">
+        <button
+          className="rail-arrow rail-arrow-prev lord-rail-arrow"
+          type="button"
+          aria-label={`Scroll ${rail.title} left`}
+          onClick={() => scrollRow(-1)}
+        >
+          <ChevronLeft />
+        </button>
+
+        <div ref={rowRef} className="lord-rail-row">
+          {rail.items.map((movie) => (
+            <button
+              key={movie.id}
+              type="button"
+              className="lord-card"
+              onClick={() => onOpenDetail(movie)}
+            >
+              <span className="lord-card-poster">
+                <img
+                  src={movie.poster || movie.still || movie.hero}
+                  alt={movie.title}
+                  loading="lazy"
+                  onError={(event) => {
+                    ;(event.target as HTMLImageElement).style.visibility = 'hidden'
+                  }}
+                />
+              </span>
+              <span className="lord-card-title">{movie.title}</span>
+            </button>
+          ))}
+        </div>
+
+        <button
+          className="rail-arrow rail-arrow-next lord-rail-arrow"
+          type="button"
+          aria-label={`Scroll ${rail.title} right`}
+          onClick={() => scrollRow(1)}
+        >
+          <ChevronRight />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function ProfileMenu({
@@ -9051,6 +9695,7 @@ function ProfileMenu({
   onAccount,
   onHelp,
   onSignOut,
+  onSetLordPin,
 }: ProfileMenuProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -9083,6 +9728,7 @@ function ProfileMenu({
   const otherProfiles = profiles.filter(
     (profile) => profile.name.toLowerCase() !== (currentUser?.name ?? '').toLowerCase(),
   )
+  const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
 
   const runAndClose = (action: () => void) => () => {
     setOpen(false)
@@ -9159,9 +9805,20 @@ function ProfileMenu({
             role="menuitem"
             onClick={runAndClose(onTransferProfile)}
           >
-            <ArrowLeftRight size={18} />
-            <span>Transfer Profile</span>
+            <Crown size={18} />
+            <span>Lord</span>
           </button>
+          {isAdmin && onSetLordPin && (
+            <button
+              className="profile-menu-item profile-menu-action"
+              type="button"
+              role="menuitem"
+              onClick={runAndClose(onSetLordPin)}
+            >
+              <KeyRound size={18} />
+              <span>Set Lord Password</span>
+            </button>
+          )}
           <button
             className="profile-menu-item profile-menu-action"
             type="button"
@@ -9213,6 +9870,7 @@ function DesktopNav({
   onManageProfiles,
   onTransferProfile,
   onHelp,
+  onSetLordPin,
   onGoAnime,
   onGoLumen,
   onSignOut,
@@ -9238,6 +9896,7 @@ function DesktopNav({
   onManageProfiles: () => void
   onTransferProfile: () => void
   onHelp: () => void
+  onSetLordPin?: () => void
   onGoAnime: () => void
   onGoLumen: () => void
   onSignOut: () => void
@@ -9258,6 +9917,7 @@ function DesktopNav({
     onAccount: onProfile,
     onHelp,
     onSignOut,
+    onSetLordPin,
   }
 
   return (

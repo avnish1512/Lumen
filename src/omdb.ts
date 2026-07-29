@@ -95,6 +95,16 @@ export type Movie = {
   ratings: OmdbRating[]
   badges?: string[]
   isFull?: boolean
+  isHentaiOcean?: boolean
+  hentaiSlug?: string
+  embedUrl?: string
+  hentaiEpisodes?: Array<{
+    episodeNumber: number
+    title: string
+    slug: string
+    embedUrl: string
+    thumbnail?: string
+  }>
 }
 
 export const featuredMovieIds = [

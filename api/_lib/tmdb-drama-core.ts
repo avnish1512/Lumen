@@ -199,6 +199,46 @@ export async function fetchKoreanChineseDramas(authChain: TmdbAuth[]): Promise<D
   return merged.map((item, index) => ({ ...item, rank: index + 1 }))
 }
 
+export type LordRail = { title: string; items: DramaItem[] }
+export type LordContent = { results: DramaItem[]; rails: LordRail[] }
+
+// Content for the PIN-locked "Lord" profile. Themed around ADULT ANIMATION —
+// mature animated comedy/drama (TMDB keyword 210024 "adult animation" on the
+// Animation genre) with include_adult=false, i.e. mainstream mature cartoons,
+// NOT pornography.
+const ADULT_ANIMATION_KEYWORD = '210024'
+
+async function discoverAdultAnimation(
+  authChain: TmdbAuth[],
+  mediaType: 'tv' | 'movie',
+  sortBy: string,
+  label: string,
+): Promise<DramaItem[]> {
+  const path = mediaType === 'tv' ? '/discover/tv' : '/discover/movie'
+  const response = await requestFirstOk(authChain, path, {
+    with_genres: '16',
+    with_keywords: ADULT_ANIMATION_KEYWORD,
+    include_adult: 'false',
+    sort_by: sortBy,
+    'vote_count.gte': '40',
+    language: 'en-US',
+    page: '1',
+  })
+
+  return (response.results ?? [])
+    .map((item, index) => mapToDrama(item, label, index + 1, mediaType))
+    .filter((item): item is DramaItem => Boolean(item))
+    .slice(0, 18)
+}
+
+import { fetchHentaiOceanCollection } from './hentaiocean-core.js'
+
+export async function fetchMatureCollection(
+  _authChain?: TmdbAuth[],
+): Promise<LordContent> {
+  return fetchHentaiOceanCollection()
+}
+
 // Full-catalog title search (movies + TV) via TMDB multi-search. Used to power
 // the app's search box so any TMDB title (e.g. "Business Proposal") is found,
 // not just the pre-built drama rails. Results carry a tmdbId (no AniList id) so

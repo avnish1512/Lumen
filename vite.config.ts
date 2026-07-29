@@ -36,7 +36,7 @@ import {
   superEmbedOptionsFromParams,
 } from './api/_lib/superembed-core'
 import { fetchAnikotoRecent, fetchAnikotoSeries } from './api/_lib/anikoto-core'
-import { fetchDramaRails, fetchKoreanChineseDramas, searchTmdbTitles } from './api/_lib/tmdb-drama-core'
+import { fetchDramaRails, fetchKoreanChineseDramas, fetchMatureCollection, searchTmdbTitles } from './api/_lib/tmdb-drama-core'
 import { fetchKinocheckTrailer } from './api/_lib/kinocheck-core'
 import { fetchTmdbSeasonEpisodes, fetchTmdbTvSeasons } from './api/_lib/tmdb-episodes-core'
 import {
@@ -882,6 +882,18 @@ function tmdbDramaDevProxy(authChain: TmdbWatchAuth[]): Plugin {
             const message =
               error instanceof Error ? error.message : 'Could not reach TMDB.'
             sendJson(res, 502, { Response: 'False', Error: message, results: [] })
+          }
+          return
+        }
+
+        if (requestUrl.searchParams.get('action') === 'mature') {
+          try {
+            const { results, rails } = await fetchMatureCollection(authChain)
+            sendJson(res, 200, { Response: 'True', results, rails })
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : 'Could not reach TMDB.'
+            sendJson(res, 502, { Response: 'False', Error: message, results: [], rails: [] })
           }
           return
         }

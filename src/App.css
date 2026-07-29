@@ -11475,7 +11475,14 @@ body:has(.login-screen) {
   background-image: none !important;
   color: #ffffff !important;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
   padding-left: 0 !important;
+}
+
+.account-screen::-webkit-scrollbar,
+.netflix-theme .account-screen::-webkit-scrollbar {
+  display: none;
 }
 
 .account-shell {
@@ -11838,7 +11845,12 @@ body:has(.login-screen) {
   right: 4px;
 }
 
-.landscape-rail .rail-viewport:hover .rail-arrow {
+.rail-viewport {
+  position: relative;
+  width: 100%;
+}
+
+.rail-viewport:hover .rail-arrow {
   opacity: 1;
 }
 
@@ -14656,4 +14668,593 @@ body:has(.login-screen) {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
   text-transform: capitalize;
+}
+
+/* ===== Lord (PIN-locked) profile ===== */
+.lord-pin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.lord-pin-card {
+  position: relative;
+  width: min(360px, 90vw);
+  padding: 32px 28px 28px;
+  border-radius: 22px;
+  background: rgba(28, 28, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  color: #fff;
+}
+
+.lord-pin-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  padding: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+}
+
+.lord-pin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.lord-pin-card h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.lord-pin-card p {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.lord-pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.lord-pin-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.lord-pin-dot.is-filled {
+  background: #fff;
+  border-color: #fff;
+}
+
+.lord-pin-dots.is-error {
+  animation: lord-shake 0.4s ease;
+}
+
+.lord-pin-dots.is-error .lord-pin-dot {
+  border-color: #ff453a;
+  background: #ff453a;
+}
+
+@keyframes lord-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+.lord-pin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  max-width: 260px;
+  margin: 0 auto;
+}
+
+.lord-pin-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.lord-pin-key:active {
+  background: rgba(255, 255, 255, 0.22);
+  transform: scale(0.96);
+}
+
+.lord-pin-key-empty {
+  background: transparent;
+  pointer-events: none;
+}
+
+.lord-pin-key-action {
+  background: transparent;
+}
+
+/* ---- Lord screen (hero + rails, no navbar) ---- */
+.lord-screen {
+  min-height: 100vh;
+  background: #000;
+  color: #fff;
+  overflow-x: hidden;
+}
+
+.lord-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px clamp(16px, 4vw, 48px);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 100%);
+  pointer-events: none;
+}
+
+.lord-topbar > * {
+  pointer-events: auto;
+}
+
+.lord-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.lord-back-floating {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.lord-back-floating:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.lord-incognito-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.2s ease;
+}
+
+.lord-incognito-btn:hover {
+  background: rgba(229, 9, 20, 0.85);
+  border-color: rgba(229, 9, 20, 0.9);
+  transform: scale(1.03);
+}
+
+.lord-pin-change-btn {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: #47a8ff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.lord-pin-change-btn:hover {
+  background: rgba(71, 168, 255, 0.12);
+  text-decoration: underline;
+}
+
+.lord-pin-error-text {
+  color: #ff4d4f;
+  font-size: 13px;
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* Inline search + live dropdown */
+.lord-search {
+  position: relative;
+}
+
+.lord-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 240px;
+  max-width: 52vw;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #fff;
+  transition: width 0.2s ease, border-color 0.2s ease;
+}
+
+.lord-search.is-focused .lord-search-bar {
+  width: 320px;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.lord-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+}
+
+.lord-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.lord-search-clear {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  padding: 0;
+}
+
+.lord-search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  max-width: 80vw;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: 14px;
+  background: rgba(20, 20, 22, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
+}
+
+.lord-search-empty {
+  padding: 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+}
+
+.lord-search-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lord-search-result:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.lord-search-result img {
+  width: 42px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #1c1c1e;
+  flex: 0 0 auto;
+}
+
+.lord-search-result-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lord-search-result-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lord-search-result-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.lord-profiles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lord-profile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.lord-profile-avatar.is-current {
+  border-color: #f5c518;
+  cursor: default;
+}
+
+.lord-profile-avatar:not(.is-current):hover {
+  transform: scale(1.08);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.lord-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 60vh;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Hero */
+.lord-hero {
+  position: relative;
+  min-height: min(78vh, 640px);
+  display: flex;
+  align-items: flex-end;
+  padding: clamp(24px, 5vw, 64px);
+  background-size: cover;
+  background-position: center top;
+}
+
+.lord-hero-content {
+  max-width: 620px;
+}
+
+.lord-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(245, 197, 24, 0.16);
+  color: #f5c518;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.lord-hero-title {
+  margin: 14px 0 8px;
+  font-size: clamp(32px, 6vw, 56px);
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.lord-hero-meta {
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.lord-hero-synopsis {
+  margin: 0 0 22px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lord-hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lord-hero-play,
+.lord-hero-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 26px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+
+.lord-hero-play {
+  background: #fff;
+  color: #000;
+}
+
+.lord-hero-info {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  backdrop-filter: blur(6px);
+}
+
+.lord-hero-play:active,
+.lord-hero-info:active {
+  transform: scale(0.97);
+}
+
+/* Rails */
+.lord-rails {
+  padding: 8px clamp(16px, 4vw, 48px) 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  margin-top: -40px;
+  position: relative;
+  z-index: 2;
+}
+
+.lord-rail-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.lord-rail-viewport {
+  position: relative;
+  width: 100%;
+}
+
+.lord-rail-viewport .lord-rail-arrow {
+  position: absolute;
+  top: 40%;
+  transform: translateY(-50%);
+  z-index: 10;
+  opacity: 0.85;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.lord-rail-viewport:hover .lord-rail-arrow {
+  opacity: 1;
+}
+
+.lord-rail-viewport .lord-rail-arrow.rail-arrow-prev {
+  left: -12px;
+}
+
+.lord-rail-viewport .lord-rail-arrow.rail-arrow-next {
+  right: -12px;
+}
+
+.lord-rail-row {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.lord-rail-row::-webkit-scrollbar {
+  display: none;
+}
+
+.lord-card {
+  flex: 0 0 auto;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+
+.lord-card-poster {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1c1c1e;
+  transition: transform 0.18s ease;
+}
+
+.lord-card:hover .lord-card-poster {
+  transform: scale(1.04);
+}
+
+.lord-card-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lord-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

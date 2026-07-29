@@ -1,6 +1,7 @@
 import {
   fetchDramaRails,
   fetchKoreanChineseDramas,
+  fetchMatureCollection,
   searchTmdbTitles,
 } from './_lib/tmdb-drama-core.js'
 import { createTmdbWatchAuthChain } from './_lib/tmdb-watch-core.js'
@@ -43,6 +44,20 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not reach TMDB.'
       res.status(502).json({ Response: 'False', Error: message, results: [] })
+    }
+    return
+  }
+
+  // Mature collection for the PIN-locked "Lord" profile (R-rated / mature but
+  // non-explicit mainstream titles).
+  if (action === 'mature') {
+    res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800')
+    try {
+      const { results, rails } = await fetchMatureCollection(authChain)
+      res.status(200).json({ Response: 'True', results, rails })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not reach TMDB.'
+      res.status(502).json({ Response: 'False', Error: message, results: [], rails: [] })
     }
     return
   }

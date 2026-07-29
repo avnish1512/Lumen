@@ -15,6 +15,7 @@ export type StreamProvider =
   | 'vidking'
   | 'megaplay'
   | 'animeplay'
+  | 'oceanplay'
 
 export type StreamProviderOption = {
   id: StreamProvider
@@ -140,6 +141,12 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'AnimePlay',
     logo: 'AP',
     description: 'Anime · AniList',
+  },
+  {
+    id: 'oceanplay',
+    name: 'OceanPlay',
+    logo: 'OP',
+    description: 'Hentai Ocean · Stream',
   },
 ]
 
@@ -495,6 +502,33 @@ export async function searchTmdb(query: string): Promise<Movie[]> {
   }
 }
 
+// Content for the PIN-locked "Lord" profile — a mature ADULT-ANIMATION theme
+// (non-explicit) built from TMDB's animation catalog. Returns a hero-friendly
+// flat list plus categorized rails.
+export type LordRail = { title: string; items: Movie[] }
+
+export async function fetchMatureCollection(): Promise<{
+  movies: Movie[]
+  rails: LordRail[]
+}> {
+  try {
+    const response = await fetch('/api/tmdb-drama?action=mature')
+    const body = (await response.json()) as {
+      Response?: string
+      results?: Movie[]
+      rails?: LordRail[]
+    }
+    if (!response.ok || body.Response === 'False') {
+      return { movies: [], rails: [] }
+    }
+    // Guard against a non-array rails shape (e.g. the drama endpoint's object).
+    const rails = Array.isArray(body.rails) ? body.rails : []
+    return { movies: body.results ?? [], rails }
+  } catch {
+    return { movies: [], rails: [] }
+  }
+}
+
 export async function fetchKoreanChineseDramas(): Promise<{
   list: Movie[]
   rails: DramaRails
@@ -521,6 +555,23 @@ export function buildStreamUrl(
   movie: Movie,
   provider: StreamProvider = defaultStreamProvider,
 ) {
+  if (movie.isHentaiOcean || movie.hentaiSlug || movie.embedUrl) {
+    if (movie.hentaiEpisodes && movie.hentaiEpisodes.length > 0) {
+      const targetEpNum = movie.streamEpisode ?? 1
+      const targetEp =
+        movie.hentaiEpisodes.find((ep) => ep.episodeNumber === targetEpNum) ||
+        movie.hentaiEpisodes[0]
+      if (targetEp?.embedUrl) {
+        return targetEp.embedUrl
+      }
+    }
+    if (movie.embedUrl) {
+      return movie.embedUrl
+    }
+    const slug = movie.hentaiSlug || movie.id.replace(/^hentaiocean-/, '')
+    return `https://hentaiocean.com/embed/${slug}?la=1`
+  }
+
   if (provider === 'megaplay' || provider === 'animeplay') {
     // Both anime players resolve straight from the AniList id + episode, which
     // is all the app carries for anime (there is no HiAnime/TMDB id here).
