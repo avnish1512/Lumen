@@ -2919,10 +2919,14 @@ function App() {
           movies={designMode === 'netflix' ? anime : (screen === 'anime' ? anime : screen === 'tv' ? tvShows : movies)}
           collection={designMode === 'netflix' ? animeCollection : (screen === 'anime' ? animeCollection : screen === 'tv' ? tvShowCollection : movieCollection)}
           featuredMovie={designMode === 'netflix' ? (anime[0] || featuredMovie) : (screen === 'anime' ? anime[0] : screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0])}
+          continueMovies={continueWatching}
           savedMovies={savedMovies}
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSave={toggleSaved}
+          onMarkWatched={markWatchedMovie}
+          onRemoveContinue={removeContinueMovie}
+          onRemoveWatchlist={removeWatchlistMovie}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
           profiles={profiles}
@@ -3970,10 +3974,14 @@ type BrowseScreenProps = {
   movies: Movie[]
   collection: MediaCollection
   featuredMovie?: Movie
+  continueMovies?: Movie[]
   savedMovies: SavedMovies
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSave: (movie: Movie) => void
+  onMarkWatched?: (movie: Movie) => void
+  onRemoveContinue?: (movie: Movie) => void
+  onRemoveWatchlist?: (movie: Movie) => void
   currentUser: UserInfo | null
   onProfile: () => void
   profiles: UserProfile[]
@@ -3986,10 +3994,14 @@ function BrowseScreen({
   movies,
   collection,
   featuredMovie,
+  continueMovies = [],
   savedMovies,
   onOpenDetail,
   onPlay,
   onSave,
+  onMarkWatched = () => {},
+  onRemoveContinue = () => {},
+  onRemoveWatchlist = () => {},
   currentUser,
   onProfile,
   profiles,
@@ -4245,6 +4257,17 @@ function BrowseScreen({
             </div>
           )}
         </div>
+      )}
+
+      {continueMovies.length > 0 && (
+        <ContinueWatchingRail
+          title="Continue Watching for You"
+          movies={continueMovies}
+          onOpenDetail={onOpenDetail}
+          onMarkWatched={onMarkWatched}
+          onRemoveContinue={onRemoveContinue}
+          onRemoveWatchlist={onRemoveWatchlist}
+        />
       )}
 
       <MovieRail
