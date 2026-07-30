@@ -2299,6 +2299,7 @@ function App() {
           current?.id === fullMovie.id
             ? {
                 ...fullMovie,
+                anilistId: current.anilistId ?? movie.anilistId ?? fullMovie.anilistId,
                 tmdbId: current.tmdbId ?? movie.tmdbId,
                 tmdbType: current.tmdbType ?? movie.tmdbType,
                 streamSeason: current.streamSeason ?? movie.streamSeason,
@@ -2363,6 +2364,7 @@ function App() {
           const match = await fetchTmdbMatch(queryParam, isTitle, mediaHint)
           const streamMovie: Movie = {
             ...movie,
+            anilistId: movie.anilistId,
             tmdbId: match.tmdbId,
             tmdbType: match.mediaType,
             streamSeason:
@@ -2379,12 +2381,13 @@ function App() {
               current?.id === movie.id
                 ? {
                     ...current,
+                    anilistId: current.anilistId ?? streamMovie.anilistId,
                     tmdbId: streamMovie.tmdbId,
                     tmdbType: streamMovie.tmdbType,
-                    streamSeason: streamMovie.streamSeason,
-                    streamEpisode: streamMovie.streamEpisode,
+                    streamSeason: current.streamSeason ?? streamMovie.streamSeason,
+                    streamEpisode: current.streamEpisode ?? streamMovie.streamEpisode,
                   }
-                : current,
+                : streamMovie,
             )
           }
 
@@ -5618,8 +5621,29 @@ function WatchScreen({
     setLanguage(movie.streamLanguage ?? 'sub')
   }, [movie.id, movie.streamEpisode, movie.streamSeason, movie.streamLanguage])
 
+  const [watchAnimeSeasons, setWatchAnimeSeasons] = useState<AnimeSeasonInfo[]>(movie.animeSeasons || [])
+
+  useEffect(() => {
+    let active = true
+    if (isAnimeMovie && movie.anilistId) {
+      void fetchAniListSeasons(movie.anilistId).then((list) => {
+        if (active && list.length > 0) {
+          setWatchAnimeSeasons(list)
+        }
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [isAnimeMovie, movie.anilistId])
+
+  const activeWatchAnimeSeason = isAnimeMovie
+    ? (watchAnimeSeasons.find((s) => s.season === season) || watchAnimeSeasons[season - 1])
+    : undefined
+
   const streamMovie: Movie = {
     ...movie,
+    anilistId: activeWatchAnimeSeason?.anilistId ?? movie.anilistId,
     streamEpisode: episode,
     streamSeason: season,
     streamLanguage: language,
@@ -5634,12 +5658,34 @@ function WatchScreen({
   // else is an embed player and stays in the iframe.
   const isHlsStream = /\.m3u8(\?|#|$)/i.test(streamUrl)
 
-  const fallbackWatchSeasons = useMemo(() => seasonsFor(movie), [movie])
+  const fallbackWatchSeasons = useMemo(() => {
+    if (isAnimeMovie && watchAnimeSeasons.length > 0) {
+      return watchAnimeSeasons.map((s) => ({
+        season: s.season,
+        episodeCount: s.episodeCount,
+        title: s.title,
+        anilistId: s.anilistId,
+      }))
+    }
+    return seasonsFor(movie)
+  }, [movie, isAnimeMovie, watchAnimeSeasons])
+
   const [tmdbWatchSeasons, setTmdbWatchSeasons] = useState<
     { season: number; episodeCount: number }[]
   >([])
   const watchSeasons =
     tmdbWatchSeasons.length > 0 ? tmdbWatchSeasons : fallbackWatchSeasons
+
+  const seasonLabels = useMemo(() => {
+    if (isAnimeMovie && watchAnimeSeasons.length > 0) {
+      const map: Record<number, string> = {}
+      for (const s of watchAnimeSeasons) {
+        map[s.season] = s.title
+      }
+      return map
+    }
+    return undefined
+  }, [isAnimeMovie, watchAnimeSeasons])
 
   const watchIsTvId =
     !isAnimeMovie && Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
@@ -5918,6 +5964,7 @@ function WatchScreen({
               seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
               value={season}
               onChange={setSeason}
+              labels={seasonLabels}
             />
 
             <div className="watch-episode-list">
