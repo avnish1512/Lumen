@@ -5162,18 +5162,23 @@ function SeasonEpisodeSection({
             // "Coming soon" detection: a future TMDB air_date, or — for anime —
             // any episode at or after the next-airing one (everything from the
             // next episode onward hasn't aired yet, not just the single next).
+            const activeNextEp = activeAnimeSeason?.nextEpisode ?? (activeAnimeSeason?.status === 'RELEASING' ? movie.nextEpisode : undefined)
+            const isReleasing = activeAnimeSeason ? activeAnimeSeason.status === 'RELEASING' : (movie.status === 'RELEASING' || !movie.status)
             const animeUpcoming =
               movie.isAnime &&
-              typeof movie.nextEpisode?.number === 'number' &&
-              episode >= movie.nextEpisode.number
+              isReleasing &&
+              typeof activeNextEp?.number === 'number' &&
+              episode >= activeNextEp.number
             const tmdbUpcoming =
-              !!data?.airDate && new Date(data.airDate).getTime() > Date.now()
+              !movie.isAnime &&
+              !!data?.airDate &&
+              new Date(data.airDate).getTime() > Date.now()
             const upcoming = animeUpcoming || tmdbUpcoming
             // Only the exact next-airing anime episode has a known date; later
             // unaired episodes just show "Coming soon" without a (wrong) date.
             const comingDate = animeUpcoming
-              ? episode === movie.nextEpisode?.number && movie.nextEpisode?.airingAt
-                ? formatAirDate(movie.nextEpisode.airingAt * 1000)
+              ? episode === activeNextEp?.number && activeNextEp?.airingAt
+                ? formatAirDate(activeNextEp.airingAt * 1000)
                 : ''
               : data?.airDate
                 ? formatAirDate(data.airDate)

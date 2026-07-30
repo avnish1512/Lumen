@@ -310,6 +310,8 @@ export type AnimeSeasonInfo = {
   title: string;
   episodeCount: number;
   seasonYear?: number;
+  status?: string;
+  nextEpisode?: { number: number; airingAt?: number };
   animeEpisodes?: { title: string; thumbnail: string }[];
 };
 
@@ -327,9 +329,11 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
         title { english romaji userPreferred }
         episodes
         format
+        status
         seasonYear
         coverImage { extraLarge large }
         streamingEpisodes { title thumbnail }
+        nextAiringEpisode { episode airingAt }
         relations {
           edges {
             relationType
@@ -337,26 +341,12 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
               id
               title { english romaji userPreferred }
               format
+              status
               episodes
               seasonYear
-              status
               coverImage { extraLarge large }
               streamingEpisodes { title thumbnail }
-              relations {
-                edges {
-                  relationType
-                  node {
-                    id
-                    title { english romaji userPreferred }
-                    format
-                    episodes
-                    seasonYear
-                    status
-                    coverImage { extraLarge large }
-                    streamingEpisodes { title thumbnail }
-                  }
-                }
-              }
+              nextAiringEpisode { episode airingAt }
             }
           }
         }
@@ -364,36 +354,58 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
     }
   `;
 
-  try {
-    const data = await queryAniList(query, { id: anilistId });
-    const root = data?.Media;
-    if (!root) {
-      return [];
+  const mediaMap = new Map<number, any>();
+  const visited = new Set<number>();
+
+  const isMainTvSeason = (m: any) => {
+    if (!m) return false;
+    if (m.format !== 'TV' && m.format !== 'TV_SHORT' && m.format !== 'ONA') return false;
+    const titleLower = (m.title?.english || m.title?.romaji || m.title?.userPreferred || '').toLowerCase();
+    if (
+      titleLower.includes('ova') ||
+      titleLower.includes('special') ||
+      titleLower.includes('picture drama') ||
+      titleLower.includes('chibi')
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  const fetchMedia = async (id: number) => {
+    if (visited.has(id)) return null;
+    visited.add(id);
+    try {
+      const data = await queryAniList(query, { id });
+      return data?.Media || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const walk = async (id: number, depth = 5) => {
+    if (depth <= 0) return;
+    const m = await fetchMedia(id);
+    if (!m) return;
+
+    if (isMainTvSeason(m)) {
+      mediaMap.set(m.id, m);
     }
 
-    const mediaMap = new Map<number, any>();
-    const addMedia = (m: any) => {
-      if (!m) return;
-      if (['TV', 'TV_SHORT', 'ONA'].includes(m.format)) {
-        if (!mediaMap.has(m.id)) {
-          mediaMap.set(m.id, m);
-        }
-      }
-    };
-
-    addMedia(root);
-
-    const relTypes = ['PREQUEL', 'SEQUEL', 'PARENT', 'SIDE_STORY'];
-    for (const e1 of root.relations?.edges || []) {
-      if (relTypes.includes(e1.relationType)) {
-        addMedia(e1.node);
-        for (const e2 of e1.node?.relations?.edges || []) {
-          if (relTypes.includes(e2.relationType)) {
-            addMedia(e2.node);
+    const edges = m.relations?.edges || [];
+    for (const edge of edges) {
+      if (['PREQUEL', 'SEQUEL', 'PARENT'].includes(edge.relationType)) {
+        if (isMainTvSeason(edge.node)) {
+          if (!visited.has(edge.node.id)) {
+            await walk(edge.node.id, depth - 1);
           }
         }
       }
     }
+  };
+
+  try {
+    await walk(anilistId, 5);
 
     const sortedMedia = Array.from(mediaMap.values()).sort((a, b) => {
       const yearA = a.seasonYear || 9999;
@@ -410,6 +422,10 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
         title: displayTitle,
         episodeCount: m.episodes && m.episodes > 0 ? m.episodes : 12,
         seasonYear: m.seasonYear,
+        status: m.status,
+        nextEpisode: m.nextAiringEpisode
+          ? { number: m.nextAiringEpisode.episode, airingAt: m.nextAiringEpisode.airingAt }
+          : undefined,
         animeEpisodes: (m.streamingEpisodes || []).map((ep: any) => ({
           title: ep.title || '',
           thumbnail: ep.thumbnail || '',

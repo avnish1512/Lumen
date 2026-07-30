@@ -58,6 +58,8 @@ export type AnimeSeasonInfo = {
   title: string
   episodeCount: number
   seasonYear?: number
+  status?: string
+  nextEpisode?: { number: number; airingAt?: number }
   animeEpisodes?: { title: string; thumbnail: string }[]
 }
 
@@ -72,6 +74,7 @@ export type Movie = {
   malId?: number
   isAnime?: boolean
   animeFormat?: string
+  status?: string
   animeSeasons?: AnimeSeasonInfo[]
   episodeCount?: number
   // Real per-episode duration in minutes (AniList `duration`), used to show an
