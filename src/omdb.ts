@@ -52,6 +52,15 @@ export type MediaCollection = {
   kidsFamily: Movie[]
 }
 
+export type AnimeSeasonInfo = {
+  season: number
+  anilistId: number
+  title: string
+  episodeCount: number
+  seasonYear?: number
+  animeEpisodes?: { title: string; thumbnail: string }[]
+}
+
 export type Movie = {
   id: string
   tmdbId?: number
@@ -63,6 +72,7 @@ export type Movie = {
   malId?: number
   isAnime?: boolean
   animeFormat?: string
+  animeSeasons?: AnimeSeasonInfo[]
   episodeCount?: number
   // Real per-episode duration in minutes (AniList `duration`), used to show an
   // accurate episode runtime instead of a fabricated one.

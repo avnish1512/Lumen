@@ -89,7 +89,7 @@ import {
   type TmdbWatchProvider,
 } from './tmdb'
 import { HlsPlayer } from './HlsPlayer'
-import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds } from './anilist'
+import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds, fetchAniListSeasons, type AnimeSeasonInfo } from './anilist'
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
   saveAccountProfiles as saveRemoteProfiles,
@@ -701,8 +701,14 @@ function seasonsFor(movie: Movie) {
   }
 
   if (movie.isAnime) {
-    // AniList anime use a single continuous season with absolute episode
-    // numbering, which is what the anime stream providers expect.
+    if (movie.animeSeasons && movie.animeSeasons.length > 0) {
+      return movie.animeSeasons.map((s) => ({
+        season: s.season,
+        episodeCount: s.episodeCount,
+        title: s.title,
+        anilistId: s.anilistId,
+      }))
+    }
     const total = movie.episodeCount && movie.episodeCount > 0 ? movie.episodeCount : 12
     return [{ season: 1, episodeCount: total }]
   }
@@ -4810,10 +4816,12 @@ function SeasonDropdown({
   seasons,
   value,
   onChange,
+  labels,
 }: {
   seasons: number[]
   value: number
   onChange: (season: number) => void
+  labels?: Record<number, string>
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -4840,6 +4848,16 @@ function SeasonDropdown({
     }
   }, [open])
 
+  const getLabel = (seasonNum: number) => {
+    const custom = labels?.[seasonNum]
+    if (custom) {
+      return custom.toLowerCase().startsWith('season')
+        ? custom
+        : `Season ${seasonNum} · ${custom}`
+    }
+    return `Season ${seasonNum}`
+  }
+
   return (
     <div className={`season-dd${open ? ' open' : ''}`} ref={rootRef}>
       <button
@@ -4849,7 +4867,7 @@ function SeasonDropdown({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span>Season {value}</span>
+        <span>{getLabel(value)}</span>
         <ChevronsUpDown />
       </button>
       {open && (
@@ -4866,7 +4884,7 @@ function SeasonDropdown({
                 setOpen(false)
               }}
             >
-              Season {season}
+              {getLabel(season)}
             </button>
           ))}
         </div>
@@ -4880,11 +4898,38 @@ function SeasonEpisodeSection({
   onPlayEpisode,
 }: {
   movie: Movie
-  onPlayEpisode: (season: number, episode: number) => void
+  onPlayEpisode: (season: number, episode: number, seasonAnilistId?: number) => void
 }) {
-  const fallbackSeasons = useMemo(() => seasonsFor(movie), [movie])
+  const [animeSeasons, setAnimeSeasons] = useState<AnimeSeasonInfo[]>(movie.animeSeasons || [])
+
+  useEffect(() => {
+    let active = true
+    if (movie.isAnime && movie.anilistId) {
+      void fetchAniListSeasons(movie.anilistId).then((list) => {
+        if (active && list.length > 0) {
+          setAnimeSeasons(list)
+        }
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [movie.isAnime, movie.anilistId])
+
+  const fallbackSeasons = useMemo(() => {
+    if (movie.isAnime && animeSeasons.length > 0) {
+      return animeSeasons.map((s) => ({
+        season: s.season,
+        episodeCount: s.episodeCount,
+        title: s.title,
+        anilistId: s.anilistId,
+      }))
+    }
+    return seasonsFor(movie)
+  }, [movie, animeSeasons])
+
   const [tmdbSeasons, setTmdbSeasons] = useState<{ season: number; episodeCount: number }[]>([])
-  // Real TMDB seasons when available, otherwise the local guess.
+  // Real TMDB seasons when available (or AniList seasons), otherwise the local guess.
   const seasons = tmdbSeasons.length > 0 ? tmdbSeasons : fallbackSeasons
   const initialSeason = movie.streamSeason ?? seasons[0]?.season ?? 1
   const [selectedSeason, setSelectedSeason] = useState(() => initialSeason)
@@ -4893,11 +4938,7 @@ function SeasonEpisodeSection({
   const [highlightedEpisode, setHighlightedEpisode] = useState<number | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
 
-  // Anime always use AniList's single continuous season with absolute episode
-  // numbering (what the anime players expect). Never pull TMDB's multi-season
-  // structure for anime — it desyncs the episode list from what actually plays.
-  const isTvId =
-    !movie.isAnime && Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
+  const isTvId = Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
 
   // Load the accurate season list from TMDB so the dropdown/counts are correct.
   useEffect(() => {
@@ -4949,8 +4990,17 @@ function SeasonEpisodeSection({
     return null
   }
 
+  const activeAnimeSeason = movie.isAnime
+    ? (animeSeasons.find((s) => s.season === selectedSeason) || animeSeasons[selectedSeason - 1])
+    : undefined
+
   const episodeCount =
-    tmdbEpisodes.length > 0 ? tmdbEpisodes.length : activeSeason.episodeCount
+    tmdbEpisodes.length > 0
+      ? tmdbEpisodes.length
+      : activeAnimeSeason
+        ? activeAnimeSeason.episodeCount
+        : activeSeason.episodeCount
+
   const episodes = Array.from({ length: episodeCount }, (_, index) => index + 1)
   // Append the next, not-yet-aired anime episode as a "coming soon" card.
   if (
@@ -4960,6 +5010,17 @@ function SeasonEpisodeSection({
   ) {
     episodes.push(movie.nextEpisode.number)
   }
+
+  const seasonLabels = useMemo(() => {
+    if (movie.isAnime && animeSeasons.length > 0) {
+      const map: Record<number, string> = {}
+      for (const s of animeSeasons) {
+        map[s.season] = s.title
+      }
+      return map
+    }
+    return undefined
+  }, [movie.isAnime, animeSeasons])
 
   const formatAirDate = (value: number | string) => {
     const date = typeof value === 'number' ? new Date(value) : new Date(value)
@@ -4987,6 +5048,7 @@ function SeasonEpisodeSection({
           seasons={seasons.map((s) => s.season)}
           value={selectedSeason}
           onChange={setSelectedSeason}
+          labels={seasonLabels}
         />
 
         <form
@@ -5041,9 +5103,9 @@ function SeasonEpisodeSection({
             const data = tmdbEpisodes.find((item) => item.number === episode)
             // AniList exposes real per-episode artwork/titles via
             // streamingEpisodes (in episode order).
-            const animeEp = movie.isAnime
-              ? movie.animeEpisodes?.[episode - 1]
-              : undefined
+            const animeEp = activeAnimeSeason
+              ? activeAnimeSeason.animeEpisodes?.[episode - 1]
+              : (movie.isAnime ? movie.animeEpisodes?.[episode - 1] : undefined)
             const hentaiEp = movie.isHentaiOcean
               ? movie.hentaiEpisodes?.[episode - 1]
               : undefined
@@ -5093,7 +5155,7 @@ function SeasonEpisodeSection({
                 aria-disabled={upcoming}
                 onClick={() => {
                   if (!upcoming) {
-                    onPlayEpisode(selectedSeason, episode)
+                    onPlayEpisode(selectedSeason, episode, activeAnimeSeason?.anilistId)
                   }
                 }}
               >

@@ -199,8 +199,8 @@ export async function fetchKoreanChineseDramas(authChain: TmdbAuth[]): Promise<D
   return merged.map((item, index) => ({ ...item, rank: index + 1 }))
 }
 
-export type LordRail = { title: string; items: DramaItem[] }
-export type LordContent = { results: DramaItem[]; rails: LordRail[] }
+export type LordRail = { title: string; items: any[] }
+export type LordContent = { results: any[]; rails: LordRail[] }
 
 // Content for the PIN-locked "Lord" profile. Themed around ADULT ANIMATION —
 // mature animated comedy/drama (TMDB keyword 210024 "adult animation" on the
@@ -208,7 +208,7 @@ export type LordContent = { results: DramaItem[]; rails: LordRail[] }
 // NOT pornography.
 const ADULT_ANIMATION_KEYWORD = '210024'
 
-async function discoverAdultAnimation(
+export async function discoverAdultAnimation(
   authChain: TmdbAuth[],
   mediaType: 'tv' | 'movie',
   sortBy: string,

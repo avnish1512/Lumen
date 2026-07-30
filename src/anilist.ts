@@ -301,3 +301,128 @@ export async function fetchAnimeListByIds(ids: number[]): Promise<AniListAnime[]
     return [];
   }
 }
+
+export type AnimeSeasonInfo = {
+  season: number;
+  anilistId: number;
+  title: string;
+  episodeCount: number;
+  seasonYear?: number;
+  animeEpisodes?: { title: string; thumbnail: string }[];
+};
+
+const animeSeasonsCache = new Map<number, AnimeSeasonInfo[]>();
+
+export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeasonInfo[]> {
+  if (animeSeasonsCache.has(anilistId)) {
+    return animeSeasonsCache.get(anilistId)!;
+  }
+
+  const query = `
+    query ($id: Int) {
+      Media(id: $id, type: ANIME) {
+        id
+        title { english romaji userPreferred }
+        episodes
+        format
+        seasonYear
+        coverImage { extraLarge large }
+        streamingEpisodes { title thumbnail }
+        relations {
+          edges {
+            relationType
+            node {
+              id
+              title { english romaji userPreferred }
+              format
+              episodes
+              seasonYear
+              status
+              coverImage { extraLarge large }
+              streamingEpisodes { title thumbnail }
+              relations {
+                edges {
+                  relationType
+                  node {
+                    id
+                    title { english romaji userPreferred }
+                    format
+                    episodes
+                    seasonYear
+                    status
+                    coverImage { extraLarge large }
+                    streamingEpisodes { title thumbnail }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const data = await queryAniList(query, { id: anilistId });
+    const root = data?.Media;
+    if (!root) {
+      return [];
+    }
+
+    const mediaMap = new Map<number, any>();
+    const addMedia = (m: any) => {
+      if (!m) return;
+      if (['TV', 'TV_SHORT', 'ONA'].includes(m.format)) {
+        if (!mediaMap.has(m.id)) {
+          mediaMap.set(m.id, m);
+        }
+      }
+    };
+
+    addMedia(root);
+
+    const relTypes = ['PREQUEL', 'SEQUEL', 'PARENT', 'SIDE_STORY'];
+    for (const e1 of root.relations?.edges || []) {
+      if (relTypes.includes(e1.relationType)) {
+        addMedia(e1.node);
+        for (const e2 of e1.node?.relations?.edges || []) {
+          if (relTypes.includes(e2.relationType)) {
+            addMedia(e2.node);
+          }
+        }
+      }
+    }
+
+    const sortedMedia = Array.from(mediaMap.values()).sort((a, b) => {
+      const yearA = a.seasonYear || 9999;
+      const yearB = b.seasonYear || 9999;
+      if (yearA !== yearB) return yearA - yearB;
+      return a.id - b.id;
+    });
+
+    const seasons: AnimeSeasonInfo[] = sortedMedia.map((m, index) => {
+      const displayTitle = m.title?.english || m.title?.romaji || m.title?.userPreferred || `Season ${index + 1}`;
+      return {
+        season: index + 1,
+        anilistId: m.id,
+        title: displayTitle,
+        episodeCount: m.episodes && m.episodes > 0 ? m.episodes : 12,
+        seasonYear: m.seasonYear,
+        animeEpisodes: (m.streamingEpisodes || []).map((ep: any) => ({
+          title: ep.title || '',
+          thumbnail: ep.thumbnail || '',
+        })),
+      };
+    });
+
+    for (const s of seasons) {
+      animeSeasonsCache.set(s.anilistId, seasons);
+    }
+
+    return seasons;
+  } catch (e) {
+    console.error('Failed to fetch anime seasons from AniList', e);
+    return [];
+  }
+}
+

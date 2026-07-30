@@ -204,7 +204,7 @@ function parseRssXml(xml: string): HentaiOceanItem[] {
   const seriesList: HentaiOceanItem[] = []
   let index = 1
 
-  grouped.forEach((episodes, key) => {
+  grouped.forEach((episodes, _key) => {
     // Sort episodes in ascending order (1, 2, 3...)
     episodes.sort((a, b) => a.episodeNum - b.episodeNum)
 
