@@ -335,31 +335,23 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
     return animeSeasonsCache.get(anilistId)!;
   }
 
-  const query = `
+  const idQuery = `
     query ($id: Int) {
       Media(id: $id, type: ANIME) {
         id
-        title { english romaji userPreferred }
-        episodes
-        format
-        status
-        seasonYear
-        coverImage { extraLarge large }
-        streamingEpisodes { title thumbnail }
-        nextAiringEpisode { episode airingAt }
         relations {
           edges {
             relationType
             node {
               id
-              title { english romaji userPreferred }
-              format
-              status
-              episodes
-              seasonYear
-              coverImage { extraLarge large }
-              streamingEpisodes { title thumbnail }
-              nextAiringEpisode { episode airingAt }
+              relations {
+                edges {
+                  relationType
+                  node {
+                    id
+                  }
+                }
+              }
             }
           }
         }
@@ -367,8 +359,33 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
     }
   `;
 
-  const mediaMap = new Map<number, any>();
-  const visited = new Set<number>();
+  const batchQuery = `
+    query ($ids: [Int]) {
+      Page(perPage: 50) {
+        media(id_in: $ids, type: ANIME) {
+          id
+          title { english romaji userPreferred }
+          episodes
+          format
+          status
+          seasonYear
+          coverImage { extraLarge large }
+          streamingEpisodes { title thumbnail }
+          nextAiringEpisode { episode airingAt }
+          relations {
+            edges {
+              relationType
+              node {
+                id
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const relTypes = ['PREQUEL', 'SEQUEL', 'PARENT'];
 
   const isMainTvSeason = (m: any) => {
     if (!m) return false;
@@ -385,42 +402,57 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
     return true;
   };
 
-  const fetchMedia = async (id: number) => {
-    if (visited.has(id)) return null;
-    visited.add(id);
-    try {
-      const data = await queryAniList(query, { id });
-      return data?.Media || null;
-    } catch {
-      return null;
-    }
-  };
-
-  const walk = async (id: number, depth = 5) => {
-    if (depth <= 0) return;
-    const m = await fetchMedia(id);
-    if (!m) return;
-
-    if (isMainTvSeason(m)) {
-      mediaMap.set(m.id, m);
+  try {
+    const idData = await queryAniList(idQuery, { id: anilistId });
+    const root = idData?.Media;
+    if (!root) {
+      return [];
     }
 
-    const edges = m.relations?.edges || [];
-    for (const edge of edges) {
-      if (['PREQUEL', 'SEQUEL', 'PARENT'].includes(edge.relationType)) {
-        if (isMainTvSeason(edge.node)) {
-          if (!visited.has(edge.node.id)) {
-            await walk(edge.node.id, depth - 1);
+    const foundIds = new Set<number>();
+    foundIds.add(root.id);
+
+    const collectIds = (node: any) => {
+      if (!node) return;
+      foundIds.add(node.id);
+      for (const e1 of node.relations?.edges || []) {
+        if (relTypes.includes(e1.relationType)) {
+          foundIds.add(e1.node.id);
+          for (const e2 of e1.node?.relations?.edges || []) {
+            if (relTypes.includes(e2.relationType)) {
+              foundIds.add(e2.node.id);
+            }
           }
         }
       }
+    };
+
+    collectIds(root);
+
+    const batch1Data = await queryAniList(batchQuery, { ids: Array.from(foundIds) });
+    const mediaList1: any[] = batch1Data?.Page?.media || [];
+
+    const missingIds = new Set<number>();
+    for (const m of mediaList1) {
+      for (const edge of m.relations?.edges || []) {
+        if (relTypes.includes(edge.relationType) && !foundIds.has(edge.node.id)) {
+          missingIds.add(edge.node.id);
+        }
+      }
     }
-  };
 
-  try {
-    await walk(anilistId, 5);
+    let finalMediaList = mediaList1;
+    if (missingIds.size > 0) {
+      try {
+        const batch2Data = await queryAniList(batchQuery, { ids: Array.from(missingIds) });
+        const mediaList2: any[] = batch2Data?.Page?.media || [];
+        finalMediaList = [...mediaList1, ...mediaList2];
+      } catch {
+        // Keep mediaList1 if second batch fails
+      }
+    }
 
-    const sortedMedia = Array.from(mediaMap.values()).sort((a, b) => {
+    const sortedMedia = finalMediaList.filter(isMainTvSeason).sort((a, b) => {
       const yearA = a.seasonYear || 9999;
       const yearB = b.seasonYear || 9999;
       if (yearA !== yearB) return yearA - yearB;
