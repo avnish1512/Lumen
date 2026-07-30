@@ -203,14 +203,16 @@ export async function fetchAnimeByOptions({
   genre,
   sort,
   perPage = 10,
+  page = 1,
 }: {
   genre?: string;
   sort?: string[];
   perPage?: number;
+  page?: number;
 }): Promise<AniListAnime[]> {
   const query = `
-    query ($genre: String, $sort: [MediaSort], $perPage: Int) {
-      Page(page: 1, perPage: $perPage) {
+    query ($genre: String, $sort: [MediaSort], $perPage: Int, $page: Int) {
+      Page(page: $page, perPage: $perPage) {
         media(genre: $genre, sort: $sort, type: ANIME) {
           id
           idMal
@@ -246,7 +248,7 @@ export async function fetchAnimeByOptions({
     }
   `;
 
-  const variables: Record<string, any> = { perPage };
+  const variables: Record<string, any> = { perPage, page };
   if (genre) variables.genre = genre;
   if (sort) variables.sort = sort;
 

@@ -1127,22 +1127,39 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
   }
 }
 
+export function getDailySeed(): number {
+  const now = new Date()
+  return now.getFullYear() * 1000 + (now.getMonth() + 1) * 31 + now.getDate()
+}
+
+export function rotateByDailySeed<T>(items: T[], seedOffset = 0): T[] {
+  if (!items || items.length === 0) return items
+  const seed = getDailySeed() + seedOffset
+  const shift = Math.abs(seed) % items.length
+  return [...items.slice(shift), ...items.slice(0, shift)]
+}
+
 async function fetchAniListHomeCollection(): Promise<MediaCollection> {
   try {
+    const page = (getDailySeed() % 3) + 1
     const [trending, action, fantasy, comedy] = await Promise.all([
-      fetchAnimeByOptions({ sort: ['TRENDING_DESC', 'POPULARITY_DESC'], perPage: 15 }),
-      fetchAnimeByOptions({ genre: 'Action', sort: ['POPULARITY_DESC'], perPage: 15 }),
-      fetchAnimeByOptions({ genre: 'Fantasy', sort: ['POPULARITY_DESC'], perPage: 15 }),
-      fetchAnimeByOptions({ genre: 'Comedy', sort: ['POPULARITY_DESC'], perPage: 15 }),
+      fetchAnimeByOptions({ sort: ['TRENDING_DESC', 'POPULARITY_DESC'], perPage: 15, page }),
+      fetchAnimeByOptions({ genre: 'Action', sort: ['POPULARITY_DESC'], perPage: 15, page }),
+      fetchAnimeByOptions({ genre: 'Fantasy', sort: ['POPULARITY_DESC'], perPage: 15, page }),
+      fetchAnimeByOptions({ genre: 'Comedy', sort: ['POPULARITY_DESC'], perPage: 15, page }),
     ])
 
-    const mapList = (list: any[]) => list.map((item, i) => mapAniListToMovieStandalone(item, i + 1))
+    const mapList = (list: any[], seedOffset = 0) =>
+      rotateByDailySeed(
+        list.map((item, i) => mapAniListToMovieStandalone(item, i + 1)),
+        seedOffset,
+      )
 
     return {
-      top: mapList(trending),
-      thrilling: mapList(action),
-      adventure: mapList(fantasy),
-      kidsFamily: mapList(comedy),
+      top: mapList(trending, 0),
+      thrilling: mapList(action, 1),
+      adventure: mapList(fantasy, 2),
+      kidsFamily: mapList(comedy, 3),
     }
   } catch (e) {
     console.error('Failed to fetch anime collection from AniList', e)
@@ -1169,6 +1186,10 @@ const emptyAnimeExtras: AnimeHomeExtras = {
 // appear across many genres). Earlier rails get first pick of the titles.
 async function fetchAnimeRails(): Promise<AnimeHomeExtras> {
   try {
+    const seed = getDailySeed()
+    const page1 = (seed % 4) + 1
+    const page2 = ((seed + 1) % 4) + 1
+
     const [
       trending,
       action,
@@ -1181,20 +1202,20 @@ async function fetchAnimeRails(): Promise<AnimeHomeExtras> {
       newest,
       topRated,
     ] = await Promise.all([
-      fetchAnimeByOptions({ sort: ['TRENDING_DESC', 'POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ genre: 'Action', sort: ['POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ genre: 'Fantasy', sort: ['POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ genre: 'Comedy', sort: ['POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ genre: 'Supernatural', sort: ['POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ genre: 'Romance', sort: ['POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ genre: 'Adventure', sort: ['POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ genre: 'Slice of Life', sort: ['POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ sort: ['START_DATE_DESC', 'POPULARITY_DESC'], perPage: 25 }),
-      fetchAnimeByOptions({ sort: ['SCORE_DESC'], perPage: 25 }),
+      fetchAnimeByOptions({ sort: ['TRENDING_DESC', 'POPULARITY_DESC'], perPage: 25, page: page1 }),
+      fetchAnimeByOptions({ genre: 'Action', sort: ['POPULARITY_DESC'], perPage: 25, page: page1 }),
+      fetchAnimeByOptions({ genre: 'Fantasy', sort: ['POPULARITY_DESC'], perPage: 25, page: page2 }),
+      fetchAnimeByOptions({ genre: 'Comedy', sort: ['POPULARITY_DESC'], perPage: 25, page: page1 }),
+      fetchAnimeByOptions({ genre: 'Supernatural', sort: ['POPULARITY_DESC'], perPage: 25, page: page2 }),
+      fetchAnimeByOptions({ genre: 'Romance', sort: ['POPULARITY_DESC'], perPage: 25, page: page1 }),
+      fetchAnimeByOptions({ genre: 'Adventure', sort: ['POPULARITY_DESC'], perPage: 25, page: page2 }),
+      fetchAnimeByOptions({ genre: 'Slice of Life', sort: ['POPULARITY_DESC'], perPage: 25, page: page1 }),
+      fetchAnimeByOptions({ sort: ['START_DATE_DESC', 'POPULARITY_DESC'], perPage: 25, page: page1 }),
+      fetchAnimeByOptions({ sort: ['SCORE_DESC'], perPage: 25, page: page2 }),
     ])
 
     const used = new Set<number>()
-    const take = (list: any[], limit = 14): Movie[] => {
+    const take = (list: any[], limit = 14, seedOffset = 0): Movie[] => {
       const out: Movie[] = []
       for (const item of list) {
         if (!item || used.has(item.id)) {
@@ -1206,20 +1227,20 @@ async function fetchAnimeRails(): Promise<AnimeHomeExtras> {
           break
         }
       }
-      return out
+      return rotateByDailySeed(out, seedOffset)
     }
 
     // Order defines priority — a title claimed by an earlier rail is skipped later.
-    const top = take(trending)
-    const actionList = take(action)
-    const fantasyList = take(fantasy)
-    const comedyList = take(comedy)
-    const supernaturalList = take(supernatural)
-    const romanceList = take(romance)
-    const adventureList = take(adventure)
-    const sliceList = take(sliceOfLife)
-    const newestList = take(newest)
-    const topRatedList = take(topRated)
+    const top = take(trending, 14, 0)
+    const actionList = take(action, 14, 1)
+    const fantasyList = take(fantasy, 14, 2)
+    const comedyList = take(comedy, 14, 3)
+    const supernaturalList = take(supernatural, 14, 4)
+    const romanceList = take(romance, 14, 5)
+    const adventureList = take(adventure, 14, 6)
+    const sliceList = take(sliceOfLife, 14, 7)
+    const newestList = take(newest, 14, 8)
+    const topRatedList = take(topRated, 14, 9)
 
     return {
       movieCollection: {
@@ -1590,6 +1611,18 @@ function App() {
           progress: entry.progress,
         })),
     [watchHistory],
+  )
+  const continueWatchingLumen = useMemo(
+    () => continueWatching.filter((m) => !m.isAnime),
+    [continueWatching],
+  )
+  const continueWatchingAnime = useMemo(
+    () => continueWatching.filter((m) => m.isAnime || m.genres.some((g) => g.toLowerCase().includes('anime'))),
+    [continueWatching],
+  )
+  const continueWatchingDrama = useMemo(
+    () => continueWatching.filter((m) => m.genres.some((g) => g.toLowerCase().includes('drama'))),
+    [continueWatching],
   )
   const searchCategoryTiles = useMemo(
     () =>
@@ -2836,7 +2869,7 @@ function App() {
             trendingNow: animeExtras.trending.length ? animeExtras.trending : (animeCollection.adventure || []),
             tvShowCollection: animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection,
           } : tmdbHomeRails}
-          continueMovies={continueWatching}
+          continueMovies={designMode === 'netflix' ? continueWatchingAnime : continueWatchingLumen}
           savedMovies={savedMovies}
           likedMovies={likedList}
           onOpenDetail={openDetail}
@@ -2880,7 +2913,7 @@ function App() {
             trendingNow: dramaRails.romCom.length ? dramaRails.romCom : (dramaCollection.adventure || []),
             tvShowCollection: dramaTvCollection,
           }}
-          continueMovies={continueWatching}
+          continueMovies={continueWatchingDrama}
           savedMovies={savedMovies}
           likedMovies={likedList}
           onOpenDetail={openDetail}
@@ -2919,14 +2952,10 @@ function App() {
           movies={designMode === 'netflix' ? anime : (screen === 'anime' ? anime : screen === 'tv' ? tvShows : movies)}
           collection={designMode === 'netflix' ? animeCollection : (screen === 'anime' ? animeCollection : screen === 'tv' ? tvShowCollection : movieCollection)}
           featuredMovie={designMode === 'netflix' ? (anime[0] || featuredMovie) : (screen === 'anime' ? anime[0] : screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0])}
-          continueMovies={continueWatching}
           savedMovies={savedMovies}
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSave={toggleSaved}
-          onMarkWatched={markWatchedMovie}
-          onRemoveContinue={removeContinueMovie}
-          onRemoveWatchlist={removeWatchlistMovie}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
           profiles={profiles}
@@ -3638,11 +3667,11 @@ function HomeScreen({
     ],
   )
   const newReleaseItems = useMemo(
-    () => buildRail(tmdbHomeRails.newReleases, newReleaseFallback),
+    () => rotateByDailySeed(buildRail(tmdbHomeRails.newReleases, newReleaseFallback), 2),
     [newReleaseFallback, tmdbHomeRails.newReleases],
   )
   const trendingNowItems = useMemo(
-    () => buildRail(tmdbHomeRails.trendingNow, trendingNowFallback),
+    () => rotateByDailySeed(buildRail(tmdbHomeRails.trendingNow, trendingNowFallback), 5),
     [tmdbHomeRails.trendingNow, trendingNowFallback],
   )
   const activeHeroIndex = Math.max(
@@ -3696,7 +3725,7 @@ function HomeScreen({
             event.currentTarget.src = heroImageFor(featuredMovie)
           }}
         />
-        <HeroTrailerPreview key={featuredMovie.id} movie={featuredMovie} />
+        <HeroTrailerPreview key={`${designMode}-${screen ?? 'home'}-${featuredMovie.id}`} movie={featuredMovie} />
         {designMode === 'netflix' ? (
           <header className="netflix-mobile-header">
             <div className="netflix-mobile-header-top">
@@ -3974,14 +4003,10 @@ type BrowseScreenProps = {
   movies: Movie[]
   collection: MediaCollection
   featuredMovie?: Movie
-  continueMovies?: Movie[]
   savedMovies: SavedMovies
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSave: (movie: Movie) => void
-  onMarkWatched?: (movie: Movie) => void
-  onRemoveContinue?: (movie: Movie) => void
-  onRemoveWatchlist?: (movie: Movie) => void
   currentUser: UserInfo | null
   onProfile: () => void
   profiles: UserProfile[]
@@ -3994,14 +4019,10 @@ function BrowseScreen({
   movies,
   collection,
   featuredMovie,
-  continueMovies = [],
   savedMovies,
   onOpenDetail,
   onPlay,
   onSave,
-  onMarkWatched = () => {},
-  onRemoveContinue = () => {},
-  onRemoveWatchlist = () => {},
   currentUser,
   onProfile,
   profiles,
@@ -4148,6 +4169,7 @@ function BrowseScreen({
               event.currentTarget.src = heroImageFor(heroMovie)
             }}
           />
+          <HeroTrailerPreview key={`${designMode}-${mode}-${heroMovie.id}`} movie={heroMovie} />
           <header className="home-header">
             <h1>{screenTitle}</h1>
             <div className="header-actions">
@@ -4257,17 +4279,6 @@ function BrowseScreen({
             </div>
           )}
         </div>
-      )}
-
-      {continueMovies.length > 0 && (
-        <ContinueWatchingRail
-          title="Continue Watching for You"
-          movies={continueMovies}
-          onOpenDetail={onOpenDetail}
-          onMarkWatched={onMarkWatched}
-          onRemoveContinue={onRemoveContinue}
-          onRemoveWatchlist={onRemoveWatchlist}
-        />
       )}
 
       <MovieRail
