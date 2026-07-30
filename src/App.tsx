@@ -89,6 +89,7 @@ import {
   type TmdbWatchProvider,
 } from './tmdb'
 import { HlsPlayer } from './HlsPlayer'
+import { getDailySeed, rotateByDailySeed } from './utils'
 import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds, fetchAniListSeasons, type AnimeSeasonInfo } from './anilist'
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
@@ -1126,19 +1127,6 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
     ratings: [],
   }
 }
-
-export function getDailySeed(): number {
-  const now = new Date()
-  return now.getFullYear() * 1000 + (now.getMonth() + 1) * 31 + now.getDate()
-}
-
-export function rotateByDailySeed<T>(items: T[], seedOffset = 0): T[] {
-  if (!items || items.length === 0) return items
-  const seed = getDailySeed() + seedOffset
-  const shift = Math.abs(seed) % items.length
-  return [...items.slice(shift), ...items.slice(0, shift)]
-}
-
 async function fetchAniListHomeCollection(): Promise<MediaCollection> {
   try {
     const page = (getDailySeed() % 3) + 1
