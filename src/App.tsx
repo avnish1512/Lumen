@@ -89,7 +89,6 @@ import {
   type TmdbWatchProvider,
 } from './tmdb'
 import { HlsPlayer } from './HlsPlayer'
-import { getDailySeed, rotateByDailySeed } from './utils'
 import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds, fetchAniListSeasons, type AnimeSeasonInfo } from './anilist'
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
@@ -1127,6 +1126,19 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
     ratings: [],
   }
 }
+
+export function getDailySeed(): number {
+  const now = new Date()
+  return now.getFullYear() * 1000 + (now.getMonth() + 1) * 31 + now.getDate()
+}
+
+export function rotateByDailySeed<T>(items: T[], seedOffset = 0): T[] {
+  if (!items || items.length === 0) return items
+  const seed = getDailySeed() + seedOffset
+  const shift = Math.abs(seed) % items.length
+  return [...items.slice(shift), ...items.slice(0, shift)]
+}
+
 async function fetchAniListHomeCollection(): Promise<MediaCollection> {
   try {
     const page = (getDailySeed() % 3) + 1
@@ -2263,10 +2275,26 @@ function App() {
       try {
         let fullMovie: Movie
         if (movie.id.startsWith('anilist-') || movie.isAnime) {
-          const anilistId = movie.anilistId || parseInt(movie.id.replace('anilist-', ''))
-          const animeData = await getAnimeDetails(anilistId)
-          fullMovie = mapAniListToMovieStandalone(animeData, movie.rank)
-          fullMovie.isFull = true
+          const rawId = movie.id.replace(/^anilist-/, '')
+          const parsedId = /^\d+$/.test(rawId) ? parseInt(rawId, 10) : NaN
+          const anilistId =
+            movie.anilistId && !isNaN(movie.anilistId)
+              ? movie.anilistId
+              : !isNaN(parsedId)
+                ? parsedId
+                : undefined
+
+          if (anilistId) {
+            const animeData = await getAnimeDetails(anilistId)
+            if (animeData) {
+              fullMovie = mapAniListToMovieStandalone(animeData, movie.rank)
+              fullMovie.isFull = true
+            } else {
+              fullMovie = { ...movie, isFull: true }
+            }
+          } else {
+            fullMovie = { ...movie, isFull: true }
+          }
         } else if (/^tt\d+/.test(movie.id)) {
           // Only real IMDb ids can be looked up on OMDb.
           fullMovie = await fetchMovieById(movie.id, movie.rank)
@@ -2298,14 +2326,14 @@ function App() {
         upsertMovie(fullMovie)
         return fullMovie
       } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'Could not load full movie details.'
+        console.warn('hydrateMovie failed, using fallback:', error)
+        const fallbackMovie = { ...movie, isFull: true }
         if (selectedMovieIdRef.current === movie.id) {
-          setDetailError(message)
+          setSelectedMovie((current) =>
+            current?.id === movie.id ? { ...fallbackMovie, ...current } : fallbackMovie,
+          )
         }
-        return movie
+        return fallbackMovie
       } finally {
         if (selectedMovieIdRef.current === movie.id) {
           setDetailLoading(false)

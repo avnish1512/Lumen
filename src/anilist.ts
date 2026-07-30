@@ -108,7 +108,11 @@ export async function searchAnime(query: string, page = 1, perPage = 20): Promis
   };
 }
 
-export async function getAnimeDetails(id: number): Promise<AniListAnime> {
+export async function getAnimeDetails(id: number): Promise<AniListAnime | null> {
+  if (!id || isNaN(id)) {
+    return null;
+  }
+
   const detailsQuery = `
     query ($id: Int) {
       Media(id: $id, type: ANIME) {
@@ -158,8 +162,13 @@ export async function getAnimeDetails(id: number): Promise<AniListAnime> {
     }
   `;
 
-  const data = await queryAniList(detailsQuery, { id });
-  return data?.Media;
+  try {
+    const data = await queryAniList(detailsQuery, { id });
+    return data?.Media || null;
+  } catch (e) {
+    console.error(`getAnimeDetails failed for id ${id}:`, e);
+    return null;
+  }
 }
 
 export async function syncAnimeProgressToAniList(
@@ -318,6 +327,10 @@ export type AnimeSeasonInfo = {
 const animeSeasonsCache = new Map<number, AnimeSeasonInfo[]>();
 
 export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeasonInfo[]> {
+  if (!anilistId || isNaN(anilistId)) {
+    return [];
+  }
+
   if (animeSeasonsCache.has(anilistId)) {
     return animeSeasonsCache.get(anilistId)!;
   }
