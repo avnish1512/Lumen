@@ -73,6 +73,9 @@ function parseBody(req: ApiRequest): Record<string, unknown> {
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   const env = process.env as Record<string, string | undefined>
   const kind = qv(req.query.kind) ?? ''
+  // Supabase config (null when env vars are missing). Used by the profiles,
+  // lord-pin, accounts, watch-party and devices handlers below.
+  const config = supabaseConfigFromEnv(env)
 
   // ---- trailer (public) ----
   if (kind === 'trailer') {
