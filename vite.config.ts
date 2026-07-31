@@ -1235,17 +1235,14 @@ function posterDevProxy(env: Record<string, string | undefined>): Plugin {
   }
 }
 
+const devProfilesMap = new Map<string, StoredProfile[]>()
+
 function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
   return {
     name: 'profiles-dev-proxy',
     configureServer(server) {
       server.middlewares.use('/api/profiles', async (req: IncomingMessage, res) => {
         const config = supabaseConfigFromEnv(env)
-
-        if (!config) {
-          sendJson(res, 200, { ok: false, configured: false, profiles: null })
-          return
-        }
 
         try {
           if (req.method === 'GET') {
@@ -1255,8 +1252,18 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
               sendJson(res, 400, { ok: false, error: 'email is required.', profiles: null })
               return
             }
-            const profiles = await fetchAccountProfiles(config, email)
-            sendJson(res, 200, { ok: true, configured: true, profiles })
+            let profiles: StoredProfile[] | null = null
+            if (config) {
+              try {
+                profiles = await fetchAccountProfiles(config, email)
+              } catch {}
+            }
+            if (profiles && profiles.length > 0) {
+              devProfilesMap.set(email, profiles)
+            } else {
+              profiles = devProfilesMap.get(email) ?? null
+            }
+            sendJson(res, 200, { ok: true, configured: Boolean(config), profiles })
             return
           }
 
@@ -1275,14 +1282,19 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
               return
             }
 
-            await saveAccountProfiles(config, email, profiles)
-            sendJson(res, 200, { ok: true, configured: true })
+            devProfilesMap.set(email, profiles)
+            if (config) {
+              try {
+                await saveAccountProfiles(config, email, profiles)
+              } catch {}
+            }
+            sendJson(res, 200, { ok: true, configured: Boolean(config) })
             return
           }
 
           sendJson(res, 405, { ok: false, error: 'Method not allowed.' })
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Supabase request failed.'
+          const message = error instanceof Error ? error.message : 'Profiles request failed.'
           sendJson(res, 502, { ok: false, error: message })
         }
       })

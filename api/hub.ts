@@ -35,9 +35,9 @@ import {
   fetchDevices,
   registerDevice,
   removeDevice,
-  removeOtherDevices,
-  type DeviceRecord,
 } from './_lib/devices-core.js'
+
+const inMemoryProfilesMap = new Map<string, StoredProfile[]>()
 
 type QueryValue = string | string[] | undefined
 
@@ -147,13 +147,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return
   }
 
-  // Everything below needs Supabase.
-  const config = supabaseConfigFromEnv(env)
-  if (!config) {
-    res.status(200).json({ ok: false, configured: false, profiles: null })
-    return
-  }
-
   const body = parseBody(req)
 
   // ---- profiles ----
@@ -166,7 +159,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           res.status(400).json({ ok: false, error: 'email is required.', profiles: null })
           return
         }
-        res.status(200).json({ ok: true, configured: true, profiles: await fetchAccountProfiles(config, email) })
+        let remoteProfiles: StoredProfile[] | null = null
+        if (config) {
+          try {
+            remoteProfiles = await fetchAccountProfiles(config, email)
+          } catch {}
+        }
+        if (remoteProfiles && remoteProfiles.length > 0) {
+          inMemoryProfilesMap.set(email, remoteProfiles)
+        } else {
+          remoteProfiles = inMemoryProfilesMap.get(email) ?? null
+        }
+        res.status(200).json({ ok: true, configured: Boolean(config), profiles: remoteProfiles })
         return
       }
       const email = String(body.email ?? '').trim().toLowerCase()
@@ -175,11 +179,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         res.status(400).json({ ok: false, error: 'email and profiles[] required.' })
         return
       }
-      await saveAccountProfiles(config, email, profiles as StoredProfile[])
-      res.status(200).json({ ok: true, configured: true })
+      inMemoryProfilesMap.set(email, profiles as StoredProfile[])
+      if (config) {
+        try {
+          await saveAccountProfiles(config, email, profiles as StoredProfile[])
+        } catch {}
+      }
+      res.status(200).json({ ok: true, configured: Boolean(config) })
     } catch (error) {
-      res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Supabase error.' })
+      res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Profiles error.' })
     }
+    return
+  }
+
+  // Everything below needs Supabase.
+  if (!config) {
+    res.status(200).json({ ok: false, configured: false, profiles: null })
     return
   }
 

@@ -22,7 +22,7 @@ export async function fetchAccountProfiles(
       profiles?: RemoteProfile[] | null
     }
 
-    if (!response.ok || !body.ok || !body.configured) {
+    if (!response.ok || !body.ok) {
       return null
     }
 

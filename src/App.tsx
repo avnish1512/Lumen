@@ -1500,21 +1500,28 @@ function App() {
 
     let active = true
     void fetchRemoteProfiles(email).then((remote) => {
-      if (!active || !remote || remote.length === 0) {
+      if (!active) {
         return
       }
-      setProfiles(remote)
-      try {
-        window.localStorage.setItem(profilesKeyFor(account), JSON.stringify(remote))
-      } catch {
-        // ignore quota / serialization errors
+      if (remote && remote.length > 0) {
+        setProfiles(remote)
+        try {
+          window.localStorage.setItem(profilesKeyFor(account), JSON.stringify(remote))
+        } catch {
+          // ignore quota / serialization errors
+        }
+      } else {
+        const local = readProfilesFor(account)
+        if (local && local.length > 0) {
+          void saveRemoteProfiles(email, local)
+        }
       }
     })
 
     return () => {
       active = false
     }
-  }, [currentUser, tempUser])
+  }, [currentUser, tempUser, screen])
 
   const initialCache = useMemo(() => readHomeCache(), [])
 
