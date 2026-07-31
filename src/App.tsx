@@ -1528,6 +1528,8 @@ function App() {
     }
   }, [currentUser, tempUser, screen])
 
+  const [showLordPin, setShowLordPin] = useState(false)
+  const [showSetLordPin, setShowSetLordPin] = useState(false)
   const [lordPin, setLordPinState] = useState<string>(getLordPin)
 
   useEffect(() => {
@@ -1832,8 +1834,6 @@ function App() {
 
   // "Lord" hidden profile: tapping the menu item asks for a 4-digit PIN; a
   // correct PIN opens the mature (R-rated, non-explicit) collection screen.
-  const [showLordPin, setShowLordPin] = useState(false)
-  const [showSetLordPin, setShowSetLordPin] = useState(false)
   const [lordMovies, setLordMovies] = useState<Movie[]>([])
   const [lordRails, setLordRails] = useState<LordRail[]>([])
   const [lordLoading, setLordLoading] = useState(false)
