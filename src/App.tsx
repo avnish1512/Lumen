@@ -203,7 +203,10 @@ function getLordPin(): string {
   return DEFAULT_LORD_PIN
 }
 
-function setLordPin(newPin: string): boolean {
+function setLordPin(newPin: string, userEmail?: string | null): boolean {
+  if (userEmail && userEmail.toLowerCase() !== 'avnishpc00@gmail.com') {
+    return false
+  }
   if (/^\d{4}$/.test(newPin)) {
     try {
       localStorage.setItem('lord_pin', newPin)
@@ -3174,6 +3177,7 @@ function App() {
 
       {showSetLordPin && (
         <SetLordPinModal
+          currentUser={currentUser}
           onClose={() => setShowSetLordPin(false)}
           onSuccess={() => setShowSetLordPin(false)}
         />
@@ -6601,7 +6605,7 @@ function LoginScreen({
                   <ChevronRight size={18} />
                 </button>
               )}
-              {onSetLordPin && (
+              {isMainAccount(currentUser.email) && onSetLordPin && (
                 <button className="account-row" type="button" onClick={onSetLordPin}>
                   <span className="account-row-left">
                     <KeyRound size={18} />
@@ -9517,23 +9521,29 @@ function LordPinModal({
 }
 
 type SetLordPinModalProps = {
+  currentUser?: UserInfo | null
   onClose: () => void
   onSuccess: (newPin: string) => void
 }
 
-function SetLordPinModal({ onClose, onSuccess }: SetLordPinModalProps) {
+function SetLordPinModal({ currentUser, onClose, onSuccess }: SetLordPinModalProps) {
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
 
   const handleSave = (event?: FormEvent) => {
     if (event) event.preventDefault()
+    if (!isAdmin) {
+      setError('Only avnishpc00@gmail.com can change the Lord password.')
+      return
+    }
     const trimmed = pin.trim()
     if (!/^\d{4}$/.test(trimmed)) {
       setError('Please enter a valid 4-digit numeric PIN.')
       return
     }
-    const ok = setLordPin(trimmed)
+    const ok = setLordPin(trimmed, currentUser?.email)
     if (ok) {
       setError('')
       setSaved(true)
@@ -9543,6 +9553,27 @@ function SetLordPinModal({ onClose, onSuccess }: SetLordPinModalProps) {
     } else {
       setError('Could not save password.')
     }
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="bff-overlay" role="dialog" aria-modal="true" aria-label="Change Lord Password">
+        <div className="bff-modal account-manage-modal">
+          <button className="bff-close" type="button" aria-label="Close" onClick={onClose}>
+            <X size={20} />
+          </button>
+          <h2 className="bff-title">Access Denied</h2>
+          <p className="bff-sub">
+            Only the primary admin account (<strong>avnishpc00@gmail.com</strong>) can change the Lord password. Other accounts can only watch.
+          </p>
+          <div className="bff-actions" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="bff-btn-primary" type="button" onClick={onClose}>
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
