@@ -55,6 +55,7 @@ import {
   Lock,
   Delete,
   KeyRound,
+  BookOpen,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -89,6 +90,7 @@ import {
   type TmdbWatchProvider,
 } from './tmdb'
 import { HlsPlayer } from './HlsPlayer'
+import { MangaScreen } from './MangaScreen'
 import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds, fetchAniListSeasons, type AnimeSeasonInfo } from './anilist'
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
@@ -186,8 +188,8 @@ function LoginBackdrop() {
   )
 }
 
-type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles' | 'drama' | 'livetv' | 'lord'
-type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search' | 'Drama' | 'Live TV'
+type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles' | 'drama' | 'livetv' | 'lord' | 'manga'
+type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search' | 'Drama' | 'Live TV' | 'Manga'
 type SavedMovies = Record<string, Movie>
 
 // 4-digit PIN that unlocks the hidden "Lord" profile. Change this value (or the
@@ -1793,9 +1795,11 @@ function App() {
           ? 'Drama'
           : screen === 'livetv'
             ? 'Live TV'
-            : screen === 'search'
-              ? 'Search'
-              : 'Anime'
+            : screen === 'manga'
+              ? 'Manga'
+              : screen === 'search'
+                ? 'Search'
+                : 'Anime'
       : screen === 'home'
         ? 'Home'
         : screen === 'library'
@@ -3012,6 +3016,8 @@ function App() {
         <LiveTvScreen onSearch={() => setScreen('search')} currentUser={currentUser} onProfile={openProfileOrLogin} profiles={profiles} />
       )}
 
+      {screen === 'manga' && <MangaScreen onBack={() => setScreen('home')} />}
+
       {(screen === 'movies' || screen === 'tv' || screen === 'anime') && (
         <BrowseScreen
           key={screen}
@@ -3229,7 +3235,7 @@ function App() {
         />
       )}
 
-      {((designMode === 'netflix' && (screen === 'home' || screen === 'drama' || screen === 'livetv' || screen === 'search' || screen === 'library')) ||
+      {((designMode === 'netflix' && (screen === 'home' || screen === 'drama' || screen === 'livetv' || screen === 'manga' || screen === 'search' || screen === 'library')) ||
         (designMode === 'apple' && screen !== 'search' && screen !== 'login' && screen !== 'profiles' && screen !== 'lord')) && (
         <BottomNav
           active={activeTab}
@@ -3239,6 +3245,7 @@ function App() {
           onLibrary={() => setScreen('library')}
           onDrama={() => setScreen('drama')}
           onLiveTv={() => setScreen('livetv')}
+          onManga={() => setScreen('manga')}
           onGoLumen={() => {
             setScreen('home')
             if (designMode !== 'apple') {
@@ -3264,6 +3271,7 @@ function App() {
           onLibrary={() => setScreen('library')}
           onDrama={() => setScreen('drama')}
           onLiveTv={() => setScreen('livetv')}
+          onManga={() => setScreen('manga')}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
           onSelectProfile={switchToProfile}
@@ -9515,6 +9523,7 @@ function BottomNav({
   onLibrary,
   onDrama,
   onLiveTv,
+  onManga,
   onGoLumen,
   onGoAnime,
   designMode,
@@ -9526,6 +9535,7 @@ function BottomNav({
   onLibrary: () => void
   onDrama?: () => void
   onLiveTv?: () => void
+  onManga?: () => void
   onGoLumen?: () => void
   onGoAnime?: () => void
   designMode: 'apple' | 'netflix'
@@ -9569,6 +9579,16 @@ function BottomNav({
           >
             <Radio />
             <span>Live TV</span>
+          </button>
+          <button
+            className={`netflix-tab${active === 'Manga' ? ' active' : ''}`}
+            type="button"
+            onClick={onManga}
+            aria-current={active === 'Manga' ? 'page' : undefined}
+            title="Manga"
+          >
+            <BookOpen />
+            <span>Manga</span>
           </button>
           <button
             className="netflix-tab netflix-tab-lumen"
@@ -10423,6 +10443,7 @@ function DesktopNav({
   onLibrary,
   onDrama,
   onLiveTv,
+  onManga,
   currentUser,
   onProfile,
   onSelectProfile,
@@ -10449,6 +10470,7 @@ function DesktopNav({
   onLibrary: () => void
   onDrama: () => void
   onLiveTv: () => void
+  onManga?: () => void
   currentUser: UserInfo | null
   onProfile: () => void
   onSelectProfile: (name: string) => void
@@ -10524,6 +10546,16 @@ function DesktopNav({
               title="Live TV"
             >
               <Radio size={22} strokeWidth={2.2} />
+            </button>
+
+            {/* Manga icon */}
+            <button
+              className={`netflix-sidebar-btn ${active === 'Manga' ? 'active' : ''}`}
+              type="button"
+              onClick={onManga}
+              title="Manga"
+            >
+              <BookOpen size={22} strokeWidth={2.2} />
             </button>
 
             {/* Search icon */}
