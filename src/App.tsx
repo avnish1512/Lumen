@@ -3002,9 +3002,10 @@ function App() {
             }
             openWatch(selectedMovie)
           }}
-          onPlayEpisode={(season, episode) => {
+          onPlayEpisode={(season, episode, seasonAnilistId) => {
             openWatch({
               ...selectedMovie,
+              anilistId: seasonAnilistId ?? selectedMovie.anilistId,
               tmdbType: selectedMovie.tmdbType ?? 'tv',
               streamSeason: season,
               streamEpisode: episode,
@@ -4349,7 +4350,7 @@ type DetailScreenProps = {
   onBack: () => void
   onOpenDetail: (movie: Movie) => void
   onPlay: (provider?: StreamProvider) => void
-  onPlayEpisode: (season: number, episode: number) => void
+  onPlayEpisode: (season: number, episode: number, seasonAnilistId?: number) => void
   onSave: () => void
   onToggleLike: () => void
   onShare: () => void
@@ -5100,7 +5101,11 @@ function SeasonEpisodeSection({
         <SeasonDropdown
           seasons={seasons.map((s) => s.season)}
           value={selectedSeason}
-          onChange={setSelectedSeason}
+          onChange={(newSeason) => {
+            setSelectedSeason(newSeason)
+            setHighlightedEpisode(null)
+            setFindEpisode('')
+          }}
           labels={seasonLabels}
         />
 
@@ -5635,7 +5640,7 @@ function WatchScreen({
     setEpisode(movie.streamEpisode ?? 1)
     setSeason(movie.streamSeason ?? 1)
     setLanguage(movie.streamLanguage ?? 'sub')
-  }, [movie.id, movie.streamEpisode, movie.streamSeason, movie.streamLanguage])
+  }, [movie.id, movie.anilistId, movie.streamEpisode, movie.streamSeason, movie.streamLanguage])
 
   const [watchAnimeSeasons, setWatchAnimeSeasons] = useState<AnimeSeasonInfo[]>(movie.animeSeasons || [])
 
@@ -5979,7 +5984,10 @@ function WatchScreen({
             <SeasonDropdown
               seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
               value={season}
-              onChange={setSeason}
+              onChange={(newSeason) => {
+                setSeason(newSeason)
+                setEpisode(1)
+              }}
               labels={seasonLabels}
             />
 
