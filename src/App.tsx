@@ -1516,9 +1516,22 @@ function App() {
           // ignore quota / serialization errors
         }
       } else {
-        const local = readProfilesFor(account)
-        if (local && local.length > 0) {
-          void saveRemoteProfiles(email, local)
+        // The backend has no list yet (or the fetch failed). Only seed it from
+        // THIS device if the device actually has a user-saved profile list.
+        // Never push the synthetic default (just "Children") — otherwise a
+        // fresh/second device would wipe the account's real profiles created
+        // elsewhere.
+        let hasSavedLocal = false
+        try {
+          hasSavedLocal = Boolean(window.localStorage.getItem(profilesKeyFor(account)))
+        } catch {
+          hasSavedLocal = false
+        }
+        if (hasSavedLocal) {
+          const local = readProfilesFor(account)
+          if (local && local.length > 0) {
+            void saveRemoteProfiles(email, local)
+          }
         }
       }
     })
