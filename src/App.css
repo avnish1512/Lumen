@@ -11708,7 +11708,7 @@ body:has(.login-screen) {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
-    padding: max(52px, calc(env(safe-area-inset-top, 0px) + 14px)) 12px 8px;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 8px;
     position: sticky;
     top: 0;
     z-index: 5;
