@@ -11689,47 +11689,88 @@ body:has(.login-screen) {
 }
 
 @media (max-width: 860px) {
+  /* Mobile mirrors the desktop tabbed account page: back + a horizontal,
+     swipeable tab row on top, and the selected section scrolls below it. */
+  .account-screen,
+  .netflix-theme .account-screen,
+  .netflix-theme .screen.account-screen {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .account-shell {
     flex-direction: column;
+    max-width: none;
   }
 
   .account-sidebar {
     flex: none;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: max(52px, calc(env(safe-area-inset-top, 0px) + 14px)) 16px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: max(52px, calc(env(safe-area-inset-top, 0px) + 14px)) 12px 8px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #000;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .account-back {
-    flex-basis: 100%;
+    flex-basis: auto;
+    align-self: flex-start;
   }
 
-  /* Mobile: drop the Overview / Membership / Security / Devices / Profiles
-     tab row — only the "Back" control stays in the header. */
+  /* Show the Overview / Membership / Security / Devices / Profiles tabs as a
+     horizontal scrolling row instead of hiding them. */
   .account-nav {
-    display: none !important;
+    display: flex !important;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
   }
 
-  /* No vertical scroll on mobile — the membership card + quick links fit. */
-  .account-screen,
-  .netflix-theme .account-screen,
-  .netflix-theme .screen.account-screen {
-    overflow-y: hidden !important;
+  .account-nav::-webkit-scrollbar {
+    display: none;
   }
 
-  .account-sidebar {
-    border-bottom: none !important;
+  .account-nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .account-nav-item.active {
+    background: rgba(255, 255, 255, 0.16);
   }
 
   .account-main {
-    padding: 8px 16px 24px;
+    padding: 12px 16px 40px;
   }
 
   .account-title {
     font-size: 26px;
+  }
+
+  /* Membership plans stack full-width on phones. */
+  .account-plan-card {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* Slightly smaller profile tiles so a couple fit per row. */
+  .account-profile-tile,
+  .account-profile-tile .account-profile-avatar {
+    width: 104px;
+  }
+
+  .account-profile-tile .account-profile-avatar {
+    height: 104px;
   }
 }
 
