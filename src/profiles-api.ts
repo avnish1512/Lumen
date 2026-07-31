@@ -50,3 +50,37 @@ export async function saveAccountProfiles(
     // Best-effort — the local cache still holds the latest profiles.
   }
 }
+
+export async function fetchRemoteLordPin(): Promise<string | null> {
+  try {
+    const response = await fetch('/api/lord-pin')
+    const body = (await response.json()) as { ok?: boolean; pin?: string }
+    if (response.ok && body.ok && body.pin && /^\d{4}$/.test(body.pin)) {
+      return body.pin
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export async function saveRemoteLordPin(
+  adminEmail: string,
+  newPin: string,
+): Promise<boolean> {
+  if (!adminEmail || adminEmail.toLowerCase() !== 'avnishpc00@gmail.com') {
+    return false
+  }
+
+  try {
+    const response = await fetch('/api/lord-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminEmail, pin: newPin }),
+    })
+    const body = (await response.json()) as { ok?: boolean }
+    return Boolean(response.ok && body.ok)
+  } catch {
+    return false
+  }
+}

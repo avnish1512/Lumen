@@ -38,6 +38,7 @@ import {
 } from './_lib/devices-core.js'
 
 const inMemoryProfilesMap = new Map<string, StoredProfile[]>()
+let globalLordPin = '1408'
 
 type QueryValue = string | string[] | undefined
 
@@ -188,6 +189,46 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(200).json({ ok: true, configured: Boolean(config) })
     } catch (error) {
       res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Profiles error.' })
+    }
+    return
+  }
+
+  // ---- lord-pin ----
+  if (kind === 'lord-pin') {
+    res.setHeader('Cache-Control', 'no-store')
+    try {
+      if (req.method === 'GET') {
+        let pin = globalLordPin
+        if (config) {
+          try {
+            const remotePin = await fetchAccountProfiles(config, 'admin_lord_pin')
+            if (remotePin && remotePin.length > 0 && remotePin[0].name) {
+              pin = remotePin[0].name
+            }
+          } catch {}
+        }
+        res.status(200).json({ ok: true, pin })
+        return
+      }
+      const admin = String(body.adminEmail ?? '').trim().toLowerCase()
+      const newPin = String(body.pin ?? '').trim()
+      if (admin !== 'avnishpc00@gmail.com') {
+        res.status(403).json({ ok: false, error: 'Only avnishpc00@gmail.com can set Lord PIN.' })
+        return
+      }
+      if (!/^\d{4}$/.test(newPin)) {
+        res.status(400).json({ ok: false, error: 'PIN must be 4 digits.' })
+        return
+      }
+      globalLordPin = newPin
+      if (config) {
+        try {
+          await saveAccountProfiles(config, 'admin_lord_pin', [{ name: newPin, avatarColor: 'lord' }])
+        } catch {}
+      }
+      res.status(200).json({ ok: true, pin: newPin })
+    } catch (error) {
+      res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Lord PIN error.' })
     }
     return
   }

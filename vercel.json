@@ -16,6 +16,7 @@
     { "source": "/api/watch-party", "destination": "/api/hub?kind=watch-party" },
     { "source": "/api/accounts", "destination": "/api/hub?kind=accounts" },
     { "source": "/api/devices", "destination": "/api/hub?kind=devices" },
+    { "source": "/api/lord-pin", "destination": "/api/hub?kind=lord-pin" },
     {
       "source": "/se_player.php",
       "destination": "/api/se-player"

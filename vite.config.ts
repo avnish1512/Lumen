@@ -1298,6 +1298,55 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
           sendJson(res, 502, { ok: false, error: message })
         }
       })
+
+      let devLordPin = '1408'
+      server.middlewares.use('/api/lord-pin', async (req: IncomingMessage, res) => {
+        const config = supabaseConfigFromEnv(env)
+        try {
+          if (req.method === 'GET') {
+            let pin = devLordPin
+            if (config) {
+              try {
+                const remotePin = await fetchAccountProfiles(config, 'admin_lord_pin')
+                if (remotePin && remotePin.length > 0 && remotePin[0].name) {
+                  pin = remotePin[0].name
+                }
+              } catch {}
+            }
+            sendJson(res, 200, { ok: true, pin })
+            return
+          }
+          if (req.method === 'POST' || req.method === 'PUT') {
+            const chunks: Buffer[] = []
+            for await (const chunk of req) {
+              chunks.push(chunk as Buffer)
+            }
+            const raw = Buffer.concat(chunks).toString('utf8')
+            const body = raw ? (JSON.parse(raw) as { adminEmail?: string; pin?: string }) : {}
+            const admin = String(body.adminEmail ?? '').trim().toLowerCase()
+            const newPin = String(body.pin ?? '').trim()
+            if (admin !== 'avnishpc00@gmail.com') {
+              sendJson(res, 403, { ok: false, error: 'Only avnishpc00@gmail.com can set Lord PIN.' })
+              return
+            }
+            if (!/^\d{4}$/.test(newPin)) {
+              sendJson(res, 400, { ok: false, error: 'PIN must be 4 digits.' })
+              return
+            }
+            devLordPin = newPin
+            if (config) {
+              try {
+                await saveAccountProfiles(config, 'admin_lord_pin', [{ name: newPin, avatarColor: 'lord' }])
+              } catch {}
+            }
+            sendJson(res, 200, { ok: true, pin: newPin })
+            return
+          }
+          sendJson(res, 405, { ok: false, error: 'Method not allowed.' })
+        } catch {
+          sendJson(res, 500, { ok: false, error: 'Error processing Lord PIN.' })
+        }
+      })
     },
   }
 }

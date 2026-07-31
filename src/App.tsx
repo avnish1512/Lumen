@@ -93,6 +93,8 @@ import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeD
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
   saveAccountProfiles as saveRemoteProfiles,
+  fetchRemoteLordPin,
+  saveRemoteLordPin,
 } from './profiles-api'
 import {
   acceptInvite,
@@ -210,6 +212,9 @@ function setLordPin(newPin: string, userEmail?: string | null): boolean {
   if (/^\d{4}$/.test(newPin)) {
     try {
       localStorage.setItem('lord_pin', newPin)
+      if (userEmail) {
+        void saveRemoteLordPin(userEmail, newPin)
+      }
       return true
     } catch {
       return false
@@ -1522,6 +1527,23 @@ function App() {
       active = false
     }
   }, [currentUser, tempUser, screen])
+
+  const [lordPin, setLordPinState] = useState<string>(getLordPin)
+
+  useEffect(() => {
+    let active = true
+    void fetchRemoteLordPin().then((pin) => {
+      if (active && pin && /^\d{4}$/.test(pin)) {
+        try {
+          localStorage.setItem('lord_pin', pin)
+        } catch {}
+        setLordPinState(pin)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [screen, showLordPin])
 
   const initialCache = useMemo(() => readHomeCache(), [])
 
@@ -3171,7 +3193,7 @@ function App() {
 
       {showLordPin && (
         <LordPinModal
-          expectedPin={getLordPin()}
+          expectedPin={lordPin}
           currentUser={currentUser}
           onSuccess={unlockLord}
           onClose={() => setShowLordPin(false)}
