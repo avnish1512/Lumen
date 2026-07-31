@@ -15541,6 +15541,24 @@ body:has(.login-screen) {
   gap: 12px;
   min-height: 40vh;
   color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+}
+
+.manga-empty-sub {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  margin: -6px 0 0;
+}
+
+/* Infinite-scroll trigger + "loading more" spinner for the browse grid. */
+.manga-scroll-sentinel {
+  width: 100%;
+  height: 1px;
+}
+
+.manga-empty-more {
+  min-height: 0;
+  padding: 24px 0;
 }
 
 .manga-grid {

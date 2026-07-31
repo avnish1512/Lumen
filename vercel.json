@@ -10,6 +10,8 @@
   },
   "rewrites": [
     { "source": "/api/img", "destination": "/api/hub?kind=img" },
+    { "source": "/api/mangahook", "destination": "/api/hub?kind=manga" },
+    { "source": "/api/livetv", "destination": "/api/hub?kind=livetv" },
     { "source": "/api/poster", "destination": "/api/hub?kind=poster" },
     { "source": "/api/tmdb-trailer", "destination": "/api/hub?kind=trailer" },
     { "source": "/api/profiles", "destination": "/api/hub?kind=profiles" },

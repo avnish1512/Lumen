@@ -1,8 +1,8 @@
-// Manga browsing + reading screen (Netflix/Anime UI). Backed by MangaDex via
-// src/manga.ts, which restricts requests to non-explicit content ratings only.
+// Manga browsing + reading screen (Netflix/Anime UI). Backed by the MangaHook
+// API (mangakakalot.tv) via src/manga.ts, proxied through /api/mangahook.
 
 import { ChevronLeft, LoaderCircle, Search, BookOpen } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchChapterPages,
   fetchChapters,
@@ -23,6 +23,12 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
   const [query, setQuery] = useState('')
   const [list, setList] = useState<MangaSummary[]>([])
   const [listLoading, setListLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  // Bumped on every new query so in-flight responses from a previous query are
+  // ignored instead of clobbering the current results.
+  const requestToken = useRef(0)
 
   const [selected, setSelected] = useState<MangaSummary | null>(null)
   const [chapters, setChapters] = useState<MangaChapter[]>([])
@@ -33,24 +39,75 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
   const [pagesLoading, setPagesLoading] = useState(false)
   const readerRef = useRef<HTMLDivElement | null>(null)
 
-  // Initial popular list.
+  // Load (or reload) the first page whenever the query changes. Empty query
+  // loads the popular list immediately; typed queries are debounced.
   useEffect(() => {
-    setListLoading(true)
-    void fetchPopularManga()
-      .then(setList)
-      .finally(() => setListLoading(false))
-  }, [])
-
-  // Debounced search.
-  useEffect(() => {
+    const trimmed = query.trim()
     const handle = window.setTimeout(() => {
+      const token = ++requestToken.current
       setListLoading(true)
-      void searchManga(query)
-        .then(setList)
-        .finally(() => setListLoading(false))
-    }, 350)
+      setList([])
+      setHasMore(false)
+      const request = trimmed ? searchManga(trimmed, 1) : fetchPopularManga(1)
+      void request
+        .then((result) => {
+          if (token !== requestToken.current) return
+          setList(result.items)
+          setPage(1)
+          setHasMore(result.hasMore)
+        })
+        .finally(() => {
+          if (token === requestToken.current) setListLoading(false)
+        })
+    }, trimmed ? 350 : 0)
     return () => window.clearTimeout(handle)
   }, [query])
+
+  const loadMore = useCallback(() => {
+    if (listLoading || loadingMore || !hasMore) return
+    const token = requestToken.current
+    const nextPage = page + 1
+    const trimmed = query.trim()
+    setLoadingMore(true)
+    const request = trimmed ? searchManga(trimmed, nextPage) : fetchPopularManga(nextPage)
+    void request
+      .then((result) => {
+        if (token !== requestToken.current) return
+        setList((prev) => {
+          const seen = new Set(prev.map((m) => m.id))
+          return [...prev, ...result.items.filter((m) => !seen.has(m.id))]
+        })
+        setPage(nextPage)
+        setHasMore(result.hasMore)
+      })
+      .finally(() => {
+        if (token === requestToken.current) setLoadingMore(false)
+      })
+  }, [listLoading, loadingMore, hasMore, page, query])
+
+  // Keep a live ref to loadMore so the IntersectionObserver callback always
+  // calls the latest version without needing to re-create the observer.
+  const loadMoreRef = useRef(loadMore)
+  loadMoreRef.current = loadMore
+
+  // Callback ref: (re)attach the observer whenever the sentinel element mounts,
+  // which happens each time we return to the browse view.
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
+    }
+    if (node) {
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) loadMoreRef.current()
+        },
+        { rootMargin: '600px' },
+      )
+      observerRef.current.observe(node)
+    }
+  }, [])
 
   const openManga = (manga: MangaSummary) => {
     setSelected(manga)
@@ -64,12 +121,12 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
 
   const openChapter = (index: number) => {
     const chapter = chapters[index]
-    if (!chapter) return
+    if (!chapter || !selected) return
     setChapterIndex(index)
     setView('reader')
     setPages([])
     setPagesLoading(true)
-    void fetchChapterPages(chapter.id)
+    void fetchChapterPages(selected.id, chapter.id)
       .then(setPages)
       .finally(() => setPagesLoading(false))
     readerRef.current?.scrollTo({ top: 0 })
@@ -174,7 +231,8 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
             </div>
           ) : chapters.length === 0 ? (
             <div className="manga-empty">
-              <p>No English chapters available for this title.</p>
+              <BookOpen size={40} />
+              <p>No chapters found for this title.</p>
             </div>
           ) : (
             <ul className="manga-chapters">
@@ -228,21 +286,29 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
             <p>No manga found.</p>
           </div>
         ) : (
-          <div className="manga-grid">
-            {list.map((manga) => (
-              <button
-                key={manga.id}
-                type="button"
-                className="manga-card"
-                onClick={() => openManga(manga)}
-              >
-                <span className="manga-card-cover">
-                  <img src={manga.coverUrl} alt={manga.title} loading="lazy" />
-                </span>
-                <span className="manga-card-title">{manga.title}</span>
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="manga-grid">
+              {list.map((manga) => (
+                <button
+                  key={manga.id}
+                  type="button"
+                  className="manga-card"
+                  onClick={() => openManga(manga)}
+                >
+                  <span className="manga-card-cover">
+                    <img src={manga.coverUrl} alt={manga.title} loading="lazy" />
+                  </span>
+                  <span className="manga-card-title">{manga.title}</span>
+                </button>
+              ))}
+            </div>
+            {hasMore && <div ref={sentinelRef} className="manga-scroll-sentinel" />}
+            {loadingMore && (
+              <div className="manga-empty manga-empty-more">
+                <LoaderCircle className="spin-icon" />
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>

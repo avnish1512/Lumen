@@ -18,6 +18,18 @@ import {
 } from './_lib/tmdb-trailer-core.js'
 import { fetchPosterImage, posterKeysFromEnv } from './_lib/poster-core.js'
 import {
+  fetchMangaChapter,
+  fetchMangaDetail,
+  fetchMangaList,
+  searchMangaList,
+} from './_lib/mangahook-core.js'
+import {
+  fetchLiveImage,
+  fetchLiveMatches,
+  fetchLiveSports,
+  fetchLiveStreams,
+} from './_lib/livetv-core.js'
+import {
   createInvite,
   getParty,
   incomingInvites,
@@ -148,6 +160,85 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.setHeader('Content-Type', image.contentType)
     res.setHeader('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable')
     res.end(Buffer.from(image.body))
+    return
+  }
+
+  // ---- manga (public JSON proxy: Jikan catalog + MangaDex reading) ----
+  if (kind === 'manga') {
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600')
+    const action = qv(req.query.action) ?? 'list'
+    try {
+      if (action === 'search') {
+        const query = (qv(req.query.query) ?? '').trim()
+        if (!query) {
+          res.status(400).json({ error: 'Provide query.' })
+          return
+        }
+        res.status(200).json(await searchMangaList(query, qv(req.query.page)))
+        return
+      }
+      if (action === 'detail') {
+        const id = qv(req.query.id)
+        if (!id) {
+          res.status(400).json({ error: 'Provide id.' })
+          return
+        }
+        res.status(200).json(await fetchMangaDetail(id))
+        return
+      }
+      if (action === 'chapter') {
+        const id = qv(req.query.id)
+        const ch = qv(req.query.ch)
+        if (!id || !ch) {
+          res.status(400).json({ error: 'Provide id and ch.' })
+          return
+        }
+        res.status(200).json(await fetchMangaChapter(id, ch))
+        return
+      }
+      res.status(200).json(await fetchMangaList(qv(req.query.page)))
+    } catch (error) {
+      res.status(502).json({ error: error instanceof Error ? error.message : 'Manga source error.' })
+    }
+    return
+  }
+
+  // ---- livetv (public JSON + image proxy for the Streamed sports API) ----
+  if (kind === 'livetv') {
+    const action = qv(req.query.action) ?? 'matches'
+    try {
+      if (action === 'image') {
+        const image = await fetchLiveImage(env, qv(req.query.path) ?? '')
+        if (!image) {
+          res.status(404).json({ error: 'Image unavailable.' })
+          return
+        }
+        res.setHeader('Content-Type', image.contentType)
+        res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400')
+        res.end(Buffer.from(image.body))
+        return
+      }
+      if (action === 'sports') {
+        res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=3600')
+        res.status(200).json(await fetchLiveSports(env))
+        return
+      }
+      if (action === 'streams') {
+        const source = qv(req.query.source)
+        const id = qv(req.query.id)
+        if (!source || !id) {
+          res.status(400).json({ error: 'Provide source and id.' })
+          return
+        }
+        res.setHeader('Cache-Control', 's-maxage=20, stale-while-revalidate=60')
+        res.status(200).json(await fetchLiveStreams(env, source, id))
+        return
+      }
+      res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120')
+      res.status(200).json(await fetchLiveMatches(env, qv(req.query.scope) ?? 'live'))
+    } catch (error) {
+      res.status(502).json({ error: error instanceof Error ? error.message : 'Live TV source error.' })
+    }
     return
   }
 

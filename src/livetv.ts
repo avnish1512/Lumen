@@ -1,11 +1,13 @@
-// Live TV powered by the Streamed API (https://streamed.pk/docs).
-// It exposes live sports events ("matches"), each with one or more stream
-// "sources"; a source resolves to a list of embeddable streams (iframe URLs).
-// The API is public (no auth) and CORS-enabled, so it is called directly from
-// the browser in both dev (Vite) and production (Vercel) without a proxy.
+// Live TV powered by the Streamed sports API. All requests go through our own
+// `/api/livetv` proxy (never to the upstream host directly): the Streamed
+// domain rotates and can hang, so the proxy runs server-side with a timeout and
+// mirror fallback. This also keeps the call same-origin, which fixes the
+// endless "loading" spinner seen in the mobile WebView.
 
-const API_BASE = 'https://streamed.pk/api'
-const SITE_BASE = 'https://streamed.pk'
+const PROXY = '/api/livetv'
+// How long the client waits before giving up on the proxy, so the UI shows an
+// error instead of spinning forever if every upstream mirror is down.
+const CLIENT_TIMEOUT_MS = 15000
 
 export type LiveSport = {
   id: string
@@ -48,12 +50,18 @@ export type LiveStream = {
 /** Which match list to load. Sport ids (e.g. "football") are also accepted. */
 export type LiveMatchScope = 'live' | 'all-today' | 'all' | (string & {})
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}/${path}`)
-  if (!response.ok) {
-    throw new Error(`Streamed ${path} request failed (${response.status}).`)
+async function fetchJson<T>(params: URLSearchParams): Promise<T> {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS)
+  try {
+    const response = await fetch(`${PROXY}?${params}`, { signal: controller.signal })
+    if (!response.ok) {
+      throw new Error(`Live TV request failed (${response.status}).`)
+    }
+    return (await response.json()) as T
+  } finally {
+    window.clearTimeout(timeout)
   }
-  return (await response.json()) as T
 }
 
 let sportsCache: LiveSport[] | null = null
@@ -64,7 +72,7 @@ export async function fetchLiveSports(): Promise<LiveSport[]> {
     return sportsCache
   }
   try {
-    const sports = await fetchJson<LiveSport[]>('sports')
+    const sports = await fetchJson<LiveSport[]>(new URLSearchParams({ action: 'sports' }))
     sportsCache = Array.isArray(sports) ? sports : []
     return sportsCache
   } catch {
@@ -82,16 +90,9 @@ export async function fetchLiveSports(): Promise<LiveSport[]> {
 export async function fetchLiveMatches(
   scope: LiveMatchScope = 'live',
 ): Promise<LiveMatch[]> {
-  const path =
-    scope === 'live'
-      ? 'matches/live'
-      : scope === 'all-today'
-        ? 'matches/all-today'
-        : scope === 'all'
-          ? 'matches/all'
-          : `matches/${encodeURIComponent(scope)}`
-
-  const matches = await fetchJson<LiveMatch[]>(path)
+  const matches = await fetchJson<LiveMatch[]>(
+    new URLSearchParams({ action: 'matches', scope: String(scope) }),
+  )
   if (!Array.isArray(matches)) {
     return []
   }
@@ -106,7 +107,7 @@ export async function fetchLiveStreams(
 ): Promise<LiveStream[]> {
   try {
     const streams = await fetchJson<LiveStream[]>(
-      `stream/${encodeURIComponent(source)}/${encodeURIComponent(id)}`,
+      new URLSearchParams({ action: 'streams', source, id }),
     )
     return Array.isArray(streams) ? streams : []
   } catch {
@@ -130,12 +131,17 @@ export async function fetchFirstAvailableStreams(
   return []
 }
 
+/** Proxy a site-relative image path through our backend. */
+function proxyImagePath(path: string): string {
+  return `${PROXY}?action=image&path=${encodeURIComponent(path)}`
+}
+
 /** Full URL for a team badge id (from `team.badge`). */
 export function liveBadgeUrl(badge?: string): string {
   if (!badge) {
     return ''
   }
-  return `${API_BASE}/images/badge/${badge}.webp`
+  return proxyImagePath(`/api/images/badge/${badge}.webp`)
 }
 
 /**
@@ -145,16 +151,17 @@ export function liveBadgeUrl(badge?: string): string {
 export function liveMatchPoster(match: LiveMatch): string {
   const poster = match.poster?.trim()
   if (poster) {
+    // Absolute external posters are used as-is; site-relative ones are proxied.
     if (poster.startsWith('http')) {
       return poster
     }
     const path = poster.startsWith('/') ? poster : `/${poster}`
-    return `${SITE_BASE}${path}${path.endsWith('.webp') ? '' : '.webp'}`
+    return proxyImagePath(`${path}${path.endsWith('.webp') ? '' : '.webp'}`)
   }
   const home = match.teams?.home?.badge
   const away = match.teams?.away?.badge
   if (home && away) {
-    return `${API_BASE}/images/poster/${home}/${away}.webp`
+    return proxyImagePath(`/api/images/poster/${home}/${away}.webp`)
   }
   return liveBadgeUrl(home || away)
 }

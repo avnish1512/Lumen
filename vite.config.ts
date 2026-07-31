@@ -47,6 +47,18 @@ import {
 } from './api/_lib/supabase-core'
 import { fetchPosterImage, posterKeysFromEnv } from './api/_lib/poster-core'
 import {
+  fetchMangaChapter,
+  fetchMangaDetail,
+  fetchMangaList,
+  searchMangaList,
+} from './api/_lib/mangahook-core'
+import {
+  fetchLiveImage,
+  fetchLiveMatches,
+  fetchLiveSports,
+  fetchLiveStreams,
+} from './api/_lib/livetv-core'
+import {
   createInvite,
   getParty,
   incomingInvites,
@@ -1204,6 +1216,109 @@ function imgDevProxy(): Plugin {
   }
 }
 
+function mangahookDevProxy(): Plugin {
+  return {
+    name: 'mangahook-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/mangahook', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { error: 'Method not allowed.' })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const action = requestUrl.searchParams.get('action') ?? 'list'
+        const page = requestUrl.searchParams.get('page') ?? undefined
+
+        try {
+          if (action === 'search') {
+            const query = (requestUrl.searchParams.get('query') ?? '').trim()
+            if (!query) {
+              sendJson(res, 400, { error: 'Provide query.' })
+              return
+            }
+            sendJson(res, 200, await searchMangaList(query, page))
+            return
+          }
+          if (action === 'detail') {
+            const id = requestUrl.searchParams.get('id')
+            if (!id) {
+              sendJson(res, 400, { error: 'Provide id.' })
+              return
+            }
+            sendJson(res, 200, await fetchMangaDetail(id))
+            return
+          }
+          if (action === 'chapter') {
+            const id = requestUrl.searchParams.get('id')
+            const ch = requestUrl.searchParams.get('ch')
+            if (!id || !ch) {
+              sendJson(res, 400, { error: 'Provide id and ch.' })
+              return
+            }
+            sendJson(res, 200, await fetchMangaChapter(id, ch))
+            return
+          }
+          sendJson(res, 200, await fetchMangaList(page))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Could not reach the manga source.'
+          sendJson(res, 502, { error: message })
+        }
+      })
+    },
+  }
+}
+
+function livetvDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'livetv-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/livetv', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { error: 'Method not allowed.' })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const action = requestUrl.searchParams.get('action') ?? 'matches'
+
+        try {
+          if (action === 'image') {
+            const image = await fetchLiveImage(env, requestUrl.searchParams.get('path') ?? '')
+            if (!image) {
+              sendJson(res, 404, { error: 'Image unavailable.' })
+              return
+            }
+            res.statusCode = 200
+            res.setHeader('Content-Type', image.contentType)
+            res.setHeader('Cache-Control', 'public, max-age=86400')
+            res.end(Buffer.from(image.body))
+            return
+          }
+          if (action === 'sports') {
+            sendJson(res, 200, await fetchLiveSports(env))
+            return
+          }
+          if (action === 'streams') {
+            const source = requestUrl.searchParams.get('source')
+            const id = requestUrl.searchParams.get('id')
+            if (!source || !id) {
+              sendJson(res, 400, { error: 'Provide source and id.' })
+              return
+            }
+            sendJson(res, 200, await fetchLiveStreams(env, source, id))
+            return
+          }
+          sendJson(res, 200, await fetchLiveMatches(env, requestUrl.searchParams.get('scope') ?? 'live'))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Could not reach the Live TV source.'
+          sendJson(res, 502, { error: message })
+        }
+      })
+    },
+  }
+}
+
 function posterDevProxy(env: Record<string, string | undefined>): Plugin {
   return {
     name: 'poster-dev-proxy',
@@ -1549,6 +1664,8 @@ export default defineConfig(({ mode }) => {
       tmdbTrailerDevProxy(createTmdbTrailerAuthChain(env)),
       profilesDevProxy(env),
       imgDevProxy(),
+      mangahookDevProxy(),
+      livetvDevProxy(env),
       posterDevProxy(env),
       watchPartyDevProxy(env),
       accountsDevProxy(env),

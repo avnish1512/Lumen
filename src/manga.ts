@@ -1,14 +1,9 @@
-// Manga reader client, backed by the free MangaDex API (https://api.mangadex.org).
-//
-// Content safety: every request is hard-limited to the "safe" and "suggestive"
-// content ratings. Erotica / pornographic manga are never requested, so the
-// reader only surfaces non-explicit titles.
+// Manga browsing + reading client. Goes through our `/api/mangahook` proxy,
+// which serves a Jikan (MyAnimeList) catalog for browse/search/detail and
+// MangaDex for chapters + page images. Cover art (MyAnimeList CDN) and page
+// images (MangaDex) both allow hotlinking, so they're used as direct URLs.
 
-const API = 'https://api.mangadex.org'
-const COVERS = 'https://uploads.mangadex.org/covers'
-
-// Only non-explicit ratings — do not add 'erotica' or 'pornographic'.
-const SAFE_RATINGS = 'contentRating[]=safe&contentRating[]=suggestive'
+const PROXY = '/api/mangahook'
 
 export type MangaSummary = {
   id: string
@@ -26,120 +21,136 @@ export type MangaChapter = {
   pages: number
 }
 
-type MangaEntity = {
-  id: string
-  attributes?: {
-    title?: Record<string, string>
-    altTitles?: Array<Record<string, string>>
-    description?: Record<string, string>
-    status?: string
-    year?: number
-  }
-  relationships?: Array<{
-    type: string
-    attributes?: { fileName?: string }
-  }>
+type ListItem = {
+  id?: string
+  image?: string
+  title?: string
+  description?: string
 }
 
-function pickTitle(attrs: MangaEntity['attributes']): string {
-  if (!attrs) return 'Untitled'
-  return (
-    attrs.title?.en ||
-    (attrs.title ? Object.values(attrs.title)[0] : undefined) ||
-    attrs.altTitles?.map((t) => t.en).find(Boolean) ||
-    'Untitled'
-  )
-}
-
-function pickDescription(attrs: MangaEntity['attributes']): string {
-  if (!attrs?.description) return ''
-  return attrs.description.en || Object.values(attrs.description)[0] || ''
-}
-
-function toSummary(entity: MangaEntity): MangaSummary {
-  const cover = entity.relationships?.find((rel) => rel.type === 'cover_art')
-  const fileName = cover?.attributes?.fileName
-  return {
-    id: entity.id,
-    title: pickTitle(entity.attributes),
-    coverUrl: fileName ? `${COVERS}/${entity.id}/${fileName}.256.jpg` : '',
-    description: pickDescription(entity.attributes),
-    status: entity.attributes?.status ?? '',
-    year: entity.attributes?.year,
+type ListResponse = {
+  mangaList?: ListItem[]
+  metaData?: {
+    totalPages?: number | string
   }
 }
 
-async function requestMangaList(params: string): Promise<MangaSummary[]> {
+export type MangaListPage = {
+  items: MangaSummary[]
+  page: number
+  totalPages: number
+  hasMore: boolean
+}
+
+type ChapterListItem = {
+  id?: string
+  path?: string
+  name?: string
+  view?: string
+  createdAt?: string
+}
+
+type DetailResponse = {
+  imageUrl?: string
+  name?: string
+  status?: string
+  chapterList?: ChapterListItem[]
+}
+
+type ChapterPagesResponse = {
+  title?: string
+  currentChapter?: string
+  images?: Array<{ title?: string; image?: string }>
+}
+
+async function requestJson<T>(params: URLSearchParams): Promise<T | null> {
   try {
-    const response = await fetch(
-      `${API}/manga?${params}&${SAFE_RATINGS}&includes[]=cover_art&hasAvailableChapters=true`,
-    )
-    if (!response.ok) return []
-    const body = (await response.json()) as { data?: MangaEntity[] }
-    return (body.data ?? []).map(toSummary).filter((m) => m.coverUrl)
+    const response = await fetch(`${PROXY}?${params}`)
+    if (!response.ok) return null
+    return (await response.json()) as T
   } catch {
-    return []
+    return null
   }
 }
 
-export function fetchPopularManga(): Promise<MangaSummary[]> {
-  return requestMangaList('limit=30&order[followedCount]=desc')
+function listToSummary(item: ListItem): MangaSummary {
+  return {
+    id: item.id ?? '',
+    title: item.title?.trim() || 'Untitled',
+    coverUrl: item.image ?? '',
+    description: item.description?.trim() ?? '',
+    status: '',
+    year: undefined,
+  }
 }
 
-export function searchManga(query: string): Promise<MangaSummary[]> {
+function chapterToModel(item: ChapterListItem): MangaChapter {
+  const name = (item.name ?? '').trim()
+  // Names look like "Chapter 139" or "Vol.2 Chapter 5"; pull out the number.
+  const num =
+    name.match(/chapter\s*([\d.]+)/i)?.[1] ??
+    name.match(/([\d.]+)\s*$/)?.[1] ??
+    ''
+  return {
+    id: item.id ?? '',
+    chapter: num,
+    // Avoid duplicating "Chapter X" (the reader renders the number itself).
+    title: num ? '' : name,
+    pages: 0,
+  }
+}
+
+function toListPage(
+  body: ListResponse | null,
+  page: number,
+  requireCover: boolean,
+): MangaListPage {
+  const rawCount = body?.mangaList?.length ?? 0
+  const items = (body?.mangaList ?? [])
+    .map(listToSummary)
+    .filter((m) => (requireCover ? m.id && m.coverUrl : Boolean(m.id)))
+  const totalPages = Number(body?.metaData?.totalPages) || 0
+  // Prefer the API's page count; otherwise assume there's more as long as the
+  // page came back with entries.
+  const hasMore = totalPages > 0 ? page < totalPages : rawCount > 0
+  return { items, page, totalPages, hasMore }
+}
+
+export async function fetchPopularManga(page = 1): Promise<MangaListPage> {
+  const body = await requestJson<ListResponse>(
+    new URLSearchParams({ action: 'list', page: String(page) }),
+  )
+  return toListPage(body, page, true)
+}
+
+export async function searchManga(query: string, page = 1): Promise<MangaListPage> {
   const trimmed = query.trim()
-  if (!trimmed) return fetchPopularManga()
-  return requestMangaList(`limit=30&title=${encodeURIComponent(trimmed)}`)
+  if (!trimmed) return fetchPopularManga(page)
+  const body = await requestJson<ListResponse>(
+    new URLSearchParams({ action: 'search', query: trimmed, page: String(page) }),
+  )
+  return toListPage(body, page, false)
 }
 
 export async function fetchChapters(mangaId: string): Promise<MangaChapter[]> {
-  try {
-    const response = await fetch(
-      `${API}/manga/${mangaId}/feed?limit=200&translatedLanguage[]=en` +
-        `&order[chapter]=asc&${SAFE_RATINGS}&includes[]=scanlation_group`,
-    )
-    if (!response.ok) return []
-    const body = (await response.json()) as {
-      data?: Array<{
-        id: string
-        attributes?: { chapter?: string; title?: string; pages?: number }
-      }>
-    }
-    // De-duplicate by chapter number (multiple groups may translate the same one).
-    const seen = new Set<string>()
-    const chapters: MangaChapter[] = []
-    for (const item of body.data ?? []) {
-      const chapter = item.attributes?.chapter ?? ''
-      const key = chapter || item.id
-      if (seen.has(key)) continue
-      seen.add(key)
-      chapters.push({
-        id: item.id,
-        chapter,
-        title: item.attributes?.title ?? '',
-        pages: item.attributes?.pages ?? 0,
-      })
-    }
-    return chapters
-  } catch {
-    return []
-  }
+  const body = await requestJson<DetailResponse>(
+    new URLSearchParams({ action: 'detail', id: mangaId }),
+  )
+  const chapters = (body?.chapterList ?? []).map(chapterToModel).filter((c) => c.id)
+  // mangakakalot lists chapters newest-first; reverse so index 0 is chapter 1
+  // and "Start reading" opens from the beginning.
+  chapters.reverse()
+  return chapters
 }
 
-export async function fetchChapterPages(chapterId: string): Promise<string[]> {
-  try {
-    const response = await fetch(`${API}/at-home/server/${chapterId}`)
-    if (!response.ok) return []
-    const body = (await response.json()) as {
-      baseUrl?: string
-      chapter?: { hash?: string; data?: string[] }
-    }
-    const baseUrl = body.baseUrl
-    const hash = body.chapter?.hash
-    const data = body.chapter?.data ?? []
-    if (!baseUrl || !hash) return []
-    return data.map((file) => `${baseUrl}/data/${hash}/${file}`)
-  } catch {
-    return []
-  }
+export async function fetchChapterPages(
+  mangaId: string,
+  chapterId: string,
+): Promise<string[]> {
+  const body = await requestJson<ChapterPagesResponse>(
+    new URLSearchParams({ action: 'chapter', id: mangaId, ch: chapterId }),
+  )
+  return (body?.images ?? [])
+    .map((page) => page.image ?? '')
+    .filter(Boolean)
 }
