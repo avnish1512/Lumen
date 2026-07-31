@@ -3159,6 +3159,7 @@ function App() {
             setTempUser(currentUser)
             setScreen('profiles')
           }}
+          onSelectProfile={switchToProfile}
           onSetLordPin={() => setShowSetLordPin(true)}
           profiles={profiles}
           designMode={designMode}
@@ -6351,6 +6352,7 @@ type LoginScreenProps = {
   onLogout: () => void
   onBack: () => void
   onSwitchProfile: () => void
+  onSelectProfile?: (name: string) => void
   onSetLordPin?: () => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
@@ -6362,6 +6364,7 @@ function LoginScreen({
   onLogout,
   onBack,
   onSwitchProfile,
+  onSelectProfile,
   onSetLordPin,
   profiles,
   designMode,
@@ -6388,7 +6391,77 @@ function LoginScreen({
   const [accError, setAccError] = useState('')
   const [accBusy, setAccBusy] = useState(false)
 
+  // Account sections render inline on the right (no popups).
+  const [accountTab, setAccountTab] = useState<
+    'overview' | 'membership' | 'security' | 'devices' | 'profiles'
+  >('overview')
+
   const adminEmail = currentUser?.email ?? ''
+
+  // Load the real device sessions for this account (used by the Devices tab).
+  const loadDevices = () => {
+    const email = currentUser?.email
+    setDevices(withCurrentDevice(readCachedDevices(email)))
+    if (email) {
+      void fetchDevicesApi(email).then((list) => {
+        const merged = withCurrentDevice(list)
+        setDevices(merged)
+        writeCachedDevices(email, merged)
+      })
+    }
+  }
+
+  const selectAccountTab = (
+    tab: 'overview' | 'membership' | 'security' | 'devices' | 'profiles',
+  ) => {
+    setAccountTab(tab)
+    if (tab === 'devices') {
+      loadDevices()
+    }
+    if (tab === 'security' && isMainAccount(currentUser?.email)) {
+      void loadAccounts()
+    }
+  }
+
+  // Membership plans shown on the Membership tab.
+  const membershipPlans = [
+    {
+      id: 'mobile',
+      name: 'Mobile',
+      price: '₹149/mo',
+      quality: '480p',
+      resolution: 'Good',
+      devices: 'Phone or tablet',
+      screens: '1 screen',
+    },
+    {
+      id: 'standard',
+      name: 'Standard',
+      price: '₹499/mo',
+      quality: '1080p',
+      resolution: 'Great',
+      devices: 'TV, computer, phone, tablet',
+      screens: '2 screens',
+    },
+    {
+      id: 'premium',
+      name: 'Premium 4K',
+      price: '₹649/mo',
+      quality: '4K + HDR',
+      resolution: 'Best',
+      devices: 'TV, computer, phone, tablet',
+      screens: '4 screens',
+    },
+  ]
+  const currentPlanId = 'premium'
+
+  const tabMeta = {
+    overview: { title: 'Account', subtitle: 'Membership details' },
+    membership: { title: 'Membership', subtitle: 'Choose the plan that fits you' },
+    security: { title: 'Security', subtitle: 'Sign-in and access' },
+    devices: { title: 'Devices', subtitle: 'Where you are signed in' },
+    profiles: { title: 'Profiles', subtitle: 'Who is watching' },
+  }[accountTab]
 
   // Login page background image (served from /public).
   const loginBg = '/login-bg.jpeg'
@@ -6404,22 +6477,6 @@ function LoginScreen({
     setAccEditing(null)
     setAccError('')
     void loadAccounts()
-  }
-
-  const openManageDevices = () => {
-    const email = currentUser?.email
-    // Render instantly from the local cache (always includes this real device).
-    setDevices(withCurrentDevice(readCachedDevices(email)))
-    setDevicesOpen(true)
-    // Then refresh from the backend, which is the source of truth for the real
-    // devices signed in to this account.
-    if (email) {
-      void fetchDevicesApi(email).then((list) => {
-        const merged = withCurrentDevice(list)
-        setDevices(merged)
-        writeCachedDevices(email, merged)
-      })
-    }
   }
 
   // Log a single device out of the account. Logging out the current device
@@ -6574,6 +6631,18 @@ function LoginScreen({
     const designName = designMode === 'netflix' ? 'Anime' : 'Lumen'
     const planName = designMode === 'netflix' ? 'Anime Premium 4K' : 'Lumen Premium 4K'
 
+    // Order for the account overview: the profile currently in use first, the
+    // Kids profile always last, everything else in between.
+    const orderedProfiles = [...profiles].sort((a, b) => {
+      const aCurrent = a.name.toLowerCase() === currentUser.name.toLowerCase()
+      const bCurrent = b.name.toLowerCase() === currentUser.name.toLowerCase()
+      if (aCurrent !== bCurrent) return aCurrent ? -1 : 1
+      const aKids = a.avatarColor === 'kids'
+      const bKids = b.avatarColor === 'kids'
+      if (aKids !== bKids) return aKids ? 1 : -1
+      return 0
+    })
+
     return (
       <section className="screen account-screen">
         <div className="account-shell">
@@ -6584,23 +6653,43 @@ function LoginScreen({
             </button>
 
             <nav className="account-nav" aria-label="Account sections">
-              <button className="account-nav-item active" type="button">
+              <button
+                className={`account-nav-item${accountTab === 'overview' ? ' active' : ''}`}
+                type="button"
+                onClick={() => selectAccountTab('overview')}
+              >
                 <Home size={18} />
                 <span>Overview</span>
               </button>
-              <button className="account-nav-item" type="button" onClick={onSwitchProfile}>
+              <button
+                className={`account-nav-item${accountTab === 'membership' ? ' active' : ''}`}
+                type="button"
+                onClick={() => selectAccountTab('membership')}
+              >
                 <CircleUserRound size={18} />
                 <span>Membership</span>
               </button>
-              <button className="account-nav-item" type="button">
+              <button
+                className={`account-nav-item${accountTab === 'security' ? ' active' : ''}`}
+                type="button"
+                onClick={() => selectAccountTab('security')}
+              >
                 <Eye size={18} />
                 <span>Security</span>
               </button>
-              <button className="account-nav-item" type="button" onClick={openManageDevices}>
+              <button
+                className={`account-nav-item${accountTab === 'devices' ? ' active' : ''}`}
+                type="button"
+                onClick={() => selectAccountTab('devices')}
+              >
                 <Tv size={18} />
                 <span>Devices</span>
               </button>
-              <button className="account-nav-item" type="button" onClick={onSwitchProfile}>
+              <button
+                className={`account-nav-item${accountTab === 'profiles' ? ' active' : ''}`}
+                type="button"
+                onClick={() => selectAccountTab('profiles')}
+              >
                 <UserCog size={18} />
                 <span>Profiles</span>
               </button>
@@ -6608,8 +6697,49 @@ function LoginScreen({
           </aside>
 
           <main className="account-main">
-            <h1 className="account-title">Account</h1>
-            <p className="account-subtitle">Membership details</p>
+            <h1 className="account-title">{tabMeta.title}</h1>
+            <p className="account-subtitle">{tabMeta.subtitle}</p>
+
+            {accountTab === 'overview' && (
+            <>
+            {orderedProfiles.length > 0 && (
+              <div className="account-profiles-card">
+                {orderedProfiles.map((profile) => (
+                  <button
+                    key={profile.name}
+                    type="button"
+                    className="account-profile-tile"
+                    title={`Switch to ${profile.name}`}
+                    onClick={() => (onSelectProfile ? onSelectProfile(profile.name) : onSwitchProfile())}
+                  >
+                    {profile.avatarColor === 'kids' ? (
+                      <div className="profile-avatar avatar-kids account-profile-avatar">
+                        <div className="kids-bg">
+                          <div className="stripe red"></div>
+                          <div className="stripe orange"></div>
+                          <div className="stripe yellow"></div>
+                          <div className="stripe green"></div>
+                          <div className="stripe blue"></div>
+                        </div>
+                        <span className="kids-text">kids</span>
+                      </div>
+                    ) : (
+                      <div
+                        className="profile-avatar account-profile-avatar"
+                        style={{ overflow: 'hidden' }}
+                      >
+                        <img
+                          src={getAvatarSrc(profile.avatarColor)}
+                          alt={profile.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      </div>
+                    )}
+                    <span className="account-profile-name">{profile.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="account-card">
               <span className="account-badge">Member since 2025</span>
@@ -6632,52 +6762,233 @@ function LoginScreen({
               </button>
             </div>
 
-            <p className="account-links-title">Quick links</p>
-            <div className="account-links">
-              <button className="account-row" type="button" onClick={onSwitchProfile}>
-                <span className="account-row-left">
-                  <UserCog size={18} />
-                  <span>Manage profiles</span>
+            <p className="account-links-title">At a glance</p>
+            <div className="account-stats">
+              <div className="account-stat">
+                <span className="account-stat-value">{profiles.length}</span>
+                <span className="account-stat-label">Profiles</span>
+              </div>
+              <div className="account-stat">
+                <span className="account-stat-value">
+                  {membershipPlans.find((plan) => plan.id === currentPlanId)?.quality ?? '4K'}
                 </span>
-                <ChevronRight size={18} />
-              </button>
-              {isMainAccount(currentUser.email) && (
-                <button className="account-row" type="button" onClick={openManageAccounts}>
-                  <span className="account-row-left">
-                    <UserCog size={18} />
-                    <span>Manage Account</span>
-                  </span>
-                  <ChevronRight size={18} />
-                </button>
-              )}
-              {isMainAccount(currentUser.email) && onSetLordPin && (
-                <button className="account-row" type="button" onClick={onSetLordPin}>
-                  <span className="account-row-left">
-                    <KeyRound size={18} />
-                    <span>Change Lord Password</span>
-                  </span>
-                  <ChevronRight size={18} />
-                </button>
-              )}
-              <button className="account-row" type="button" onClick={openManageDevices}>
-                <span className="account-row-left">
-                  <Tv size={18} />
-                  <span>Manage access and devices</span>
+                <span className="account-stat-label">Video quality</span>
+              </div>
+              <div className="account-stat">
+                <span className="account-stat-value">
+                  {(membershipPlans.find((plan) => plan.id === currentPlanId)?.screens ?? '4 screens').replace(
+                    ' screens',
+                    '',
+                  ).replace(' screen', '')}
                 </span>
-                <ChevronRight size={18} />
-              </button>
-              <button
-                className="account-row account-signout"
-                type="button"
-                onClick={onLogout}
-              >
-                <span className="account-row-left">
-                  <LogOut size={18} />
-                  <span>Sign out</span>
-                </span>
-                <ChevronRight size={18} />
-              </button>
+                <span className="account-stat-label">Max screens</span>
+              </div>
+              <div className="account-stat">
+                <span className="account-stat-value">2025</span>
+                <span className="account-stat-label">Member since</span>
+              </div>
             </div>
+            </>
+            )}
+
+            {accountTab === 'membership' && (
+              <div className="account-plans">
+                {membershipPlans.map((plan) => {
+                  const isCurrent = plan.id === currentPlanId
+                  return (
+                    <div
+                      key={plan.id}
+                      className={`account-plan-card${isCurrent ? ' is-current' : ''}`}
+                    >
+                      {isCurrent && <span className="account-plan-tag">Current plan</span>}
+                      <h2 className="account-plan-name">{plan.name}</h2>
+                      <p className="account-plan-price">{plan.price}</p>
+                      <ul className="account-plan-features">
+                        <li>Video quality: {plan.quality}</li>
+                        <li>Resolution: {plan.resolution}</li>
+                        <li>{plan.devices}</li>
+                        <li>{plan.screens}</li>
+                      </ul>
+                      <button
+                        className={`account-plan-btn${isCurrent ? ' is-current' : ''}`}
+                        type="button"
+                        disabled={isCurrent}
+                      >
+                        {isCurrent ? 'Current plan' : 'Switch to this plan'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {accountTab === 'security' && (
+              <div className="account-links">
+                <div className="account-card">
+                  <p className="account-plan-email">
+                    <span className="account-email-avatar">
+                      {renderProfileAvatarMini(currentUser, profiles)}
+                    </span>
+                    {currentUser.email}
+                  </p>
+                  <p className="account-plan-sub">Password: ••••••••</p>
+                </div>
+                {isMainAccount(currentUser.email) && (
+                  <button className="account-row" type="button" onClick={openManageAccounts}>
+                    <span className="account-row-left">
+                      <UserCog size={18} />
+                      <span>Manage Account</span>
+                    </span>
+                    <ChevronRight size={18} />
+                  </button>
+                )}
+                {isMainAccount(currentUser.email) && onSetLordPin && (
+                  <button className="account-row" type="button" onClick={onSetLordPin}>
+                    <span className="account-row-left">
+                      <KeyRound size={18} />
+                      <span>Change Lord Password</span>
+                    </span>
+                    <ChevronRight size={18} />
+                  </button>
+                )}
+                <button
+                  className="account-row account-signout"
+                  type="button"
+                  onClick={onLogout}
+                >
+                  <span className="account-row-left">
+                    <LogOut size={18} />
+                    <span>Sign out</span>
+                  </span>
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            )}
+
+            {accountTab === 'devices' && (
+              <div className="account-devices">
+                {devices.filter((device) => device.current).length > 0 && (
+                  <section className="device-group">
+                    <h2 className="device-group-title">This Device</h2>
+                    {devices
+                      .filter((device) => device.current)
+                      .map((device) => (
+                        <div key={device.id} className="device-row">
+                          <span className={`device-icon device-icon-${device.type}`}>
+                            {device.type === 'tv' && <Tv size={22} />}
+                            {device.type === 'mobile' && <Smartphone size={22} />}
+                            {device.type === 'tablet' && <Tablet size={22} />}
+                            {device.type === 'desktop' && <Monitor size={22} />}
+                          </span>
+                          <div className="device-info">
+                            <span className="device-name">{device.name}</span>
+                            <span className="device-meta">Last used : {deviceLastUsedLabel(device)}</span>
+                          </div>
+                          <button
+                            className="device-logout"
+                            type="button"
+                            onClick={() => logoutDevice(device.id)}
+                          >
+                            Log Out
+                          </button>
+                        </div>
+                      ))}
+                  </section>
+                )}
+                {devices.filter((device) => !device.current).length > 0 && (
+                  <section className="device-group">
+                    <h2 className="device-group-title">Other Devices</h2>
+                    {devices
+                      .filter((device) => !device.current)
+                      .map((device) => (
+                        <div key={device.id} className="device-row">
+                          <span className={`device-icon device-icon-${device.type}`}>
+                            {device.type === 'tv' && <Tv size={22} />}
+                            {device.type === 'mobile' && <Smartphone size={22} />}
+                            {device.type === 'tablet' && <Tablet size={22} />}
+                            {device.type === 'desktop' && <Monitor size={22} />}
+                          </span>
+                          <div className="device-info">
+                            <span className="device-name">{device.name}</span>
+                            <span className="device-meta">Last used : {deviceLastUsedLabel(device)}</span>
+                          </div>
+                          <button
+                            className="device-logout"
+                            type="button"
+                            onClick={() => logoutDevice(device.id)}
+                          >
+                            Log Out
+                          </button>
+                        </div>
+                      ))}
+                  </section>
+                )}
+                {devices.filter((device) => !device.current).length > 0 && (
+                  <button
+                    className="device-logout-all"
+                    type="button"
+                    onClick={logoutOtherDevices}
+                  >
+                    Log out of all other devices
+                  </button>
+                )}
+                {devices.length === 0 && (
+                  <p className="account-empty">No active devices found.</p>
+                )}
+              </div>
+            )}
+
+            {accountTab === 'profiles' && (
+              <>
+                {orderedProfiles.length > 0 && (
+                  <div className="account-profiles-card">
+                    {orderedProfiles.map((profile) => (
+                      <button
+                        key={profile.name}
+                        type="button"
+                        className="account-profile-tile"
+                        title={profile.name}
+                        onClick={onSwitchProfile}
+                      >
+                        {profile.avatarColor === 'kids' ? (
+                          <div className="profile-avatar avatar-kids account-profile-avatar">
+                            <div className="kids-bg">
+                              <div className="stripe red"></div>
+                              <div className="stripe orange"></div>
+                              <div className="stripe yellow"></div>
+                              <div className="stripe green"></div>
+                              <div className="stripe blue"></div>
+                            </div>
+                            <span className="kids-text">kids</span>
+                          </div>
+                        ) : (
+                          <div
+                            className="profile-avatar account-profile-avatar"
+                            style={{ overflow: 'hidden' }}
+                          >
+                            <img
+                              src={getAvatarSrc(profile.avatarColor)}
+                              alt={profile.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            />
+                          </div>
+                        )}
+                        <span className="account-profile-name">{profile.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="account-links">
+                  <button className="account-row" type="button" onClick={onSwitchProfile}>
+                    <span className="account-row-left">
+                      <UserCog size={18} />
+                      <span>Manage profiles</span>
+                    </span>
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </>
+            )}
           </main>
         </div>
 

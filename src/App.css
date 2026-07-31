@@ -15270,3 +15270,165 @@ body:has(.login-screen) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===== Account overview: created-profile tiles ===== */
+.account-profiles-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  padding: 0;
+  margin-bottom: 28px;
+  background: transparent;
+  border: 0;
+}
+
+.account-profile-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 140px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.account-profile-tile .account-profile-avatar {
+  width: 140px;
+  height: 140px;
+  border-radius: 16px;
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.account-profile-tile:hover .account-profile-avatar {
+  transform: scale(1.05);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.account-profile-name {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.8);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== Account: Membership plans ===== */
+.account-plans {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.account-plan-card {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 220px;
+  padding: 22px;
+  border-radius: 16px;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.account-plan-card.is-current {
+  border-color: #f5c518;
+  box-shadow: 0 0 0 1px #f5c518 inset;
+}
+
+.account-plan-tag {
+  align-self: flex-start;
+  padding: 3px 10px;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  background: rgba(245, 197, 24, 0.16);
+  color: #f5c518;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-plan-name {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.account-plan-price {
+  margin: 0 0 14px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.account-plan-features {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.account-plan-btn {
+  margin-top: auto;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #fff;
+  color: #000;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-plan-btn.is-current {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: default;
+}
+
+.account-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.account-empty {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+}
+
+/* ===== Account overview: at-a-glance stats ===== */
+.account-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 14px;
+}
+
+.account-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px;
+  border-radius: 14px;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.account-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.account-stat-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
