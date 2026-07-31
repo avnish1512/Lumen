@@ -1528,9 +1528,10 @@ function App() {
     }
   }, [currentUser, tempUser, screen])
 
-  const [showLordPin, setShowLordPin] = useState(false)
-  const [showSetLordPin, setShowSetLordPin] = useState(false)
   const [lordPin, setLordPinState] = useState<string>(getLordPin)
+  // Declared here (not with the other Lord state below) because the effect
+  // that refreshes the remote PIN depends on it.
+  const [showLordPin, setShowLordPin] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -1834,6 +1835,8 @@ function App() {
 
   // "Lord" hidden profile: tapping the menu item asks for a 4-digit PIN; a
   // correct PIN opens the mature (R-rated, non-explicit) collection screen.
+  // (showLordPin is declared earlier, above the remote-PIN refresh effect.)
+  const [showSetLordPin, setShowSetLordPin] = useState(false)
   const [lordMovies, setLordMovies] = useState<Movie[]>([])
   const [lordRails, setLordRails] = useState<LordRail[]>([])
   const [lordLoading, setLordLoading] = useState(false)
