@@ -335,30 +335,6 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
     return animeSeasonsCache.get(anilistId)!;
   }
 
-  const idQuery = `
-    query ($id: Int) {
-      Media(id: $id, type: ANIME) {
-        id
-        relations {
-          edges {
-            relationType
-            node {
-              id
-              relations {
-                edges {
-                  relationType
-                  node {
-                    id
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `;
-
   const batchQuery = `
     query ($ids: [Int]) {
       Page(perPage: 50) {
@@ -403,54 +379,37 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
   };
 
   try {
-    const idData = await queryAniList(idQuery, { id: anilistId });
-    const root = idData?.Media;
-    if (!root) {
-      return [];
-    }
+    // Walk the full prequel/sequel/parent chain breadth-first so every related
+    // season AniList links together is discovered — no matter how far it sits
+    // from the entry the user opened. Each entry stays a separate season, just
+    // like AniList presents them.
+    const knownMedia = new Map<number, any>();
+    let frontier: number[] = [anilistId];
+    let guard = 0;
 
-    const foundIds = new Set<number>();
-    foundIds.add(root.id);
-
-    const collectIds = (node: any) => {
-      if (!node) return;
-      foundIds.add(node.id);
-      for (const e1 of node.relations?.edges || []) {
-        if (relTypes.includes(e1.relationType)) {
-          foundIds.add(e1.node.id);
-          for (const e2 of e1.node?.relations?.edges || []) {
-            if (relTypes.includes(e2.relationType)) {
-              foundIds.add(e2.node.id);
-            }
+    while (frontier.length > 0 && knownMedia.size < 60 && guard < 10) {
+      guard++;
+      const batchData = await queryAniList(batchQuery, { ids: frontier });
+      const media: any[] = batchData?.Page?.media || [];
+      const nextIds = new Set<number>();
+      for (const m of media) {
+        if (!knownMedia.has(m.id)) {
+          knownMedia.set(m.id, m);
+        }
+        for (const edge of m.relations?.edges || []) {
+          if (relTypes.includes(edge.relationType) && !knownMedia.has(edge.node.id)) {
+            nextIds.add(edge.node.id);
           }
         }
       }
-    };
-
-    collectIds(root);
-
-    const batch1Data = await queryAniList(batchQuery, { ids: Array.from(foundIds) });
-    const mediaList1: any[] = batch1Data?.Page?.media || [];
-
-    const missingIds = new Set<number>();
-    for (const m of mediaList1) {
-      for (const edge of m.relations?.edges || []) {
-        if (relTypes.includes(edge.relationType) && !foundIds.has(edge.node.id)) {
-          missingIds.add(edge.node.id);
-        }
-      }
+      frontier = Array.from(nextIds).filter((id) => !knownMedia.has(id));
     }
 
-    let finalMediaList = mediaList1;
-    if (missingIds.size > 0) {
-      try {
-        const batch2Data = await queryAniList(batchQuery, { ids: Array.from(missingIds) });
-        const mediaList2: any[] = batch2Data?.Page?.media || [];
-        finalMediaList = [...mediaList1, ...mediaList2];
-      } catch {
-        // Keep mediaList1 if second batch fails
-      }
+    if (knownMedia.size === 0) {
+      return [];
     }
+
+    const finalMediaList: any[] = Array.from(knownMedia.values());
 
     const sortedMedia = finalMediaList.filter(isMainTvSeason).sort((a, b) => {
       const yearA = a.seasonYear || 9999;
@@ -461,11 +420,21 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
 
     const seasons: AnimeSeasonInfo[] = sortedMedia.map((m, index) => {
       const displayTitle = m.title?.english || m.title?.romaji || m.title?.userPreferred || `Season ${index + 1}`;
+      // AniList reports `episodes: null` while a series is still airing (e.g.
+      // long-running shows like One Piece). In that case the already-aired
+      // count is `nextAiringEpisode.episode - 1`; only fall back to 12 when
+      // neither the total nor an airing schedule is known.
+      const airedSoFar =
+        typeof m.nextAiringEpisode?.episode === 'number'
+          ? Math.max(0, m.nextAiringEpisode.episode - 1)
+          : 0;
+      const resolvedEpisodeCount =
+        m.episodes && m.episodes > 0 ? m.episodes : airedSoFar > 0 ? airedSoFar : 12;
       return {
         season: index + 1,
         anilistId: m.id,
         title: displayTitle,
-        episodeCount: m.episodes && m.episodes > 0 ? m.episodes : 12,
+        episodeCount: resolvedEpisodeCount,
         seasonYear: m.seasonYear,
         status: m.status,
         nextEpisode: m.nextAiringEpisode

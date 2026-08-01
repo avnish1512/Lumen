@@ -5061,8 +5061,10 @@ function SeasonEpisodeSection({
   }, [movie, animeSeasons])
 
   const [tmdbSeasons, setTmdbSeasons] = useState<{ season: number; episodeCount: number }[]>([])
-  // Real TMDB seasons when available (or AniList seasons), otherwise the local guess.
-  const seasons = tmdbSeasons.length > 0 ? tmdbSeasons : fallbackSeasons
+  // Anime is always AniList-driven (never TMDB). For everything else, prefer the
+  // real TMDB season list when available, otherwise the local guess.
+  const seasons =
+    !movie.isAnime && tmdbSeasons.length > 0 ? tmdbSeasons : fallbackSeasons
   const initialSeason = movie.streamSeason ?? seasons[0]?.season ?? 1
   const [selectedSeason, setSelectedSeason] = useState(() => initialSeason)
   const [tmdbEpisodes, setTmdbEpisodes] = useState<SeasonEpisode[]>([])
@@ -5070,7 +5072,13 @@ function SeasonEpisodeSection({
   const [highlightedEpisode, setHighlightedEpisode] = useState<number | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
 
-  const isTvId = Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
+  // Anime is driven entirely by the AniList season structure (each season is a
+  // distinct AniList entry, and streaming resolves by that per-season anilistId).
+  // Never let TMDB seasons/episodes override it, or switching seasons shows the
+  // wrong episodes and per-season titles fall back to the root entry's absolute
+  // numbering (e.g. "Episode 103" under Season 2's "Episode 1").
+  const isTvId =
+    !movie.isAnime && Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
 
   // Load the accurate season list from TMDB so the dropdown/counts are correct.
   useEffect(() => {
@@ -5127,7 +5135,7 @@ function SeasonEpisodeSection({
     : undefined
 
   const episodeCount =
-    tmdbEpisodes.length > 0
+    !movie.isAnime && tmdbEpisodes.length > 0
       ? tmdbEpisodes.length
       : activeAnimeSeason
         ? activeAnimeSeason.episodeCount
@@ -5236,7 +5244,11 @@ function SeasonEpisodeSection({
 
         <div ref={rowRef} className="episode-row episode-row-v2">
           {episodes.map((episode) => {
-            const data = tmdbEpisodes.find((item) => item.number === episode)
+            // Anime never uses TMDB episode data — its titles/stills come from
+            // the selected AniList season, keeping per-season numbering aligned.
+            const data = movie.isAnime
+              ? undefined
+              : tmdbEpisodes.find((item) => item.number === episode)
             // AniList exposes real per-episode artwork/titles via
             // streamingEpisodes (in episode order).
             const animeEp = activeAnimeSeason
