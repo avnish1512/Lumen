@@ -14934,7 +14934,14 @@ body:has(.login-screen) {
   background: rgba(0, 0, 0, 0.75);
 }
 
-.lord-incognito-btn {
+.lord-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lord-incognito-btn,
+.lord-clear-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -14951,10 +14958,21 @@ body:has(.login-screen) {
   transition: all 0.2s ease;
 }
 
-.lord-incognito-btn:hover {
+.lord-incognito-btn:hover,
+.lord-clear-btn:hover:not(:disabled) {
   background: rgba(229, 9, 20, 0.85);
   border-color: rgba(229, 9, 20, 0.9);
   transform: scale(1.03);
+}
+
+.lord-clear-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lord-screen .continue-rail {
+  padding: 0;
+  background: transparent;
 }
 
 .lord-pin-change-btn {

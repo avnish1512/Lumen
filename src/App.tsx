@@ -1694,6 +1694,24 @@ function App() {
     () => continueWatching.filter((m) => m.genres.some((g) => g.toLowerCase().includes('drama'))),
     [continueWatching],
   )
+  const continueWatchingLord = useMemo(
+    () =>
+      Object.values(watchHistory)
+        .filter(
+          (entry) =>
+            entry.progress < 100 &&
+            (entry.movie.isHentaiOcean ||
+              entry.movie.genres.some((g) => g.toLowerCase() === 'hentai')),
+        )
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, 12)
+        .map((entry, index) => ({
+          ...entry.movie,
+          rank: index + 1,
+          progress: entry.progress,
+        })),
+    [watchHistory],
+  )
   const searchCategoryTiles = useMemo(
     () =>
       buildSearchCategoryTiles(searchCategories, [
@@ -2729,6 +2747,23 @@ function App() {
     [removeContinueMovie, removeSavedMovie],
   )
 
+  const clearLordContinueWatching = useCallback(() => {
+    setWatchHistory((current) => {
+      const next = { ...current }
+      let changed = false
+      Object.entries(current).forEach(([key, entry]) => {
+        if (
+          entry.movie.isHentaiOcean ||
+          entry.movie.genres.some((g) => g.toLowerCase() === 'hentai')
+        ) {
+          delete next[key]
+          changed = true
+        }
+      })
+      return changed ? next : current
+    })
+  }, [])
+
   const mapAniListToMovie = useCallback((anime: any, rank = 1): Movie => {
     return mapAniListToMovieStandalone(anime, rank)
   }, [])
@@ -3225,12 +3260,17 @@ function App() {
           movies={lordMovies}
           rails={lordRails}
           loading={lordLoading}
+          continueMovies={continueWatchingLord}
           currentUser={currentUser}
           profiles={profiles}
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSelectProfile={switchToProfile}
           onBack={() => setScreen(lordBackScreen)}
+          onClearContinueWatching={clearLordContinueWatching}
+          onMarkWatched={markWatchedMovie}
+          onRemoveContinue={removeContinueMovie}
+          onRemoveWatchlist={removeWatchlistMovie}
         />
       )}
 
@@ -10222,12 +10262,17 @@ type LordScreenProps = {
   movies: Movie[]
   rails: LordRail[]
   loading: boolean
+  continueMovies?: Movie[]
   currentUser: UserInfo | null
   profiles: UserProfile[]
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSelectProfile: (name: string) => void
   onBack: () => void
+  onClearContinueWatching?: () => void
+  onMarkWatched?: (movie: Movie) => void
+  onRemoveContinue?: (movie: Movie) => void
+  onRemoveWatchlist?: (movie: Movie) => void
 }
 
 // Standalone hero + rails layout for the unlocked "Lord" profile.
@@ -10235,9 +10280,14 @@ function LordScreen({
   movies,
   rails,
   loading,
+  continueMovies = [],
   onOpenDetail,
   onPlay,
   onBack,
+  onClearContinueWatching,
+  onMarkWatched,
+  onRemoveContinue,
+  onRemoveWatchlist,
 }: LordScreenProps) {
   const hero = movies[0] ?? null
 
@@ -10290,6 +10340,26 @@ function LordScreen({
               <path d="M9 16.5h6" />
             </svg>
             <span>Incognito</span>
+          </button>
+
+          <button
+            className="lord-clear-btn"
+            type="button"
+            onClick={() => {
+              if (
+                window.confirm(
+                  'Permanently delete all Lord Continue Watching history? This cannot be recovered.',
+                )
+              ) {
+                onClearContinueWatching?.()
+              }
+            }}
+            title="Permanently clear Lord Continue Watching history"
+            aria-label="Permanently clear Lord Continue Watching history"
+            disabled={continueMovies.length === 0}
+          >
+            <Trash2 size={18} />
+            <span>Clear History</span>
           </button>
         </div>
 
@@ -10402,6 +10472,16 @@ function LordScreen({
           </div>
 
           <div className="lord-rails">
+            {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
+              <ContinueWatchingRail
+                title="Continue Watching"
+                movies={continueMovies}
+                onOpenDetail={onOpenDetail}
+                onMarkWatched={onMarkWatched}
+                onRemoveContinue={onRemoveContinue}
+                onRemoveWatchlist={onRemoveWatchlist}
+              />
+            )}
             {rails.map((rail) => (
               <LordRailRow
                 key={rail.title}

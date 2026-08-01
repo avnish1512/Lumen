@@ -190,6 +190,23 @@ describe('Hentai Ocean integration', () => {
 
     expect(filtered).toHaveLength(1)
     expect(filtered[0].movie.title).toBe('Inception')
+
+    const lordFiltered = history.filter(
+      (entry) =>
+        entry.progress < 100 &&
+        (entry.movie.isHentaiOcean ||
+          entry.movie.genres.some((g) => g.toLowerCase() === 'hentai')),
+    )
+    expect(lordFiltered).toHaveLength(1)
+    expect(lordFiltered[0].movie.title).toBe('Test Hentai')
+
+    const clearedLordHistory = history.filter(
+      (entry) =>
+        !entry.movie.isHentaiOcean &&
+        !entry.movie.genres.some((g) => g.toLowerCase() === 'hentai'),
+    )
+    expect(clearedLordHistory).toHaveLength(1)
+    expect(clearedLordHistory[0].movie.title).toBe('Inception')
   })
 
   it('allows custom Lord PIN setting for admin account', () => {
