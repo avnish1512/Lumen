@@ -6383,7 +6383,6 @@ function LoginScreen({
   onBack,
   onSwitchProfile,
   onSelectProfile,
-  onSetLordPin,
   profiles,
   designMode,
 }: LoginScreenProps) {
