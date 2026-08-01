@@ -84,6 +84,41 @@ describe('Hentai Ocean integration', () => {
     expect(urlEp1).toBe('https://hentaiocean.com/embed/my-mother-1?la=1')
   })
 
+  it('updates la parameter for SUB and DUB stream languages', () => {
+    const movie: Movie = {
+      id: 'hentaiocean-test-lang',
+      hentaiSlug: 'test-lang',
+      embedUrl: 'https://hentaiocean.com/embed/test-lang?la=1',
+      isHentaiOcean: true,
+      rank: 1,
+      title: 'Test Lang Hentai',
+      logoTitle: 'Test Lang Hentai',
+      label: 'Hentai Ocean',
+      type: 'Anime',
+      genres: ['Hentai'],
+      year: '2026',
+      runtime: '24 min',
+      rating: '9.0',
+      maturity: '18+',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const subUrl = buildStreamUrl({ ...movie, streamLanguage: 'sub' })
+    expect(subUrl).toBe('https://hentaiocean.com/embed/test-lang?la=1')
+
+    const dubUrl = buildStreamUrl({ ...movie, streamLanguage: 'dub' })
+    expect(dubUrl).toBe('https://hentaiocean.com/embed/test-lang?la=2')
+  })
+
   it('includes OceanPlay in stream provider options', () => {
     const oceanPlayOption = streamProviderOptions.find((p) => p.id === 'oceanplay')
     expect(oceanPlayOption).toBeDefined()

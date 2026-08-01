@@ -556,20 +556,30 @@ export function buildStreamUrl(
   provider: StreamProvider = defaultStreamProvider,
 ) {
   if (movie.isHentaiOcean || movie.hentaiSlug || movie.embedUrl) {
+    let rawUrl = ''
     if (movie.hentaiEpisodes && movie.hentaiEpisodes.length > 0) {
       const targetEpNum = movie.streamEpisode ?? 1
       const targetEp =
         movie.hentaiEpisodes.find((ep) => ep.episodeNumber === targetEpNum) ||
         movie.hentaiEpisodes[0]
       if (targetEp?.embedUrl) {
-        return targetEp.embedUrl
+        rawUrl = targetEp.embedUrl
       }
     }
-    if (movie.embedUrl) {
-      return movie.embedUrl
+    if (!rawUrl && movie.embedUrl) {
+      rawUrl = movie.embedUrl
     }
-    const slug = movie.hentaiSlug || movie.id.replace(/^hentaiocean-/, '')
-    return `https://hentaiocean.com/embed/${slug}?la=1`
+    if (!rawUrl) {
+      const slug = movie.hentaiSlug || movie.id.replace(/^hentaiocean-/, '')
+      rawUrl = `https://hentaiocean.com/embed/${slug}?la=1`
+    }
+
+    const laValue = movie.streamLanguage === 'dub' ? '2' : '1'
+    if (rawUrl.includes('la=')) {
+      return rawUrl.replace(/la=[^&]+/, `la=${laValue}`)
+    }
+    const separator = rawUrl.includes('?') ? '&' : '?'
+    return `${rawUrl}${separator}la=${laValue}`
   }
 
   if (provider === 'megaplay' || provider === 'animeplay') {

@@ -5954,7 +5954,7 @@ function WatchScreen({
           <p className="watch-title-genre">{movie.genres[0] ?? 'Movie'}</p>
         </div>
 
-        {isAnimeMovie ? (
+        {isAnimeMovie || isHentai ? (
           <div className="watch-lang-toggle" role="group" aria-label="Audio language">
             <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
               SUB
