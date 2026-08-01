@@ -6425,6 +6425,13 @@ function LoginScreen({
   const [newAdminPw, setNewAdminPw] = useState('')
   const [adminPwMsg, setAdminPwMsg] = useState('')
   const [adminPwBusy, setAdminPwBusy] = useState(false)
+  // Collapsible sections (closed by default; open on click).
+  const [manageAccountsOpen, setManageAccountsOpen] = useState(false)
+  const [changeAdminOpen, setChangeAdminOpen] = useState(false)
+  const [changeLordOpen, setChangeLordOpen] = useState(false)
+  const [newLordPin, setNewLordPin] = useState('')
+  const [lordPinMsg, setLordPinMsg] = useState('')
+  const [lordPinBusy, setLordPinBusy] = useState(false)
 
   // Account sections render inline on the right (no popups).
   const [accountTab, setAccountTab] = useState<
@@ -6549,6 +6556,33 @@ function LoginScreen({
       setAdminKeyInput(next)
     } else {
       setAdminPwMsg(result.error ?? 'Could not update admin password.')
+    }
+  }
+
+  const submitLordPin = async () => {
+    setLordPinMsg('')
+    const pin = newLordPin.trim()
+    if (!/^\d{4}$/.test(pin)) {
+      setLordPinMsg('PIN must be exactly 4 digits.')
+      return
+    }
+    if (!isMainAccount(currentUser?.email)) {
+      setLordPinMsg('Only the admin can change the Lord PIN.')
+      return
+    }
+    setLordPinBusy(true)
+    const ok = await saveRemoteLordPin(currentUser?.email ?? '', pin)
+    setLordPinBusy(false)
+    if (ok) {
+      try {
+        localStorage.setItem('lord_pin', pin)
+      } catch {
+        // ignore
+      }
+      setLordPinMsg('Lord PIN updated.')
+      setNewLordPin('')
+    } else {
+      setLordPinMsg('Could not update. Unlock with your admin password first.')
     }
   }
 
@@ -6898,15 +6932,30 @@ function LoginScreen({
                   <p className="account-plan-sub">Password: ••••••••</p>
                 </div>
                 {isMainAccount(currentUser.email) && (
-                  <div className="account-card account-manage-inline">
-                    <div className="account-manage-head">
+                  <button
+                    type="button"
+                    className="account-row account-manage-toggle"
+                    onClick={() => setManageAccountsOpen((value) => !value)}
+                    aria-expanded={manageAccountsOpen}
+                  >
+                    <span className="account-row-left">
                       <UserCog size={18} />
-                      <h3 className="account-manage-heading">Manage Accounts</h3>
-                    </div>
+                      <span>Manage Accounts</span>
+                    </span>
+                    <ChevronRight
+                      size={18}
+                      style={{
+                        transform: manageAccountsOpen ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 0.15s ease',
+                      }}
+                    />
+                  </button>
+                )}
+                {isMainAccount(currentUser.email) && manageAccountsOpen && (
+                  <div className="account-card account-manage-inline">
                     <p className="account-manage-note">
                       Enter your admin password to unlock. Add, edit or remove
-                      sign-in accounts — passwords are stored hashed and can&apos;t
-                      be viewed. (This is separate from the Lord PIN.)
+                      sign-in accounts. (This is separate from the Lord PIN.)
                     </p>
 
                     <div className="account-manage-form">
@@ -7018,11 +7067,27 @@ function LoginScreen({
                   </div>
                 )}
                 {isMainAccount(currentUser.email) && (
-                  <div className="account-card account-manage-inline">
-                    <div className="account-manage-head">
+                  <button
+                    type="button"
+                    className="account-row account-manage-toggle"
+                    onClick={() => setChangeAdminOpen((value) => !value)}
+                    aria-expanded={changeAdminOpen}
+                  >
+                    <span className="account-row-left">
                       <KeyRound size={18} />
-                      <h3 className="account-manage-heading">Change Admin Password</h3>
-                    </div>
+                      <span>Change Admin Password</span>
+                    </span>
+                    <ChevronRight
+                      size={18}
+                      style={{
+                        transform: changeAdminOpen ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 0.15s ease',
+                      }}
+                    />
+                  </button>
+                )}
+                {isMainAccount(currentUser.email) && changeAdminOpen && (
+                  <div className="account-card account-manage-inline">
                     <p className="account-manage-note">
                       Used to sign in as the main account and to unlock account
                       management. Separate from the Lord PIN.
@@ -7051,14 +7116,58 @@ function LoginScreen({
                     {adminPwMsg && <p className="bff-status">{adminPwMsg}</p>}
                   </div>
                 )}
-                {isMainAccount(currentUser.email) && onSetLordPin && (
-                  <button className="account-row" type="button" onClick={onSetLordPin}>
+                {isMainAccount(currentUser.email) && (
+                  <button
+                    type="button"
+                    className="account-row account-manage-toggle"
+                    onClick={() => setChangeLordOpen((value) => !value)}
+                    aria-expanded={changeLordOpen}
+                  >
                     <span className="account-row-left">
                       <KeyRound size={18} />
                       <span>Change Lord Password</span>
                     </span>
-                    <ChevronRight size={18} />
+                    <ChevronRight
+                      size={18}
+                      style={{
+                        transform: changeLordOpen ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 0.15s ease',
+                      }}
+                    />
                   </button>
+                )}
+                {isMainAccount(currentUser.email) && changeLordOpen && (
+                  <div className="account-card account-manage-inline">
+                    <p className="account-manage-note">
+                      The 4-digit PIN that unlocks the hidden Lord profile.
+                      Requires unlocking with your admin password first.
+                    </p>
+                    <div className="account-manage-form">
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        className="account-manage-input"
+                        placeholder="New 4-digit PIN"
+                        value={newLordPin}
+                        onChange={(event) =>
+                          setNewLordPin(event.target.value.replace(/\D/g, '').slice(0, 4))
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') void submitLordPin()
+                        }}
+                      />
+                      <button
+                        className="account-manage-save"
+                        type="button"
+                        disabled={lordPinBusy}
+                        onClick={() => void submitLordPin()}
+                      >
+                        Update
+                      </button>
+                    </div>
+                    {lordPinMsg && <p className="bff-status">{lordPinMsg}</p>}
+                  </div>
                 )}
                 <button
                   className="account-row account-signout"
