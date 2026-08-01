@@ -91,7 +91,7 @@ import {
 } from './tmdb'
 import { HlsPlayer } from './HlsPlayer'
 import { MangaScreen } from './MangaScreen'
-import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds, fetchAniListSeasons, type AnimeSeasonInfo } from './anilist'
+import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds, type AnimeSeasonInfo } from './anilist'
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
   saveAccountProfiles as saveRemoteProfiles,
@@ -1141,12 +1141,12 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
   }
 }
 
-export function getDailySeed(): number {
+function getDailySeed(): number {
   const now = new Date()
   return now.getFullYear() * 1000 + (now.getMonth() + 1) * 31 + now.getDate()
 }
 
-export function rotateByDailySeed<T>(items: T[], seedOffset = 0): T[] {
+function rotateByDailySeed<T>(items: T[], seedOffset = 0): T[] {
   if (!items || items.length === 0) return items
   const seed = getDailySeed() + seedOffset
   const shift = Math.abs(seed) % items.length
@@ -5032,21 +5032,10 @@ function SeasonEpisodeSection({
   movie: Movie
   onPlayEpisode: (season: number, episode: number, seasonAnilistId?: number) => void
 }) {
-  const [animeSeasons, setAnimeSeasons] = useState<AnimeSeasonInfo[]>(movie.animeSeasons || [])
-
-  useEffect(() => {
-    let active = true
-    if (movie.isAnime && movie.anilistId) {
-      void fetchAniListSeasons(movie.anilistId).then((list) => {
-        if (active && list.length > 0) {
-          setAnimeSeasons(list)
-        }
-      })
-    }
-    return () => {
-      active = false
-    }
-  }, [movie.isAnime, movie.anilistId])
+  // Anime is NOT grouped into a multi-season dropdown: each AniList entry is its
+  // own standalone title (exactly as AniList lists them), so we only ever show
+  // this entry's own episodes. Other seasons show up as separate search results.
+  const [animeSeasons] = useState<AnimeSeasonInfo[]>(movie.animeSeasons || [])
 
   const fallbackSeasons = useMemo(() => {
     if (movie.isAnime && animeSeasons.length > 0) {
@@ -5184,6 +5173,7 @@ function SeasonEpisodeSection({
   return (
     <section className="detail-section season-section">
       <div className="season-header">
+        {seasons.length > 1 && (
         <SeasonDropdown
           seasons={seasons.map((s) => s.season)}
           value={selectedSeason}
@@ -5194,6 +5184,7 @@ function SeasonEpisodeSection({
           }}
           labels={seasonLabels}
         />
+        )}
 
         <form
           className="episode-finder"
@@ -5732,21 +5723,8 @@ function WatchScreen({
     setLanguage(movie.streamLanguage ?? 'sub')
   }, [movie.id, movie.anilistId, movie.streamEpisode, movie.streamSeason, movie.streamLanguage])
 
-  const [watchAnimeSeasons, setWatchAnimeSeasons] = useState<AnimeSeasonInfo[]>(movie.animeSeasons || [])
-
-  useEffect(() => {
-    let active = true
-    if (isAnimeMovie && movie.anilistId) {
-      void fetchAniListSeasons(movie.anilistId).then((list) => {
-        if (active && list.length > 0) {
-          setWatchAnimeSeasons(list)
-        }
-      })
-    }
-    return () => {
-      active = false
-    }
-  }, [isAnimeMovie, movie.anilistId])
+  // Anime stays a single standalone entry (no cross-season grouping).
+  const [watchAnimeSeasons] = useState<AnimeSeasonInfo[]>(movie.animeSeasons || [])
 
   const activeWatchAnimeSeason = isAnimeMovie
     ? (watchAnimeSeasons.find((s) => s.season === season) || watchAnimeSeasons[season - 1])
