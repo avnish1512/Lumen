@@ -40,9 +40,13 @@ import {
   adminEmailFromEnv,
   deleteAccount,
   listAccounts,
+  resolveAdminPassword,
+  revealPassword,
   saveAccount,
+  setAdminPassword,
   verifyAccount,
 } from './_lib/accounts-core.js'
+import type { SupabaseConfig } from './_lib/supabase-core.js'
 import {
   fetchDevices,
   registerDevice,
@@ -58,6 +62,39 @@ type ApiRequest = {
   method?: string
   query: Record<string, QueryValue>
   body?: unknown
+  headers?: Record<string, string | string[] | undefined>
+}
+
+// Constant-time string comparison to avoid leaking the secret via timing.
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length || a.length === 0) return false
+  let mismatch = 0
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return mismatch === 0
+}
+
+// Privileged actions (viewing/editing accounts, changing the Lord PIN) require
+// the admin credential, presented by the client via the `x-admin-key` header or
+// an `adminKey` body field. It's matched against ADMIN_PASSWORD (the admin's
+// login password) or, if configured, a separate ADMIN_SECRET. The old "trust
+// the admin email" check was exploitable, so a matching credential is now
+// mandatory — if neither env var is set, all privileged actions are denied.
+// (This is intentionally distinct from the 4-digit Lord PIN.)
+async function adminAuthorized(
+  env: Record<string, string | undefined>,
+  config: SupabaseConfig | null,
+  req: ApiRequest,
+  body: Record<string, unknown>,
+): Promise<boolean> {
+  const header = req.headers?.['x-admin-key']
+  const headerKey = Array.isArray(header) ? header[0] : header
+  const provided = String(headerKey ?? body.adminKey ?? '')
+  if (!provided) return false
+  const adminPassword = await resolveAdminPassword(env, config)
+  const candidates = [adminPassword, env.ADMIN_SECRET].filter(Boolean) as string[]
+  return candidates.some((candidate) => safeEqual(provided, candidate))
 }
 
 type ApiResponse = {
@@ -244,6 +281,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const body = parseBody(req)
 
+  // ---- admin login (server-only password) ----
+  // The main account authenticates against ADMIN_PASSWORD held on the server,
+  // so no admin password ships in the client bundle. Handled before the
+  // Supabase gate so the admin can sign in even if Supabase is unavailable.
+  if (kind === 'accounts' && qv(req.query.action) === 'verify') {
+    const email = String(body.email ?? '').trim().toLowerCase()
+    const password = String(body.password ?? '')
+    const adminPassword = await resolveAdminPassword(env, config)
+    if (email === adminEmailFromEnv(env) && adminPassword && safeEqual(password, adminPassword)) {
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ ok: true })
+      return
+    }
+    // Otherwise fall through to the table-backed verify in the accounts block.
+  }
+
   // ---- profiles ----
   if (kind === 'profiles') {
     res.setHeader('Cache-Control', 'no-store')
@@ -292,6 +345,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.setHeader('Cache-Control', 'no-store')
     try {
       if (req.method === 'GET') {
+        // Resolve the current PIN server-side; never send it to the client.
         let pin = globalLordPin
         if (config) {
           try {
@@ -301,13 +355,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
             }
           } catch {}
         }
-        res.status(200).json({ ok: true, pin })
+        // `verify` compares a candidate PIN server-side and returns only ok/no.
+        if (qv(req.query.action) === 'verify') {
+          res.status(200).json({ ok: safeEqual(String(qv(req.query.pin) ?? ''), pin) })
+          return
+        }
+        res.status(200).json({ ok: true })
         return
       }
-      const admin = String(body.adminEmail ?? '').trim().toLowerCase()
       const newPin = String(body.pin ?? '').trim()
-      if (admin !== 'avnishpc00@gmail.com') {
-        res.status(403).json({ ok: false, error: 'Only avnishpc00@gmail.com can set Lord PIN.' })
+      if (!(await adminAuthorized(env, config, req, body))) {
+        res.status(403).json({ ok: false, error: 'Not authorized.' })
         return
       }
       if (!/^\d{4}$/.test(newPin)) {
@@ -320,7 +378,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           await saveAccountProfiles(config, 'admin_lord_pin', [{ name: newPin, avatarColor: 'lord' }])
         } catch {}
       }
-      res.status(200).json({ ok: true, pin: newPin })
+      res.status(200).json({ ok: true })
     } catch (error) {
       res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Lord PIN error.' })
     }
@@ -392,24 +450,55 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   // ---- accounts ----
   if (kind === 'accounts') {
     res.setHeader('Cache-Control', 'no-store')
-    const adminEmail = adminEmailFromEnv(env)
     const action = qv(req.query.action) ?? ''
-    const isAdmin = (value: unknown) => String(value ?? '').toLowerCase() === adminEmail
+    const adminEmail = adminEmailFromEnv(env)
+    const isAdmin = () => adminAuthorized(env, config, req, body)
     try {
       if (req.method === 'POST' && action === 'verify') {
         res.status(200).json({ ok: await verifyAccount(config, String(body.email ?? '').toLowerCase(), String(body.password ?? '')) })
         return
       }
       if (req.method === 'GET' && action === 'list') {
-        if (!isAdmin(qv(req.query.admin))) {
+        if (!(await isAdmin())) {
           res.status(403).json({ ok: false, error: 'Not authorized.' })
           return
         }
-        res.status(200).json({ ok: true, configured: true, accounts: await listAccounts(config) })
+        // Never include the admin account in the manageable list.
+        const accounts = (await listAccounts(config)).filter(
+          (account) => account.email.toLowerCase() !== adminEmail,
+        )
+        res.status(200).json({ ok: true, configured: true, accounts })
+        return
+      }
+      if (req.method === 'GET' && action === 'reveal') {
+        if (!(await isAdmin())) {
+          res.status(403).json({ ok: false, error: 'Not authorized.' })
+          return
+        }
+        const email = (qv(req.query.email) ?? '').trim().toLowerCase()
+        if (!email || email === adminEmail) {
+          res.status(400).json({ ok: false, error: 'Invalid account.' })
+          return
+        }
+        res.status(200).json({ ok: true, password: await revealPassword(config, email) })
+        return
+      }
+      if (req.method === 'POST' && action === 'set-admin-password') {
+        if (!(await isAdmin())) {
+          res.status(403).json({ ok: false, error: 'Not authorized.' })
+          return
+        }
+        const newPassword = String(body.newPassword ?? '')
+        if (newPassword.length < 6) {
+          res.status(400).json({ ok: false, error: 'Admin password must be at least 6 characters.' })
+          return
+        }
+        await setAdminPassword(config, newPassword)
+        res.status(200).json({ ok: true })
         return
       }
       if (req.method === 'POST' && action === 'save') {
-        if (!isAdmin(body.admin)) {
+        if (!(await isAdmin())) {
           res.status(403).json({ ok: false, error: 'Not authorized.' })
           return
         }
@@ -419,12 +508,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           res.status(400).json({ ok: false, error: 'Valid email and password (4+ chars) required.' })
           return
         }
+        if (email === adminEmail) {
+          res.status(400).json({ ok: false, error: 'Use "Change admin password" for the main account.' })
+          return
+        }
         await saveAccount(config, email, password, String(body.previousEmail ?? '').toLowerCase() || undefined)
         res.status(200).json({ ok: true })
         return
       }
       if (req.method === 'POST' && action === 'delete') {
-        if (!isAdmin(body.admin)) {
+        if (!(await isAdmin())) {
           res.status(403).json({ ok: false, error: 'Not authorized.' })
           return
         }

@@ -13293,6 +13293,31 @@ body:has(.login-screen) {
   width: min(520px, 100%);
 }
 
+/* Inline (non-popup) manage panel rendered in the Security section. */
+.account-manage-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-manage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-manage-heading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.account-manage-note {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
 .account-manage-form {
   display: flex;
   flex-wrap: wrap;

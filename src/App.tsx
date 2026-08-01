@@ -95,7 +95,7 @@ import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeD
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
   saveAccountProfiles as saveRemoteProfiles,
-  fetchRemoteLordPin,
+  verifyRemoteLordPin,
   saveRemoteLordPin,
 } from './profiles-api'
 import {
@@ -107,10 +107,14 @@ import {
   type WatchParty,
 } from './watch-party'
 import {
+  changeAdminPassword as changeAdminPasswordApi,
   deleteAccount as deleteAccountApi,
+  getAdminKey,
   isMainAccount,
   listAccounts as listAccountsApi,
+  revealPassword as revealPasswordApi,
   saveAccount as saveAccountApi,
+  setAdminKey,
   verifyCredentials,
   type Account,
 } from './accounts-api'
@@ -1286,7 +1290,12 @@ type UserProfile = {
 function PullToRefresh({ containerRef }: { containerRef: RefObject<HTMLElement | null> }) {
   const [distance, setDistance] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
-  const gesture = useRef({ startY: null as number | null, dist: 0, active: false })
+  const gesture = useRef({
+    startY: null as number | null,
+    dist: 0,
+    active: false,
+    scroller: null as HTMLElement | null,
+  })
 
   useEffect(() => {
     const el = containerRef.current
@@ -1297,16 +1306,41 @@ function PullToRefresh({ containerRef }: { containerRef: RefObject<HTMLElement |
     const THRESHOLD = 72
     const MAX = 120
 
-    const scrollTopNow = () =>
+    const defaultScrollTop = () =>
       el.scrollHeight > el.clientHeight + 1
         ? el.scrollTop
         : window.scrollY || document.documentElement.scrollTop || 0
 
+    // Find the actual scroll container under the touch. Screens like Account,
+    // Manga and Live TV render as their own `position: fixed` scrollers nested
+    // inside the app shell, so we must measure *their* scrollTop — not the
+    // shell's (which always reads 0 while an overlay is open). Otherwise we'd
+    // wrongly think we're at the top and hijack their downward touch scrolling.
+    const findScroller = (target: EventTarget | null): HTMLElement | null => {
+      let node = target instanceof HTMLElement ? target : null
+      while (node && node !== el) {
+        const overflowY = getComputedStyle(node).overflowY
+        if (
+          (overflowY === 'auto' || overflowY === 'scroll') &&
+          node.scrollHeight > node.clientHeight + 1
+        ) {
+          return node
+        }
+        node = node.parentElement
+      }
+      return null
+    }
+
+    const scrollTopOf = (scroller: HTMLElement | null) =>
+      scroller ? scroller.scrollTop : defaultScrollTop()
+
     const onStart = (event: TouchEvent) => {
-      if (refreshing || event.touches.length !== 1 || scrollTopNow() > 0) {
+      const scroller = findScroller(event.target)
+      if (refreshing || event.touches.length !== 1 || scrollTopOf(scroller) > 0) {
         gesture.current.startY = null
         return
       }
+      gesture.current.scroller = scroller
       gesture.current.startY = event.touches[0].clientY
       gesture.current.active = false
     }
@@ -1318,7 +1352,7 @@ function PullToRefresh({ containerRef }: { containerRef: RefObject<HTMLElement |
       }
       const dy = event.touches[0].clientY - state.startY
       // Cancel if the user scrolls up or the container is no longer at the top.
-      if (dy <= 0 || scrollTopNow() > 0) {
+      if (dy <= 0 || scrollTopOf(state.scroller) > 0) {
         if (state.active) {
           state.active = false
           state.dist = 0
@@ -1543,25 +1577,11 @@ function App() {
     }
   }, [currentUser, tempUser, screen])
 
-  const [lordPin, setLordPinState] = useState<string>(getLordPin)
-  // Declared here (not with the other Lord state below) because the effect
-  // that refreshes the remote PIN depends on it.
+  // Local fallback PIN (used only if the server verify is unreachable). The
+  // authoritative check is server-side via verifyRemoteLordPin — the PIN is
+  // never fetched to the client.
+  const [lordPin] = useState<string>(getLordPin)
   const [showLordPin, setShowLordPin] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    void fetchRemoteLordPin().then((pin) => {
-      if (active && pin && /^\d{4}$/.test(pin)) {
-        try {
-          localStorage.setItem('lord_pin', pin)
-        } catch {}
-        setLordPinState(pin)
-      }
-    })
-    return () => {
-      active = false
-    }
-  }, [screen, showLordPin])
 
   const initialCache = useMemo(() => readHomeCache(), [])
 
@@ -6386,9 +6406,10 @@ function LoginScreen({
   // user taps "Login" or the email button.
   const [mobileEmailOpen, setMobileEmailOpen] = useState(false)
 
-  // Admin "Manage Account" panel (main account only).
-  const [manageOpen, setManageOpen] = useState(false)
+  // Admin "Manage Account" panel (main account only). Rendered inline in the
+  // Security section (no popup). Listing/editing requires the admin key.
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [adminKeyInput, setAdminKeyInput] = useState<string>(() => getAdminKey())
 
   // "Manage Devices" panel — logged-in sessions for this account.
   const [devicesOpen, setDevicesOpen] = useState(false)
@@ -6398,6 +6419,12 @@ function LoginScreen({
   const [accEditing, setAccEditing] = useState<string | null>(null)
   const [accError, setAccError] = useState('')
   const [accBusy, setAccBusy] = useState(false)
+  // Per-account revealed password (key present = shown; null = loading).
+  const [revealed, setRevealed] = useState<Record<string, string | null>>({})
+  // Change-admin-password form.
+  const [newAdminPw, setNewAdminPw] = useState('')
+  const [adminPwMsg, setAdminPwMsg] = useState('')
+  const [adminPwBusy, setAdminPwBusy] = useState(false)
 
   // Account sections render inline on the right (no popups).
   const [accountTab, setAccountTab] = useState<
@@ -6475,16 +6502,54 @@ function LoginScreen({
   const loginBg = '/login-bg.jpeg'
 
   const loadAccounts = async () => {
-    setAccounts(await listAccountsApi(adminEmail))
+    const result = await listAccountsApi()
+    setAccounts(result.accounts)
+    setAccError(result.ok ? '' : result.error ?? '')
   }
 
-  const openManageAccounts = () => {
-    setManageOpen(true)
-    setAccEmail('')
-    setAccPass('')
-    setAccEditing(null)
+  // Store the entered admin key for this session, then (re)load the list.
+  const unlockAccounts = () => {
+    setAdminKey(adminKeyInput.trim())
     setAccError('')
+    setRevealed({})
     void loadAccounts()
+  }
+
+  // Toggle showing a single account's password (fetched on demand).
+  const toggleReveal = async (email: string) => {
+    if (email in revealed) {
+      setRevealed((current) => {
+        const next = { ...current }
+        delete next[email]
+        return next
+      })
+      return
+    }
+    setRevealed((current) => ({ ...current, [email]: null })) // loading
+    const result = await revealPasswordApi(email)
+    setRevealed((current) => ({
+      ...current,
+      [email]: result.ok ? result.password ?? '(unavailable)' : result.error ?? '(error)',
+    }))
+  }
+
+  const submitAdminPassword = async () => {
+    setAdminPwMsg('')
+    const next = newAdminPw.trim()
+    if (next.length < 6) {
+      setAdminPwMsg('Admin password must be at least 6 characters.')
+      return
+    }
+    setAdminPwBusy(true)
+    const result = await changeAdminPasswordApi(next)
+    setAdminPwBusy(false)
+    if (result.ok) {
+      setAdminPwMsg('Admin password updated.')
+      setNewAdminPw('')
+      setAdminKeyInput(next)
+    } else {
+      setAdminPwMsg(result.error ?? 'Could not update admin password.')
+    }
   }
 
   // Log a single device out of the account. Logging out the current device
@@ -6552,7 +6617,9 @@ function LoginScreen({
   const startEditAccount = (account: Account) => {
     setAccEditing(account.email)
     setAccEmail(account.email)
-    setAccPass(account.password)
+    // Passwords are hashed and never returned, so editing requires setting a
+    // new one (leave the field to type a fresh password).
+    setAccPass('')
     setAccError('')
   }
 
@@ -6572,8 +6639,6 @@ function LoginScreen({
     e.preventDefault()
     setError('')
 
-    const requiredPassword = 'Avnish@00'
-
     const trimmedEmail = email.trim().toLowerCase()
     const trimmedPassword = password.trim()
 
@@ -6587,14 +6652,11 @@ function LoginScreen({
       return
     }
 
-    // Only the main admin account keeps a built-in password. Every other
-    // account must exist in the `accounts` table, so a deleted account can no
-    // longer sign in.
-    const hardcodedOk =
-      isMainAccount(trimmedEmail) && trimmedPassword === requiredPassword
-
+    // All credentials are verified server-side: the main account against the
+    // server-only ADMIN_PASSWORD, everyone else against the accounts table.
+    // No password is baked into the client.
     setLoading(true)
-    const ok = hardcodedOk || (await verifyCredentials(trimmedEmail, trimmedPassword))
+    const ok = await verifyCredentials(trimmedEmail, trimmedPassword)
     setLoading(false)
 
     if (!ok) {
@@ -6608,17 +6670,11 @@ function LoginScreen({
     })
   }
 
+  // Social sign-in previously logged in with no password (and could grant the
+  // admin account), which was an authentication bypass. Until a real OAuth flow
+  // exists, it's disabled rather than granting passwordless access.
   const handleSocialLogin = (provider: 'Apple' | 'Google') => {
-    setError('')
-    setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      const targetEmail = provider === 'Apple' ? 'Appclone@gmail.com' : 'avnishpc00@gmail.com'
-      onLogin({
-        name: targetEmail.split('@')[0],
-        email: targetEmail,
-      })
-    }, 1200)
+    setError(`${provider} sign-in isn't available yet. Please sign in with your email and password.`)
   }
 
   const handleRequestAccess = () => {
@@ -6842,13 +6898,158 @@ function LoginScreen({
                   <p className="account-plan-sub">Password: ••••••••</p>
                 </div>
                 {isMainAccount(currentUser.email) && (
-                  <button className="account-row" type="button" onClick={openManageAccounts}>
-                    <span className="account-row-left">
+                  <div className="account-card account-manage-inline">
+                    <div className="account-manage-head">
                       <UserCog size={18} />
-                      <span>Manage Account</span>
-                    </span>
-                    <ChevronRight size={18} />
-                  </button>
+                      <h3 className="account-manage-heading">Manage Accounts</h3>
+                    </div>
+                    <p className="account-manage-note">
+                      Enter your admin password to unlock. Add, edit or remove
+                      sign-in accounts — passwords are stored hashed and can&apos;t
+                      be viewed. (This is separate from the Lord PIN.)
+                    </p>
+
+                    <div className="account-manage-form">
+                      <input
+                        type="password"
+                        className="account-manage-input"
+                        placeholder="Admin password"
+                        autoComplete="off"
+                        value={adminKeyInput}
+                        onChange={(event) => setAdminKeyInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') unlockAccounts()
+                        }}
+                      />
+                      <button
+                        className="account-manage-save"
+                        type="button"
+                        onClick={unlockAccounts}
+                      >
+                        Unlock
+                      </button>
+                    </div>
+
+                    <div className="account-manage-form">
+                      <input
+                        type="email"
+                        className="account-manage-input"
+                        placeholder="email@example.com"
+                        value={accEmail}
+                        onChange={(event) => setAccEmail(event.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="account-manage-input"
+                        placeholder={accEditing ? 'New password (min 4 chars)' : 'Password (min 4 chars)'}
+                        value={accPass}
+                        onChange={(event) => setAccPass(event.target.value)}
+                      />
+                      <button
+                        className="account-manage-save"
+                        type="button"
+                        disabled={accBusy}
+                        onClick={() => void submitAccount()}
+                      >
+                        {accEditing ? 'Save' : 'Add'}
+                      </button>
+                      {accEditing && (
+                        <button
+                          className="account-manage-cancel"
+                          type="button"
+                          onClick={() => {
+                            setAccEditing(null)
+                            setAccEmail('')
+                            setAccPass('')
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+
+                    {accError && <p className="bff-status">{accError}</p>}
+
+                    <div className="account-manage-list">
+                      {accounts.length === 0 ? (
+                        accError ? null : <p className="bff-empty">No accounts added yet.</p>
+                      ) : (
+                        accounts.map((account) => {
+                          const shown = account.email in revealed
+                          const value = revealed[account.email]
+                          return (
+                            <div key={account.email} className="account-manage-row">
+                              <div className="account-manage-cred">
+                                <span className="account-manage-email">{account.email}</span>
+                                <span className="account-manage-pass">
+                                  {shown ? (value === null ? '…' : value || '(unavailable)') : '••••••••'}
+                                </span>
+                              </div>
+                              <button
+                                className="account-manage-edit"
+                                type="button"
+                                title={shown ? 'Hide password' : 'Show password'}
+                                onClick={() => void toggleReveal(account.email)}
+                              >
+                                {shown ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                              <button
+                                className="account-manage-edit"
+                                type="button"
+                                title="Edit"
+                                onClick={() => startEditAccount(account)}
+                              >
+                                <Pencil size={16} />
+                              </button>
+                              <button
+                                className="account-manage-remove"
+                                type="button"
+                                title="Remove"
+                                disabled={accBusy}
+                                onClick={() => void removeAccount(account.email)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+                {isMainAccount(currentUser.email) && (
+                  <div className="account-card account-manage-inline">
+                    <div className="account-manage-head">
+                      <KeyRound size={18} />
+                      <h3 className="account-manage-heading">Change Admin Password</h3>
+                    </div>
+                    <p className="account-manage-note">
+                      Used to sign in as the main account and to unlock account
+                      management. Separate from the Lord PIN.
+                    </p>
+                    <div className="account-manage-form">
+                      <input
+                        type="password"
+                        className="account-manage-input"
+                        placeholder="New admin password (min 6 chars)"
+                        autoComplete="new-password"
+                        value={newAdminPw}
+                        onChange={(event) => setNewAdminPw(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') void submitAdminPassword()
+                        }}
+                      />
+                      <button
+                        className="account-manage-save"
+                        type="button"
+                        disabled={adminPwBusy}
+                        onClick={() => void submitAdminPassword()}
+                      >
+                        Update
+                      </button>
+                    </div>
+                    {adminPwMsg && <p className="bff-status">{adminPwMsg}</p>}
+                  </div>
                 )}
                 {isMainAccount(currentUser.email) && onSetLordPin && (
                   <button className="account-row" type="button" onClick={onSetLordPin}>
@@ -6999,93 +7200,6 @@ function LoginScreen({
             )}
           </main>
         </div>
-
-        {manageOpen && (
-          <div className="bff-overlay" role="dialog" aria-label="Manage accounts">
-            <div className="bff-modal account-manage-modal">
-              <button className="bff-close" type="button" aria-label="Close" onClick={() => setManageOpen(false)}>
-                <X size={20} />
-              </button>
-              <h2 className="bff-title">Manage Accounts</h2>
-              <p className="bff-sub">
-                Add, edit or remove sign-in accounts. Everyone signs in with their
-                own email and password.
-              </p>
-
-              <div className="account-manage-form">
-                <input
-                  type="email"
-                  className="account-manage-input"
-                  placeholder="email@example.com"
-                  value={accEmail}
-                  onChange={(event) => setAccEmail(event.target.value)}
-                />
-                <input
-                  type="text"
-                  className="account-manage-input"
-                  placeholder="password"
-                  value={accPass}
-                  onChange={(event) => setAccPass(event.target.value)}
-                />
-                <button
-                  className="account-manage-save"
-                  type="button"
-                  disabled={accBusy}
-                  onClick={() => void submitAccount()}
-                >
-                  {accEditing ? 'Save' : 'Add'}
-                </button>
-                {accEditing && (
-                  <button
-                    className="account-manage-cancel"
-                    type="button"
-                    onClick={() => {
-                      setAccEditing(null)
-                      setAccEmail('')
-                      setAccPass('')
-                    }}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-
-              {accError && <p className="bff-status">{accError}</p>}
-
-              <div className="account-manage-list">
-                {accounts.length === 0 ? (
-                  <p className="bff-empty">No accounts saved yet. Add one above.</p>
-                ) : (
-                  accounts.map((account) => (
-                    <div key={account.email} className="account-manage-row">
-                      <div className="account-manage-cred">
-                        <span className="account-manage-email">{account.email}</span>
-                        <span className="account-manage-pass">{account.password}</span>
-                      </div>
-                      <button
-                        className="account-manage-edit"
-                        type="button"
-                        onClick={() => startEditAccount(account)}
-                      >
-                        <Pencil size={16} />
-                      </button>
-                      {!isMainAccount(account.email) && (
-                        <button
-                          className="account-manage-remove"
-                          type="button"
-                          disabled={accBusy}
-                          onClick={() => void removeAccount(account.email)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {devicesOpen && (
           <div className="device-manage-screen" role="dialog" aria-label="Manage devices">
@@ -9803,8 +9917,16 @@ function LordPinModal({
   const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
 
   const submit = useCallback(
-    (pin: string) => {
-      if (pin === expectedPin) {
+    async (pin: string) => {
+      let ok = false
+      try {
+        // Authoritative check: the server compares and returns only ok/no.
+        ok = await verifyRemoteLordPin(pin)
+      } catch {
+        // Offline fallback to the locally-known PIN so the gate still works.
+        ok = pin === expectedPin
+      }
+      if (ok) {
         onSuccess()
       } else {
         setError(true)
@@ -9824,7 +9946,7 @@ function LordPinModal({
     const next = digits + key
     setDigits(next)
     if (next.length === 4) {
-      submit(next)
+      void submit(next)
     }
   }
 

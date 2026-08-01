@@ -69,7 +69,10 @@ import {
   adminEmailFromEnv,
   deleteAccount,
   listAccounts,
+  resolveAdminPassword,
+  revealPassword,
   saveAccount,
+  setAdminPassword,
   verifyAccount,
 } from './api/_lib/accounts-core'
 import {
@@ -991,6 +994,31 @@ function tmdbTrailerDevProxy(authChain: TmdbTrailerAuth[]): Plugin {
   }
 }
 
+// Dev-server equivalent of the production admin gate: privileged actions require
+// the admin credential (ADMIN_PASSWORD, or a separate ADMIN_SECRET if set),
+// presented via the `x-admin-key` header or an `adminKey` body field. Denied
+// entirely when neither is configured.
+async function devAdminAuthorized(
+  env: Record<string, string | undefined>,
+  req: IncomingMessage,
+  body?: Record<string, unknown>,
+): Promise<boolean> {
+  const header = req.headers['x-admin-key']
+  const headerKey = Array.isArray(header) ? header[0] : header
+  const provided = String(headerKey ?? body?.adminKey ?? '')
+  if (!provided) return false
+  const adminPassword = await resolveAdminPassword(env, supabaseConfigFromEnv(env))
+  const candidates = [adminPassword, env.ADMIN_SECRET].filter(Boolean) as string[]
+  return candidates.some((candidate) => {
+    if (provided.length !== candidate.length) return false
+    let mismatch = 0
+    for (let i = 0; i < provided.length; i++) {
+      mismatch |= provided.charCodeAt(i) ^ candidate.charCodeAt(i)
+    }
+    return mismatch === 0
+  })
+}
+
 function accountsDevProxy(env: Record<string, string | undefined>): Plugin {
   return {
     name: 'accounts-dev-proxy',
@@ -1004,15 +1032,31 @@ function accountsDevProxy(env: Record<string, string | undefined>): Plugin {
         const adminEmail = adminEmailFromEnv(env)
         const requestUrl = new URL(req.url ?? '/', 'http://localhost')
         const action = requestUrl.searchParams.get('action') ?? ''
-        const isAdmin = (value: unknown) => String(value ?? '').toLowerCase() === adminEmail
 
         try {
           if (req.method === 'GET' && action === 'list') {
-            if (!isAdmin(requestUrl.searchParams.get('admin'))) {
+            if (!(await devAdminAuthorized(env, req))) {
               sendJson(res, 403, { ok: false, error: 'Not authorized.' })
               return
             }
-            sendJson(res, 200, { ok: true, configured: true, accounts: await listAccounts(config) })
+            const accounts = (await listAccounts(config)).filter(
+              (account) => account.email.toLowerCase() !== adminEmail,
+            )
+            sendJson(res, 200, { ok: true, configured: true, accounts })
+            return
+          }
+
+          if (req.method === 'GET' && action === 'reveal') {
+            if (!(await devAdminAuthorized(env, req))) {
+              sendJson(res, 403, { ok: false, error: 'Not authorized.' })
+              return
+            }
+            const email = (requestUrl.searchParams.get('email') ?? '').trim().toLowerCase()
+            if (!email || email === adminEmail) {
+              sendJson(res, 400, { ok: false, error: 'Invalid account.' })
+              return
+            }
+            sendJson(res, 200, { ok: true, password: await revealPassword(config, email) })
             return
           }
 
@@ -1025,16 +1069,32 @@ function accountsDevProxy(env: Record<string, string | undefined>): Plugin {
             const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
 
             if (action === 'verify') {
-              const ok = await verifyAccount(
-                config,
-                String(body.email ?? '').toLowerCase(),
-                String(body.password ?? ''),
-              )
-              sendJson(res, 200, { ok })
+              const email = String(body.email ?? '').toLowerCase()
+              const password = String(body.password ?? '')
+              const adminPassword = await resolveAdminPassword(env, config)
+              if (email === adminEmail && adminPassword && password === adminPassword) {
+                sendJson(res, 200, { ok: true })
+                return
+              }
+              sendJson(res, 200, { ok: await verifyAccount(config, email, password) })
+              return
+            }
+            if (action === 'set-admin-password') {
+              if (!(await devAdminAuthorized(env, req, body))) {
+                sendJson(res, 403, { ok: false, error: 'Not authorized.' })
+                return
+              }
+              const newPassword = String(body.newPassword ?? '')
+              if (newPassword.length < 6) {
+                sendJson(res, 400, { ok: false, error: 'Admin password must be at least 6 characters.' })
+                return
+              }
+              await setAdminPassword(config, newPassword)
+              sendJson(res, 200, { ok: true })
               return
             }
             if (action === 'save') {
-              if (!isAdmin(body.admin)) {
+              if (!(await devAdminAuthorized(env, req, body))) {
                 sendJson(res, 403, { ok: false, error: 'Not authorized.' })
                 return
               }
@@ -1044,12 +1104,16 @@ function accountsDevProxy(env: Record<string, string | undefined>): Plugin {
                 sendJson(res, 400, { ok: false, error: 'Valid email and password (4+ chars) required.' })
                 return
               }
+              if (email === adminEmail) {
+                sendJson(res, 400, { ok: false, error: 'Use "Change admin password" for the main account.' })
+                return
+              }
               await saveAccount(config, email, password, String(body.previousEmail ?? '').toLowerCase() || undefined)
               sendJson(res, 200, { ok: true })
               return
             }
             if (action === 'delete') {
-              if (!isAdmin(body.admin)) {
+              if (!(await devAdminAuthorized(env, req, body))) {
                 sendJson(res, 403, { ok: false, error: 'Not authorized.' })
                 return
               }
@@ -1428,7 +1492,14 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
                 }
               } catch {}
             }
-            sendJson(res, 200, { ok: true, pin })
+            const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+            if (requestUrl.searchParams.get('action') === 'verify') {
+              const provided = requestUrl.searchParams.get('pin') ?? ''
+              sendJson(res, 200, { ok: provided.length === pin.length && provided === pin })
+              return
+            }
+            // Never leak the PIN to the client.
+            sendJson(res, 200, { ok: true })
             return
           }
           if (req.method === 'POST' || req.method === 'PUT') {
@@ -1437,11 +1508,10 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
               chunks.push(chunk as Buffer)
             }
             const raw = Buffer.concat(chunks).toString('utf8')
-            const body = raw ? (JSON.parse(raw) as { adminEmail?: string; pin?: string }) : {}
-            const admin = String(body.adminEmail ?? '').trim().toLowerCase()
+            const body = raw ? (JSON.parse(raw) as { adminEmail?: string; pin?: string; adminKey?: string }) : {}
             const newPin = String(body.pin ?? '').trim()
-            if (admin !== 'avnishpc00@gmail.com') {
-              sendJson(res, 403, { ok: false, error: 'Only avnishpc00@gmail.com can set Lord PIN.' })
+            if (!(await devAdminAuthorized(env, req, body))) {
+              sendJson(res, 403, { ok: false, error: 'Not authorized.' })
               return
             }
             if (!/^\d{4}$/.test(newPin)) {
@@ -1454,7 +1524,7 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
                 await saveAccountProfiles(config, 'admin_lord_pin', [{ name: newPin, avatarColor: 'lord' }])
               } catch {}
             }
-            sendJson(res, 200, { ok: true, pin: newPin })
+            sendJson(res, 200, { ok: true })
             return
           }
           sendJson(res, 405, { ok: false, error: 'Method not allowed.' })

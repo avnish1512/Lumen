@@ -51,16 +51,15 @@ export async function saveAccountProfiles(
   }
 }
 
-export async function fetchRemoteLordPin(): Promise<string | null> {
+// Verify a candidate Lord PIN server-side. The PIN itself is never sent to the
+// client — the server only answers ok/no.
+export async function verifyRemoteLordPin(pin: string): Promise<boolean> {
   try {
-    const response = await fetch('/api/lord-pin')
-    const body = (await response.json()) as { ok?: boolean; pin?: string }
-    if (response.ok && body.ok && body.pin && /^\d{4}$/.test(body.pin)) {
-      return body.pin
-    }
-    return null
+    const response = await fetch(`/api/lord-pin?action=verify&pin=${encodeURIComponent(pin)}`)
+    const body = (await response.json()) as { ok?: boolean }
+    return Boolean(response.ok && body.ok)
   } catch {
-    return null
+    return false
   }
 }
 
@@ -73,10 +72,17 @@ export async function saveRemoteLordPin(
   }
 
   try {
+    const adminKey = (() => {
+      try {
+        return sessionStorage.getItem('lumen_admin_key') ?? ''
+      } catch {
+        return ''
+      }
+    })()
     const response = await fetch('/api/lord-pin', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminEmail, pin: newPin }),
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+      body: JSON.stringify({ adminEmail, pin: newPin, adminKey }),
     })
     const body = (await response.json()) as { ok?: boolean }
     return Boolean(response.ok && body.ok)
