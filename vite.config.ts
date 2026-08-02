@@ -42,6 +42,8 @@ import { fetchTmdbSeasonEpisodes, fetchTmdbTvSeasons } from './api/_lib/tmdb-epi
 import {
   fetchAccountProfiles,
   saveAccountProfiles,
+  fetchWatchHistory,
+  saveWatchHistory,
   supabaseConfigFromEnv,
   type StoredProfile,
 } from './api/_lib/supabase-core'
@@ -1537,6 +1539,64 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
   }
 }
 
+function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'watch-history-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/watch-history', async (req: IncomingMessage, res) => {
+        const config = supabaseConfigFromEnv(env)
+        try {
+          if (req.method === 'GET') {
+            const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+            const key = (requestUrl.searchParams.get('key') ?? '').trim()
+            if (!key) {
+              sendJson(res, 400, { ok: false, error: 'key is required.', history: null })
+              return
+            }
+            let history: Record<string, unknown> | null = null
+            if (config) {
+              try {
+                history = await fetchWatchHistory(config, key)
+              } catch {}
+            }
+            sendJson(res, 200, { ok: true, configured: Boolean(config), history })
+            return
+          }
+
+          if (req.method === 'POST' || req.method === 'PUT') {
+            const chunks: Buffer[] = []
+            for await (const chunk of req) {
+              chunks.push(chunk as Buffer)
+            }
+            const raw = Buffer.concat(chunks).toString('utf8')
+            const body = raw
+              ? (JSON.parse(raw) as { key?: string; history?: Record<string, unknown> })
+              : {}
+            const key = String(body.key ?? '').trim()
+            const history = body.history
+            if (!key || !history || typeof history !== 'object') {
+              sendJson(res, 400, { ok: false, error: 'key and history are required.' })
+              return
+            }
+            if (config) {
+              try {
+                await saveWatchHistory(config, key, history)
+              } catch {}
+            }
+            sendJson(res, 200, { ok: true, configured: Boolean(config) })
+            return
+          }
+
+          sendJson(res, 405, { ok: false, error: 'Method not allowed.' })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Watch-history request failed.'
+          sendJson(res, 502, { ok: false, error: message })
+        }
+      })
+    },
+  }
+}
+
 function devicesDevProxy(env: Record<string, string | undefined>): Plugin {
   return {
     name: 'devices-dev-proxy',
@@ -1734,6 +1794,7 @@ export default defineConfig(({ mode }) => {
       kinocheckDevProxy(env.KINOCHECK_API_KEY),
       tmdbTrailerDevProxy(createTmdbTrailerAuthChain(env)),
       profilesDevProxy(env),
+      watchHistoryDevProxy(env),
       imgDevProxy(),
       mangahookDevProxy(),
       livetvDevProxy(env),

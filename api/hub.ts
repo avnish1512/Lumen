@@ -9,6 +9,8 @@
 import {
   fetchAccountProfiles,
   saveAccountProfiles,
+  fetchWatchHistory,
+  saveWatchHistory,
   supabaseConfigFromEnv,
   type StoredProfile,
 } from './_lib/supabase-core.js'
@@ -337,6 +339,43 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(200).json({ ok: true, configured: Boolean(config) })
     } catch (error) {
       res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Profiles error.' })
+    }
+    return
+  }
+
+  // ---- watch-history (cross-device Continue Watching) ----
+  if (kind === 'watch-history') {
+    res.setHeader('Cache-Control', 'no-store')
+    try {
+      if (req.method === 'GET') {
+        const key = (qv(req.query.key) ?? '').trim()
+        if (!key) {
+          res.status(400).json({ ok: false, error: 'key is required.', history: null })
+          return
+        }
+        let history: Record<string, unknown> | null = null
+        if (config) {
+          try {
+            history = await fetchWatchHistory(config, key)
+          } catch {}
+        }
+        res.status(200).json({ ok: true, configured: Boolean(config), history })
+        return
+      }
+      const key = String(body.key ?? '').trim()
+      const history = body.history
+      if (!key || !history || typeof history !== 'object') {
+        res.status(400).json({ ok: false, error: 'key and history required.' })
+        return
+      }
+      if (config) {
+        try {
+          await saveWatchHistory(config, key, history as Record<string, unknown>)
+        } catch {}
+      }
+      res.status(200).json({ ok: true, configured: Boolean(config) })
+    } catch (error) {
+      res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Watch-history error.' })
     }
     return
   }

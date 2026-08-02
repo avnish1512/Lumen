@@ -97,6 +97,8 @@ import {
   saveAccountProfiles as saveRemoteProfiles,
   verifyRemoteLordPin,
   saveRemoteLordPin,
+  fetchRemoteWatchHistory,
+  saveRemoteWatchHistory,
 } from './profiles-api'
 import {
   acceptInvite,
@@ -599,6 +601,19 @@ function readWatchHistory(): WatchHistory {
   } catch {
     return {}
   }
+}
+
+// Merge two watch-history maps, keeping the most-recently-updated entry per
+// key. Used to reconcile the local cache with the cross-device remote copy.
+function mergeWatchHistory(a: WatchHistory, b: WatchHistory): WatchHistory {
+  const merged: WatchHistory = { ...a }
+  for (const [key, entry] of Object.entries(b)) {
+    const existing = merged[key]
+    if (!existing || (entry?.updatedAt ?? 0) > (existing.updatedAt ?? 0)) {
+      merged[key] = entry
+    }
+  }
+  return merged
 }
 
 function compactRuntime(runtime: string) {
@@ -2152,6 +2167,45 @@ function App() {
     // are allowed to write its data.
     loadedProfileRef.current = currentUser?.name ?? null
   }, [currentUser])
+
+  // Cross-device "Continue Watching" sync. Keyed by account email + profile so
+  // the same person sees the same history on every device they sign in on.
+  const watchHistorySyncKey = currentUser?.email
+    ? `${currentUser.email.toLowerCase()}::${currentUser.name}`
+    : ''
+
+  // Pull the remote history when the active account/profile changes and merge
+  // it into the local cache (newest entry per title wins).
+  useEffect(() => {
+    if (!watchHistorySyncKey) {
+      return
+    }
+    let cancelled = false
+    const profileAtFetch = currentUser?.name ?? null
+    void (async () => {
+      const remote = await fetchRemoteWatchHistory(watchHistorySyncKey)
+      if (cancelled || !remote || loadedProfileRef.current !== profileAtFetch) {
+        return
+      }
+      setWatchHistory((local) => mergeWatchHistory(local, remote as WatchHistory))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [watchHistorySyncKey])
+
+  // Debounced push of local history changes back to the server.
+  useEffect(() => {
+    if (!watchHistorySyncKey || loadedProfileRef.current !== (currentUser?.name ?? null)) {
+      return
+    }
+    const handle = window.setTimeout(() => {
+      void saveRemoteWatchHistory(watchHistorySyncKey, watchHistory)
+    }, 1500)
+    return () => {
+      window.clearTimeout(handle)
+    }
+  }, [watchHistory, watchHistorySyncKey])
 
   // Record this real device as a signed-in session for the account, so the
   // "Manage Devices" screen reflects actual devices (not sample data). Runs

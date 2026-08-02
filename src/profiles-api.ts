@@ -51,6 +51,51 @@ export async function saveAccountProfiles(
   }
 }
 
+// Cross-device "Continue Watching" sync. Keyed by `${email}::${profileName}`.
+// Returns the remote history map, or null when unavailable/unconfigured.
+export async function fetchRemoteWatchHistory(
+  key: string,
+): Promise<Record<string, any> | null> {
+  if (!key) {
+    return null
+  }
+
+  try {
+    const response = await fetch(`/api/watch-history?key=${encodeURIComponent(key)}`)
+    const body = (await response.json()) as {
+      ok?: boolean
+      history?: Record<string, any> | null
+    }
+
+    if (!response.ok || !body.ok) {
+      return null
+    }
+
+    return body.history && typeof body.history === 'object' ? body.history : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveRemoteWatchHistory(
+  key: string,
+  history: Record<string, any>,
+): Promise<void> {
+  if (!key) {
+    return
+  }
+
+  try {
+    await fetch('/api/watch-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, history }),
+    })
+  } catch {
+    // Best-effort — the local cache still holds the latest history.
+  }
+}
+
 // Verify a candidate Lord PIN server-side. The PIN itself is never sent to the
 // client — the server only answers ok/no.
 export async function verifyRemoteLordPin(pin: string): Promise<boolean> {

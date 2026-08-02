@@ -90,3 +90,56 @@ export async function saveAccountProfiles(
     throw new Error(`Supabase write failed (${response.status}). ${detail}`.trim())
   }
 }
+
+// Cross-device "Continue Watching" sync. Keyed by `${email}::${profileName}` so
+// the same account+profile shares its watch history across devices.
+//
+// Expected table (run once in the Supabase SQL editor):
+//
+//   create table if not exists account_watch_history (
+//     key        text primary key,
+//     data       jsonb not null default '{}'::jsonb,
+//     updated_at timestamptz not null default now()
+//   );
+//   alter table account_watch_history enable row level security;
+
+export async function fetchWatchHistory(
+  config: SupabaseConfig,
+  key: string,
+): Promise<Record<string, unknown> | null> {
+  const url = `${config.url}/rest/v1/account_watch_history?key=eq.${encodeURIComponent(
+    key,
+  )}&select=data`
+
+  const response = await fetch(url, { headers: restHeaders(config) })
+  if (!response.ok) {
+    throw new Error(`Supabase watch-history read failed (${response.status}).`)
+  }
+
+  const rows = (await response.json()) as Array<{ data?: Record<string, unknown> }>
+  if (!rows.length) {
+    return null
+  }
+  return rows[0].data && typeof rows[0].data === 'object' ? rows[0].data : {}
+}
+
+export async function saveWatchHistory(
+  config: SupabaseConfig,
+  key: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const url = `${config.url}/rest/v1/account_watch_history?on_conflict=key`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...restHeaders(config),
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify([{ key, data, updated_at: new Date().toISOString() }]),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Supabase watch-history write failed (${response.status}).`)
+  }
+}
