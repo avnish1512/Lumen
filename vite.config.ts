@@ -53,6 +53,7 @@ import {
   fetchMangaDetail,
   fetchMangaList,
   searchMangaList,
+  configureMangadexAuth,
 } from './api/_lib/mangahook-core'
 import {
   fetchLiveImage,
@@ -1283,10 +1284,11 @@ function imgDevProxy(): Plugin {
   }
 }
 
-function mangahookDevProxy(): Plugin {
+function mangahookDevProxy(env: Record<string, string | undefined>): Plugin {
   return {
     name: 'mangahook-dev-proxy',
     configureServer(server) {
+      configureMangadexAuth(env)
       server.middlewares.use('/api/mangahook', async (req: IncomingMessage, res) => {
         if (req.method && req.method !== 'GET') {
           sendJson(res, 405, { error: 'Method not allowed.' })
@@ -1796,7 +1798,7 @@ export default defineConfig(({ mode }) => {
       profilesDevProxy(env),
       watchHistoryDevProxy(env),
       imgDevProxy(),
-      mangahookDevProxy(),
+      mangahookDevProxy(env),
       livetvDevProxy(env),
       posterDevProxy(env),
       watchPartyDevProxy(env),

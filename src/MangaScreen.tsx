@@ -1,5 +1,5 @@
-// Manga browsing + reading screen (Netflix/Anime UI). Backed by the MangaHook
-// API (mangakakalot.tv) via src/manga.ts, proxied through /api/mangahook.
+// Manga browsing + reading screen (Netflix/Anime UI). Backed by MangaDex via
+// src/manga.ts, proxied through /api/mangahook.
 
 import { ChevronLeft, LoaderCircle, Search, BookOpen } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'

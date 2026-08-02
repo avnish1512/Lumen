@@ -1,7 +1,7 @@
 // Manga browsing + reading client. Goes through our `/api/mangahook` proxy,
-// which serves a Jikan (MyAnimeList) catalog for browse/search/detail and
-// MangaDex for chapters + page images. Cover art (MyAnimeList CDN) and page
-// images (MangaDex) both allow hotlinking, so they're used as direct URLs.
+// which is powered entirely by MangaDex (catalog, search, detail, chapters and
+// page images). Cover art and page images both allow hotlinking, so they're
+// used as direct URLs.
 
 const PROXY = '/api/mangahook'
 
@@ -137,8 +137,8 @@ export async function fetchChapters(mangaId: string): Promise<MangaChapter[]> {
     new URLSearchParams({ action: 'detail', id: mangaId }),
   )
   const chapters = (body?.chapterList ?? []).map(chapterToModel).filter((c) => c.id)
-  // mangakakalot lists chapters newest-first; reverse so index 0 is chapter 1
-  // and "Start reading" opens from the beginning.
+  // The API returns chapters newest-first; reverse so index 0 is chapter 1 and
+  // "Start reading" opens from the beginning.
   chapters.reverse()
   return chapters
 }

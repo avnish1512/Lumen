@@ -203,7 +203,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return
   }
 
-  // ---- manga (public JSON proxy: Jikan catalog + MangaDex reading) ----
+  // ---- manga (public JSON proxy: MangaDex catalog + reading) ----
   if (kind === 'manga') {
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600')
     const action = qv(req.query.action) ?? 'list'
