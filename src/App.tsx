@@ -395,7 +395,7 @@ function isStreamProvider(value: string | null): value is StreamProvider {
     value === 'multiembed-vip' ||
     value === 'vidking' ||
     value === 'megaplay' ||
-    value === 'animeplay' ||
+    value === 'megabuzz' ||
     value === 'oceanplay'
   )
 }
@@ -5740,7 +5740,7 @@ function WatchScreen({
       movie.genres.includes('Animation') ||
       designMode === 'netflix')
 
-  const animeProviderIds: StreamProvider[] = ['megaplay', 'animeplay']
+  const animeProviderIds: StreamProvider[] = ['megaplay', 'megabuzz']
 
   const activeProviderId = isHentai
     ? 'oceanplay'
@@ -5840,10 +5840,10 @@ function WatchScreen({
     ? Array.from({ length: activeWatchSeason.episodeCount }, (_, index) => index + 1)
     : []
 
-  // MegaPlay / AnimePlay post playback events to the parent window. Use the
+  // MegaPlay (VidNest) posts playback events to the parent window. Use the
   // first time/watching-log event to flag the title as "continue watching".
   useEffect(() => {
-    if (activeProviderId !== 'megaplay' && activeProviderId !== 'animeplay') {
+    if (activeProviderId !== 'megaplay') {
       return
     }
 
@@ -5853,7 +5853,6 @@ function WatchScreen({
       if (
         typeof event.origin === 'string' &&
         !event.origin.includes('vidnest.fun') &&
-        !event.origin.includes('animeplay.cfd') &&
         !event.origin.includes('megaplay.buzz')
       ) {
         return
@@ -5923,7 +5922,9 @@ function WatchScreen({
             title={`${movie.title} stream`}
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
-            referrerPolicy="no-referrer"
+            // MegaBuzz (megaplay.buzz) requires a referer; every other embed is
+            // sent with no referer for privacy.
+            referrerPolicy={activeProviderId === 'megabuzz' ? 'origin' : 'no-referrer'}
             sandbox={
               streamSandboxEnabled
                 ? 'allow-forms allow-presentation allow-same-origin allow-scripts'

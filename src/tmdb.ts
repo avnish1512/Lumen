@@ -14,7 +14,7 @@ export type StreamProvider =
   | 'multiembed-vip'
   | 'vidking'
   | 'megaplay'
-  | 'animeplay'
+  | 'megabuzz'
   | 'oceanplay'
 
 export type StreamProviderOption = {
@@ -132,14 +132,14 @@ export const streamProviderOptions: StreamProviderOption[] = [
   },
   {
     id: 'megaplay',
-    name: 'MegaPlay',
-    logo: 'MP',
+    name: 'VidNest',
+    logo: 'VN',
     description: 'Anime · AniList',
   },
   {
-    id: 'animeplay',
-    name: 'AnimePlay',
-    logo: 'AP',
+    id: 'megabuzz',
+    name: 'MegaPlay',
+    logo: 'MP',
     description: 'Anime · AniList',
   },
   {
@@ -582,32 +582,20 @@ export function buildStreamUrl(
     return `${rawUrl}${separator}la=${laValue}`
   }
 
-  if (provider === 'megaplay' || provider === 'animeplay') {
-    // Both anime players resolve straight from the AniList id + episode, which
-    // is all the app carries for anime (there is no HiAnime/TMDB id here).
-    //
-    // NOTE: the old megaplay.buzz/animeplay.cfd `/stream/ani/{anilistId}` paths
-    // are dead — they expect a HiAnime episode id and now return a 410 error.
-    // Two separate anime servers, both AniList-native and sub/dub aware:
-    //   MegaPlay  -> https://vidnest.fun/anime/{anilistId}/{ep}/{sub|dub}
-    //   AnimePlay -> https://animeplay.cfd/stream/ani/{anilistId}/{ep}/{sub|dub}
-    //
-    // animeplay.cfd is a thin wrapper around megaplay.buzz that supplies the
-    // Referer megaplay requires, so it still plays even though the app's stream
-    // iframe uses referrerPolicy="no-referrer". (Direct megaplay.buzz would
-    // 410 under no-referrer, which is why MegaPlay uses VidNest instead.)
+  if (provider === 'megaplay' || provider === 'megabuzz') {
+    // AniList-native anime servers (the app carries no HiAnime/TMDB id for
+    // anime), both sub/dub aware and keyed by the AniList id + episode:
+    //   MegaPlay -> https://vidnest.fun/anime/{anilistId}/{ep}/{sub|dub}
+    //   MegaBuzz -> https://megaplay.buzz/stream/ani/{anilistId}/{ep}/{sub|dub}
+    // MegaBuzz needs a referer (see the iframe's referrerPolicy in WatchScreen).
     if (!movie.anilistId) {
       return ''
     }
-
     const ep = movie.streamEpisode ?? 1
     const language = movie.streamLanguage === 'dub' ? 'dub' : 'sub'
-
-    if (provider === 'animeplay') {
-      return `https://animeplay.cfd/stream/ani/${movie.anilistId}/${ep}/${language}`
-    }
-
-    return `https://vidnest.fun/anime/${movie.anilistId}/${ep}/${language}`
+    return provider === 'megabuzz'
+      ? `https://megaplay.buzz/stream/ani/${movie.anilistId}/${ep}/${language}`
+      : `https://vidnest.fun/anime/${movie.anilistId}/${ep}/${language}`
   }
 
   if (!movie.tmdbId) {
