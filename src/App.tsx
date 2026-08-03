@@ -1463,6 +1463,11 @@ function App() {
     // instead of briefly showing the other mode's carried-over hero/rails.
     setHomeHeroMovie(null)
     setDramaHeroMovie(null)
+    // Keep the Lumen (apple) and Anime (netflix) searches independent — don't
+    // carry one mode's query/results into the other.
+    setSearchQuery('')
+    setSearchResults([])
+    setSearchError('')
   }
 
   const handleAddProfile = (name: string, avatarColor: string) => {
@@ -3227,9 +3232,6 @@ function App() {
           onClear={handleClearSearch}
           onOpenDetail={openDetail}
           onClose={() => setScreen('home')}
-          currentUser={currentUser}
-          onProfile={openProfileOrLogin}
-          profiles={profiles}
           designMode={designMode}
           searchRecommendations={
             designMode === 'netflix'
@@ -6108,6 +6110,7 @@ function WatchScreen({
             </span>
           </label>
 
+
           <div className="server-selector" role="radiogroup" aria-label="Streaming server">
             {(() => {
               const filteredOptions = isHentai
@@ -6184,9 +6187,6 @@ type SearchScreenProps = {
   onClear: () => void
   onOpenDetail: (movie: Movie) => void
   onClose: () => void
-  currentUser: UserInfo | null
-  onProfile: () => void
-  profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
   searchRecommendations: Movie[]
   searchMode: 'anime' | 'drama'
@@ -6204,9 +6204,6 @@ function SearchScreen({
   onClear,
   onOpenDetail,
   onClose,
-  currentUser,
-  onProfile,
-  profiles,
   designMode,
   searchRecommendations,
   searchMode,
@@ -6313,14 +6310,6 @@ function SearchScreen({
       ) : (
         <header className="search-header">
           <h1>Search</h1>
-          <button 
-            className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
-            type="button" 
-            title="Profile"
-            onClick={onProfile}
-          >
-            {renderProfileAvatarMini(currentUser, profiles)}
-          </button>
         </header>
       )}
 
