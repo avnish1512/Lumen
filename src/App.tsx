@@ -1834,11 +1834,43 @@ function App() {
     )
   }, [dramaList, dramaHeroMovie, dramaRails])
 
-  const relatedMedia = selectedMovie?.isAnime
-    ? anime
-    : selectedMovie && isTvShow(selectedMovie)
-      ? tvShows
-      : movies
+  const [showSetLordPin, setShowSetLordPin] = useState(false)
+  const [lordMovies, setLordMovies] = useState<Movie[]>([])
+  const [lordRails, setLordRails] = useState<LordRail[]>([])
+  const [lordLoading, setLordLoading] = useState(false)
+  const [lordBackScreen, setLordBackScreen] = useState<Screen>('home')
+
+  const isHentaiSelectedMovie = Boolean(
+    selectedMovie &&
+      (selectedMovie.isHentaiOcean ||
+        selectedMovie.hentaiSlug ||
+        selectedMovie.id.startsWith('hentaiocean-') ||
+        selectedMovie.genres.some((g) => g.toLowerCase() === 'hentai')),
+  )
+
+  useEffect(() => {
+    if (
+      (screen === 'lord' || isHentaiSelectedMovie) &&
+      lordMovies.length === 0 &&
+      !lordLoading
+    ) {
+      setLordLoading(true)
+      void fetchMatureCollection()
+        .then(({ movies, rails }) => {
+          setLordMovies(movies || [])
+          setLordRails(rails || [])
+        })
+        .finally(() => setLordLoading(false))
+    }
+  }, [screen, isHentaiSelectedMovie, lordMovies.length, lordLoading])
+
+  const relatedMedia = isHentaiSelectedMovie
+    ? lordMovies
+    : selectedMovie?.isAnime
+      ? anime
+      : selectedMovie && isTvShow(selectedMovie)
+        ? tvShows
+        : movies
   const requiredMedia = screen === 'tv' ? tvShows : screen === 'anime' ? anime : movies
   const needsMovieBootstrap =
     screen === 'home' ||
@@ -1913,11 +1945,6 @@ function App() {
   // "Lord" hidden profile: tapping the menu item asks for a 4-digit PIN; a
   // correct PIN opens the mature (R-rated, non-explicit) collection screen.
   // (showLordPin is declared earlier, above the remote-PIN refresh effect.)
-  const [showSetLordPin, setShowSetLordPin] = useState(false)
-  const [lordMovies, setLordMovies] = useState<Movie[]>([])
-  const [lordRails, setLordRails] = useState<LordRail[]>([])
-  const [lordLoading, setLordLoading] = useState(false)
-  const [lordBackScreen, setLordBackScreen] = useState<Screen>('home')
 
   const openLord = () => {
     setShowLordPin(true)
@@ -5788,6 +5815,11 @@ function WatchScreen({
     movie.isHentaiOcean ||
       movie.genres.some((g) => g.toLowerCase() === 'hentai'),
   )
+  const isPhubVideo = Boolean(
+    movie.id.startsWith('phub-') ||
+      movie.label === 'PHub' ||
+      movie.hentaiSlug?.startsWith('phub-'),
+  )
   const isTmdbTitle = !isHentai && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
   const isAnimeMovie =
     !isTmdbTitle &&
@@ -6032,28 +6064,30 @@ function WatchScreen({
       </section>
 
       <div className="watch-topbar">
-        <button
-          className="watch-play"
-          type="button"
-          disabled={!streamUrl || streamLoading}
-          onClick={openCurrentStream}
-          title={streamUrl ? `Open ${currentProvider.name}` : 'Waiting for stream id'}
-          aria-label={
-            streamUrl
-              ? `Open ${currentProvider.name} stream for ${movie.title}`
-              : `Waiting for stream id for ${movie.title}`
-          }
-        >
-          <Play fill="currentColor" strokeWidth={0} />
-          <span>Watch</span>
-        </button>
+        {!isPhubVideo && (
+          <button
+            className="watch-play"
+            type="button"
+            disabled={!streamUrl || streamLoading}
+            onClick={openCurrentStream}
+            title={streamUrl ? `Open ${currentProvider.name}` : 'Waiting for stream id'}
+            aria-label={
+              streamUrl
+                ? `Open ${currentProvider.name} stream for ${movie.title}`
+                : `Waiting for stream id for ${movie.title}`
+            }
+          >
+            <Play fill="currentColor" strokeWidth={0} />
+            <span>Watch</span>
+          </button>
+        )}
 
         <div className="watch-title-block">
           <h2 className="watch-title-main">{movie.title}</h2>
           <p className="watch-title-genre">{movie.genres[0] ?? 'Movie'}</p>
         </div>
 
-        {isAnimeMovie || isHentai ? (
+        {(isAnimeMovie || isHentai) && !isPhubVideo ? (
           <div className="watch-lang-toggle" role="group" aria-label="Audio language">
             <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
               SUB
@@ -6070,81 +6104,89 @@ function WatchScreen({
       <div className="watch-lower">
         <div className="watch-lower-left">
           <p className="watch-synopsis">
-            <strong>{movie.year}:</strong> {movie.synopsis}
+            {!isPhubVideo && <strong>{movie.year}: </strong>}
+            {movie.synopsis}
           </p>
-          <Metadata movie={movie} />
+          {!isPhubVideo && <Metadata movie={movie} />}
 
-          <button
-            type="button"
-            className="watch-mylist-btn"
-            onClick={onSave}
-            title={isSaved ? 'Saved to My List' : 'Add to My List'}
-          >
-            {isSaved ? <Check /> : <Plus />}
-            <span>{isSaved ? 'Saved' : 'My List'}</span>
-          </button>
+          {!isPhubVideo && (
+            <button
+              type="button"
+              className="watch-mylist-btn"
+              onClick={onSave}
+              title={isSaved ? 'Saved to My List' : 'Add to My List'}
+            >
+              {isSaved ? <Check /> : <Plus />}
+              <span>{isSaved ? 'Saved' : 'My List'}</span>
+            </button>
+          )}
 
-          <button
-            type="button"
-            className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
-            onClick={onToggleLike}
-            aria-pressed={isLiked}
-            title={isLiked ? 'Liked' : 'Like'}
-          >
-            <Heart fill={isLiked ? 'currentColor' : 'none'} />
-            <span>{isLiked ? 'Liked' : 'Like'}</span>
-          </button>
+          {!isPhubVideo && (
+            <button
+              type="button"
+              className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
+              onClick={onToggleLike}
+              aria-pressed={isLiked}
+              title={isLiked ? 'Liked' : 'Like'}
+            >
+              <Heart fill={isLiked ? 'currentColor' : 'none'} />
+              <span>{isLiked ? 'Liked' : 'Like'}</span>
+            </button>
+          )}
 
-          <label className="stream-sandbox-toggle">
-            <span>
-              <strong>Sandbox</strong>
-              <small>
-                {streamSandboxEnabled ? 'Blocks popups and redirects' : 'Allows full player behavior'}
-              </small>
-            </span>
-            <input
-              type="checkbox"
-              checked={streamSandboxEnabled}
-              onChange={(event) => onStreamSandboxChange(event.target.checked)}
-            />
-            <span aria-hidden="true" className="toggle-track">
-              <span />
-            </span>
-          </label>
+          {!isPhubVideo && (
+            <label className="stream-sandbox-toggle">
+              <span>
+                <strong>Sandbox</strong>
+                <small>
+                  {streamSandboxEnabled ? 'Blocks popups and redirects' : 'Allows full player behavior'}
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={streamSandboxEnabled}
+                onChange={(event) => onStreamSandboxChange(event.target.checked)}
+              />
+              <span aria-hidden="true" className="toggle-track">
+                <span />
+              </span>
+            </label>
+          )}
 
+          {!isPhubVideo && (
+            <div className="server-selector" role="radiogroup" aria-label="Streaming server">
+              {(() => {
+                const filteredOptions = isHentai
+                  ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                  : streamProviderOptions.filter((provider) => {
+                      if (provider.id === 'oceanplay') return false
+                      const isAnimeProvider = animeProviderIds.includes(provider.id)
+                      return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
+                    })
 
-          <div className="server-selector" role="radiogroup" aria-label="Streaming server">
-            {(() => {
-              const filteredOptions = isHentai
-                ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
-                : streamProviderOptions.filter((provider) => {
-                    if (provider.id === 'oceanplay') return false
-                    const isAnimeProvider = animeProviderIds.includes(provider.id)
-                    return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
-                  })
-
-              return filteredOptions.map((provider) => {
-                const isActive = provider.id === activeProviderId
-                return (
-                  <button
-                    key={provider.id}
-                    className={`server-option${isActive ? ' active' : ''}`}
-                    type="button"
-                    role="radio"
-                    aria-checked={isActive}
-                    onClick={() => onStreamProviderChange(provider.id)}
-                  >
-                    <span className="provider-logo">{provider.logo}</span>
-                    <span className="server-copy">
-                      <strong>{provider.name}</strong>
-                      <small>{provider.description}</small>
-                    </span>
-                    {isActive ? <Check /> : <ChevronRight />}
-                  </button>
-                )
-              })
-            })()}
-          </div>
+                return filteredOptions.map((provider) => {
+                  const isActive = provider.id === activeProviderId
+                  return (
+                    <button
+                      key={provider.id}
+                      className={`server-option${isActive ? ' active' : ''}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={isActive}
+                      onClick={() => onStreamProviderChange(provider.id)}
+                    >
+                      <span className="provider-logo">{provider.logo}</span>
+                      <span className="server-copy">
+                        <strong>{provider.name}</strong>
+                        <small>{provider.description}</small>
+                      </span>
+                      {isActive ? <Check /> : <ChevronRight />}
+                    </button>
+                  )
+                })
+              })()}
+            </div>
+          )}
         </div>
 
         {isSeries && (
@@ -10323,19 +10365,33 @@ type LordScreenProps = {
 
 // Standalone hero + rails layout for the unlocked "Lord" profile.
 function LordScreen({
-  movies,
-  rails,
-  loading,
+  movies = [],
+  rails = [],
+  loading = false,
   continueMovies = [],
+  currentUser,
+  profiles = [],
   onOpenDetail,
   onPlay,
+  onSelectProfile,
   onBack,
   onClearContinueWatching,
   onMarkWatched,
   onRemoveContinue,
   onRemoveWatchlist,
 }: LordScreenProps) {
-  const hero = movies[0] ?? null
+  const rotatedMovies = useMemo(() => {
+    return rotateByDailySeed(movies || [], 1)
+  }, [movies])
+
+  const hero = rotatedMovies[0] ?? null
+
+  const rotatedRails = useMemo(() => {
+    return (rails || []).map((rail, railIndex) => ({
+      ...rail,
+      items: rotateByDailySeed(rail?.items || [], (railIndex + 1) * 4),
+    }))
+  }, [rails])
 
   const [activeLordTab, setActiveLordTab] = useState<'collection' | 'phub'>('collection')
   const [query, setQuery] = useState('')
@@ -10346,10 +10402,10 @@ function LordScreen({
     if (!trimmed) {
       return []
     }
-    return movies
+    return rotatedMovies
       .filter((movie) => movie.title.toLowerCase().includes(trimmed))
       .slice(0, 8)
-  }, [query, movies])
+  }, [query, rotatedMovies])
 
   const showDropdown = searchFocused && query.trim().length > 0
 
@@ -10396,7 +10452,7 @@ function LordScreen({
               onClick={() => setActiveLordTab('collection')}
             >
               <Crown size={15} />
-              <span>Collection</span>
+              <span>Hentai</span>
             </button>
             <button
               className={`lord-tab-btn ${activeLordTab === 'phub' ? 'is-active' : ''}`}
@@ -10432,72 +10488,70 @@ function LordScreen({
         </div>
 
         <div className="lord-topbar-right">
-          {activeLordTab === 'collection' && (
-            <div className={`lord-search${searchFocused ? ' is-focused' : ''}`}>
-              <div className="lord-search-bar">
-                <Search size={18} />
-                <input
-                  type="text"
-                  className="lord-search-input"
-                  placeholder="Titles, genres…"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onFocus={() => setSearchFocused(true)}
-                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-                  aria-label="Search titles"
-                />
-                {query && (
-                  <button
-                    type="button"
-                    className="lord-search-clear"
-                    onClick={() => setQuery('')}
-                    aria-label="Clear search"
-                  >
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
-
-              {showDropdown && (
-                <ul className="lord-search-results" role="listbox">
-                  {matches.length === 0 ? (
-                    <li className="lord-search-empty">No matches</li>
-                  ) : (
-                    matches.map((movie) => (
-                      <li key={movie.id}>
-                        <button
-                          type="button"
-                          className="lord-search-result"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => pickMatch(movie)}
-                        >
-                          <img
-                            src={movie.poster || movie.still || movie.hero}
-                            alt=""
-                            loading="lazy"
-                            onError={(event) => {
-                              ;(event.target as HTMLImageElement).style.visibility = 'hidden'
-                            }}
-                          />
-                          <span className="lord-search-result-text">
-                            <span className="lord-search-result-title">{movie.title}</span>
-                            <span className="lord-search-result-meta">
-                              {movie.year} · {movie.type}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    ))
-                  )}
-                </ul>
+          <div className={`lord-search${searchFocused ? ' is-focused' : ''}`}>
+            <div className="lord-search-bar">
+              <Search size={18} />
+              <input
+                type="text"
+                className="lord-search-input"
+                placeholder={activeLordTab === 'phub' ? 'Search videos…' : 'Titles, genres…'}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                aria-label="Search titles"
+              />
+              {query && (
+                <button
+                  type="button"
+                  className="lord-search-clear"
+                  onClick={() => setQuery('')}
+                  aria-label="Clear search"
+                >
+                  <X size={16} />
+                </button>
               )}
             </div>
-          )}
+
+            {activeLordTab === 'collection' && showDropdown && (
+              <ul className="lord-search-results" role="listbox">
+                {matches.length === 0 ? (
+                  <li className="lord-search-empty">No matches</li>
+                ) : (
+                  matches.map((movie) => (
+                    <li key={movie.id}>
+                      <button
+                        type="button"
+                        className="lord-search-result"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => pickMatch(movie)}
+                      >
+                        <img
+                          src={movie.poster || movie.still || movie.hero}
+                          alt=""
+                          loading="lazy"
+                          onError={(event) => {
+                            ;(event.target as HTMLImageElement).style.visibility = 'hidden'
+                          }}
+                        />
+                        <span className="lord-search-result-text">
+                          <span className="lord-search-result-title">{movie.title}</span>
+                          <span className="lord-search-result-meta">
+                            {movie.year} · {movie.type}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+          </div>
         </div>
       </header>
 
       {activeLordTab === 'phub' ? (
-        <LordPhubSection />
+        <LordPhubSection searchQuery={query} onOpenDetail={onOpenDetail} onPlay={onPlay} />
       ) : loading ? (
         <div className="lord-empty">
           <LoaderCircle className="spin-icon" />
@@ -10554,7 +10608,7 @@ function LordScreen({
                 onRemoveWatchlist={onRemoveWatchlist}
               />
             )}
-            {rails.map((rail) => (
+            {rotatedRails.map((rail) => (
               <LordRailRow
                 key={rail.title}
                 rail={rail}
@@ -10564,6 +10618,28 @@ function LordScreen({
           </div>
         </>
       )}
+
+      {/* Mobile Bottom Dock for Lord Screen */}
+      <div className="bottom-ui lord-bottom-ui">
+        <nav className="tab-dock" aria-label="Lord Navigation">
+          <button
+            className={activeLordTab === 'collection' ? 'active' : ''}
+            type="button"
+            onClick={() => setActiveLordTab('collection')}
+          >
+            <Crown size={16} />
+            <span>Hentai</span>
+          </button>
+          <button
+            className={activeLordTab === 'phub' ? 'active' : ''}
+            type="button"
+            onClick={() => setActiveLordTab('phub')}
+          >
+            <Code size={16} />
+            <span>PHub</span>
+          </button>
+        </nav>
+      </div>
     </section>
   )
 }
@@ -10888,8 +10964,21 @@ const INITIAL_HANIME_VIDEOS: HanimeVideo[] = [
   },
 ]
 
+function cleanHtmlEntities(str: string): string {
+  if (!str) return ''
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&bull;?/g, '•')
+    .replace(/&bull_/g, '•')
+    .replace(/&nbsp;/g, ' ')
+}
+
 function normalizeVideoItem(item: any, index: number): HanimeVideo {
-  const title = item.name || item.vod_name || item.title || item.origin_name || 'Untitled Video'
+  const title = cleanHtmlEntities(item.name || item.vod_name || item.title || item.origin_name || 'Untitled Video')
   let thumb = item.thumb_url || item.poster_url || item.vod_pic || ''
   if (thumb.startsWith('http://')) {
     thumb = thumb.replace('http://', 'https://')
@@ -10948,15 +11037,52 @@ function normalizeVideoItem(item: any, index: number): HanimeVideo {
   }
 }
 
-function LordPhubSection() {
+const PHUB_CATEGORIES = [
+  'All',
+  'Teen',
+  'Femdom',
+  'Latina',
+  'Cumshot',
+  'Amateur',
+  'MILF',
+  'Asian Woman',
+  'ASMR',
+  'Japanese',
+  'Lesbian',
+]
+
+function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay }: { searchQuery?: string; onOpenDetail: (movie: Movie) => void; onPlay: (movie: Movie) => void }) {
   const [videos, setVideos] = useState<HanimeVideo[]>(INITIAL_HANIME_VIDEOS)
   const [loading, setLoading] = useState(false)
-  const [selectedCat, setSelectedCat] = useState('All')
-  const [searchQuery, setSearchQuery] = useState('')
+
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(6500)
-  const [activePlayerVideo, setActivePlayerVideo] = useState<HanimeVideo | null>(null)
-
+  const hanimeToMovie = (video: HanimeVideo): Movie => ({
+    id: `phub-${video.id}`,
+    rank: 0,
+    title: cleanHtmlEntities(video.title),
+    logoTitle: '',
+    label: 'PHub',
+    type: 'Movie',
+    genres: [video.category],
+    year: new Date().getFullYear().toString(),
+    runtime: video.duration,
+    rating: 'N/A',
+    maturity: '18+',
+    progress: 0,
+    hero: video.poster || video.thumb,
+    poster: video.poster || video.thumb,
+    still: video.thumb,
+    synopsis: cleanHtmlEntities(video.description || `${video.category} · ${video.duration}`),
+    cast: (video.actors || []).map(cleanHtmlEntities),
+    director: '',
+    awards: '',
+    boxOffice: '',
+    ratings: [],
+    embedUrl: video.embedUrl,
+    isHentaiOcean: true,
+    hentaiSlug: video.code || `phub-${video.id}`,
+  })
   useEffect(() => {
     let active = true
     async function loadApiVideos() {
@@ -10986,186 +11112,147 @@ function LordPhubSection() {
     }
   }, [page, searchQuery])
 
-  const filteredVideos = useMemo(() => {
-    return videos.filter((v) => {
-      if (selectedCat !== 'All' && v.category.toLowerCase() !== selectedCat.toLowerCase()) {
-        return false
+  const railsData = useMemo(() => {
+    if (videos.length === 0) return []
+
+    const localRotate = (arr: HanimeVideo[], shift: number) => {
+      if (arr.length === 0) return []
+      const day = new Date().getDate()
+      const start = (day + shift) % arr.length
+      return [...arr.slice(start), ...arr.slice(0, start)]
+    }
+
+    return PHUB_CATEGORIES.map((cat, idx) => {
+      let items: HanimeVideo[]
+      if (cat === 'All') {
+        items = localRotate(videos, 1)
+      } else {
+        const catLower = cat.toLowerCase()
+        const matched = videos.filter(
+          (v) =>
+            v.category.toLowerCase().includes(catLower) ||
+            v.title.toLowerCase().includes(catLower),
+        )
+        items = matched.length > 0 ? localRotate(matched, idx * 3) : localRotate(videos, idx * 5)
       }
-      if (searchQuery.trim() && !v.title.toLowerCase().includes(searchQuery.trim().toLowerCase())) {
-        return false
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase()
+        items = items.filter((v) => v.title.toLowerCase().includes(q))
       }
-      return true
-    })
-  }, [videos, selectedCat, searchQuery])
+
+      return { title: cat, items }
+    }).filter((r) => r.items.length > 0)
+  }, [videos, searchQuery])
 
   return (
     <div className="hanime-container">
-      <header className="hanime-header">
-        <div className="hanime-title-wrap">
-          <h2 className="hanime-section-title">Latest Videos</h2>
-          <div className="hanime-title-accent" />
-        </div>
-
-        <div className="hanime-controls">
-          <div className="hanime-search-bar">
-            <Search size={16} />
-            <input
-              type="text"
-              placeholder="Search videos..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value)
-                setPage(1)
-              }}
-            />
-            {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery('')} className="phub-search-clear">
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          <div className="hanime-pills">
-            {['All', 'Teen', 'Femdom', 'Latina', 'Cumshot', 'Amateur', 'MILF', 'Asian Woman', 'ASMR', 'Japanese', 'Lesbian'].map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                className={`hanime-pill ${selectedCat === cat ? 'is-active' : ''}`}
-                onClick={() => setSelectedCat(cat)}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-      </header>
-
       {loading ? (
         <div className="phub-loading">
           <LoaderCircle className="spin-icon" size={32} />
           <p>Loading videos...</p>
         </div>
-      ) : filteredVideos.length === 0 ? (
+      ) : railsData.length === 0 ? (
         <div className="phub-empty">
           <Search size={42} />
           <p>No videos found matching your query.</p>
         </div>
       ) : (
-        <>
-          <div className="hanime-grid">
-            {filteredVideos.map((video, idx) => (
-              <div
-                key={`${video.id}-${idx}`}
-                className="hanime-card"
-                onClick={() => setActivePlayerVideo(video)}
-              >
-                <div className="hanime-poster-area">
-                  <img
-                    src={video.thumb}
-                    referrerPolicy="no-referrer"
-                    alt={video.title}
-                    loading="lazy"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement
-                      target.onerror = null
-                      target.src = INITIAL_HANIME_VIDEOS[idx % INITIAL_HANIME_VIDEOS.length].thumb
-                    }}
-                  />
-
-                  {/* 4K Glowing Purple Badge */}
-                  <span className="hanime-badge-4k">4K</span>
-
-                  {/* Duration Badge */}
-                  <span className="hanime-badge-duration">{video.duration}</span>
-
-                  <div className="hanime-play-overlay">
-                    <div className="hanime-play-btn">
-                      <Play fill="#fff" size={22} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="hanime-card-body">
-                  <h3 className="hanime-card-title" title={video.title}>
-                    {video.title}
-                  </h3>
-                  <span className="hanime-card-tag">{video.category}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="phub-pagination">
-            <button
-              type="button"
-              className="phub-page-btn"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              <ChevronLeft size={16} /> Previous
-            </button>
-            <span className="phub-page-info">
-              Page {page} of {totalPages}
-            </span>
-            <button
-              type="button"
-              className="phub-page-btn"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              Next <ChevronRight size={16} />
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* Video Streaming Player Modal */}
-      {activePlayerVideo && (
-        <div className="phub-modal-backdrop" onClick={() => setActivePlayerVideo(null)}>
-          <div className="phub-modal-card" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="phub-modal-close"
-              onClick={() => setActivePlayerVideo(null)}
-            >
-              <X size={20} />
-            </button>
-
-            <div className="phub-player-container">
-              {activePlayerVideo.embedUrl.endsWith('.m3u8') ? (
-                <HlsPlayer src={activePlayerVideo.embedUrl} poster={activePlayerVideo.poster} />
-              ) : (
-                <iframe
-                  src={activePlayerVideo.embedUrl}
-                  title={activePlayerVideo.title}
-                  allowFullScreen
-                  allow="autoplay; encrypted-media"
-                />
-              )}
-            </div>
-
-            <div className="phub-modal-body">
-              <div className="phub-modal-header-row">
-                <div>
-                  <h2 className="phub-modal-title">{activePlayerVideo.title}</h2>
-                  <p className="phub-modal-meta">
-                    {activePlayerVideo.category} · Duration: {activePlayerVideo.duration}
-                  </p>
-                </div>
-                <CopyButton text={activePlayerVideo.embedUrl} />
-              </div>
-              {activePlayerVideo.actors.length > 0 && (
-                <p className="phub-modal-detail-line">
-                  <strong>Cast:</strong> {activePlayerVideo.actors.join(', ')}
-                </p>
-              )}
-              {activePlayerVideo.description && (
-                <p className="phub-modal-description">{activePlayerVideo.description}</p>
-              )}
-            </div>
-          </div>
+        <div className="lord-rails phub-rails">
+          {railsData.map((rail) => (
+            <LordPhubRailRow
+              key={rail.title}
+              title={rail.title}
+              videos={rail.items}
+              onVideoClick={(video) => onOpenDetail(hanimeToMovie(video))}
+            />
+          ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function LordPhubRailRow({
+  title,
+  videos,
+  onVideoClick,
+}: {
+  title: string
+  videos: HanimeVideo[]
+  onVideoClick: (video: HanimeVideo) => void
+}) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  const scrollRow = (direction: 1 | -1) => {
+    const row = rowRef.current
+    if (row) {
+      row.scrollBy({
+        left: direction * (row.clientWidth * 0.75),
+        behavior: 'smooth',
+      })
+    }
+  }
+
+  if (!videos || videos.length === 0) return null
+
+  return (
+    <div className="lord-rail">
+      <h2 className="lord-rail-title">{title}</h2>
+      <div className="lord-rail-viewport">
+        <button
+          className="rail-arrow rail-arrow-prev lord-rail-arrow"
+          type="button"
+          aria-label={`Scroll ${title} left`}
+          onClick={() => scrollRow(-1)}
+        >
+          <ChevronLeft />
+        </button>
+
+        <div ref={rowRef} className="lord-rail-row">
+          {videos.map((video, idx) => (
+            <div
+              key={`${video.id}-${idx}`}
+              className="hanime-card"
+              onClick={() => onVideoClick(video)}
+            >
+              <div className="hanime-poster-area">
+                <img
+                  src={video.thumb}
+                  referrerPolicy="no-referrer"
+                  alt={video.title}
+                  loading="lazy"
+                  onError={(event) => {
+                    const target = event.target as HTMLImageElement
+                    target.onerror = null
+                    target.src = INITIAL_HANIME_VIDEOS[idx % INITIAL_HANIME_VIDEOS.length].thumb
+                  }}
+                />
+                <span className="hanime-badge-4k">4K</span>
+                <span className="hanime-badge-duration">{video.duration}</span>
+                <div className="hanime-play-overlay">
+                  <div className="hanime-play-btn">
+                    <Play fill="#fff" size={22} />
+                  </div>
+                </div>
+              </div>
+              <div className="hanime-card-body">
+                <h3 className="hanime-card-title">{video.title}</h3>
+                <span className="hanime-card-tag">{video.category}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          className="rail-arrow rail-arrow-next lord-rail-arrow"
+          type="button"
+          aria-label={`Scroll ${title} right`}
+          onClick={() => scrollRow(1)}
+        >
+          <ChevronRight />
+        </button>
+      </div>
     </div>
   )
 }

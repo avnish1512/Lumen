@@ -214,4 +214,101 @@ describe('Hentai Ocean integration', () => {
     expect(localStorage.getItem('lord_pin')).toBe('9999')
     localStorage.removeItem('lord_pin')
   })
+
+  it('selects Hentai Ocean collection as related media for Hentai titles', () => {
+    const hentaiMovie: Movie = {
+      id: 'hentaiocean-test-1',
+      isHentaiOcean: true,
+      title: 'Test Hentai 1',
+      genres: ['Hentai', 'Adult'],
+      rank: 1,
+      logoTitle: 'Test Hentai 1',
+      label: 'Hentai',
+      type: 'Anime',
+      year: '2026',
+      runtime: '24 min',
+      rating: '9.0',
+      maturity: '18+',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const otherHentaiMovie: Movie = {
+      id: 'hentaiocean-test-2',
+      isHentaiOcean: true,
+      title: 'Test Hentai 2',
+      genres: ['Hentai'],
+      rank: 2,
+      logoTitle: 'Test Hentai 2',
+      label: 'Hentai',
+      type: 'Anime',
+      year: '2026',
+      runtime: '24 min',
+      rating: '9.2',
+      maturity: '18+',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const tmdbMovie: Movie = {
+      id: 'tt1234567',
+      title: 'TMDB Movie',
+      genres: ['Action'],
+      rank: 1,
+      logoTitle: 'TMDB Movie',
+      label: 'Movie',
+      type: 'Movie',
+      year: '2025',
+      runtime: '120 min',
+      rating: '7.5',
+      maturity: 'PG-13',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const lordMovies = [hentaiMovie, otherHentaiMovie]
+    const tmdbMovies = [tmdbMovie]
+
+    const getRelatedMedia = (selected: Movie, oceanList: Movie[], defaultList: Movie[]) => {
+      const isHentai = Boolean(
+        selected.isHentaiOcean ||
+          selected.hentaiSlug ||
+          selected.id.startsWith('hentaiocean-') ||
+          selected.genres.some((g) => g.toLowerCase() === 'hentai'),
+      )
+      return isHentai ? oceanList : defaultList
+    }
+
+    const relatedForHentai = getRelatedMedia(hentaiMovie, lordMovies, tmdbMovies)
+    expect(relatedForHentai).toEqual(lordMovies)
+    expect(relatedForHentai).not.toContain(tmdbMovie)
+
+    const relatedForTmdb = getRelatedMedia(tmdbMovie, lordMovies, tmdbMovies)
+    expect(relatedForTmdb).toEqual(tmdbMovies)
+  })
 })
+

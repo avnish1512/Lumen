@@ -44,12 +44,18 @@ button {
 }
 
 .home-header {
-  position: relative;
-  z-index: 3;
+  position: sticky;
+  top: 0;
+  z-index: 3000;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 28px 28px 0;
+  padding: 20px 28px 12px;
+  background: rgba(10, 10, 14, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.3s ease;
 }
 
 .home-header h1 {
@@ -628,7 +634,7 @@ button {
   line-height: 1;
 }
 
-.metadata > span:not(.outline-badge)::after {
+.metadata>span:not(.outline-badge)::after {
   content: '/';
   margin-left: 9px;
   color: rgba(255, 255, 255, 0.7);
@@ -928,11 +934,11 @@ button {
   transition: transform 180ms ease;
 }
 
-.stream-sandbox-toggle input:checked + .toggle-track {
+.stream-sandbox-toggle input:checked+.toggle-track {
   background: #2997ff;
 }
 
-.stream-sandbox-toggle input:checked + .toggle-track span {
+.stream-sandbox-toggle input:checked+.toggle-track span {
   transform: translateX(24px);
 }
 
@@ -2702,6 +2708,7 @@ button:focus-visible {
 }
 
 @media (min-width: 900px) {
+
   html,
   body {
     min-height: 100svh;
@@ -3290,6 +3297,7 @@ button:focus-visible {
 }
 
 @media (min-width: 900px) {
+
   .home-screen .movie-rail,
   .browse-screen .movie-rail {
     width: 100%;
@@ -3537,12 +3545,12 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.feature-wide-meta > span:not(.provider-badge) {
+.feature-wide-meta>span:not(.provider-badge) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.feature-wide-meta > span:not(.provider-badge, :last-child)::after {
+.feature-wide-meta>span:not(.provider-badge, :last-child)::after {
   padding-left: 7px;
   color: rgba(255, 255, 255, 0.72);
   content: '•';
@@ -4041,7 +4049,7 @@ button:focus-visible {
   }
 }
 
-.feature-wide-meta > span:not(.provider-badge, :last-child)::after {
+.feature-wide-meta>span:not(.provider-badge, :last-child)::after {
   content: '\2022';
 }
 
@@ -4121,7 +4129,7 @@ button:focus-visible {
   font-weight: 820;
 }
 
-.apple-detail-meta > span:not(:last-child, .provider-badge)::after {
+.apple-detail-meta>span:not(:last-child, .provider-badge)::after {
   padding-left: 8px;
   color: rgba(255, 255, 255, 0.74);
   content: '\2022';
@@ -4167,7 +4175,7 @@ button:focus-visible {
   font-weight: 800;
 }
 
-.detail-hero-facts > span:not(.outline-badge)::after {
+.detail-hero-facts>span:not(.outline-badge)::after {
   padding-left: 8px;
   color: rgba(255, 255, 255, 0.56);
   content: '\2022';
@@ -4799,7 +4807,7 @@ a.watch-option-card {
     line-height: 0.8;
   }
 
-  .detail-screen .apple-detail-meta > span {
+  .detail-screen .apple-detail-meta>span {
     order: 1;
   }
 
@@ -4970,6 +4978,7 @@ a.watch-option-card {
 
 /* Reference-inspired mobile hero and search layouts. */
 @media (max-width: 899px) {
+
   .home-screen .home-hero,
   .browse-screen .home-hero {
     min-height: 78svh;
@@ -5157,7 +5166,7 @@ a.watch-option-card {
   -webkit-backdrop-filter: blur(36px) saturate(1.65);
 }
 
-.search-form > svg {
+.search-form>svg {
   width: 44px;
   height: 44px;
   color: rgba(255, 255, 255, 0.9);
@@ -5218,7 +5227,7 @@ a.watch-option-card {
     padding: 0 15px;
   }
 
-  .search-form > svg {
+  .search-form>svg {
     width: 32px;
     height: 32px;
   }
@@ -5351,6 +5360,7 @@ a.watch-option-card {
 }
 
 @media (max-width: 899px) {
+
   /* Touch devices: keep arrows visible since there's no hover. */
   .episode-viewport .episode-arrow {
     opacity: 0.9;
@@ -5545,12 +5555,9 @@ a.watch-option-card {
 
 .desktop-nav nav::after {
   transform:
-    translate3d(
-      calc(var(--nav-bubble-x) + var(--nav-magnetic-x)),
+    translate3d(calc(var(--nav-bubble-x) + var(--nav-magnetic-x)),
       var(--nav-magnetic-y),
-      0
-    )
-    scale(1);
+      0) scale(1);
 }
 
 .tab-dock button,
@@ -5566,13 +5573,9 @@ a.watch-option-card {
   --nav-press-x: 1;
   --nav-press-y: 1;
   transform:
-    translate3d(
-      var(--nav-magnetic-x),
+    translate3d(var(--nav-magnetic-x),
       calc(var(--nav-magnetic-y) + var(--nav-hover-y)),
-      0
-    )
-    scale(var(--nav-hover-scale))
-    scale(var(--nav-press-x), var(--nav-press-y));
+      0) scale(var(--nav-hover-scale)) scale(var(--nav-press-x), var(--nav-press-y));
   transition:
     color 180ms ease,
     background 200ms ease,
@@ -5716,8 +5719,7 @@ a.watch-option-card {
 .desktop-brand span,
 .home-header h1 {
   display: inline-flex;
-  transform: translate3d(0, var(--nav-logo-y, 0px), 0)
-    scale(var(--nav-logo-scale, 1));
+  transform: translate3d(0, var(--nav-logo-y, 0px), 0) scale(var(--nav-logo-scale, 1));
   transition: transform 360ms var(--nav-soft);
   will-change: transform;
 }
@@ -5848,6 +5850,7 @@ a.watch-option-card {
 }
 
 @keyframes nav-squash-stretch {
+
   0%,
   100% {
     transform: scale(1);
@@ -5863,6 +5866,7 @@ a.watch-option-card {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .bottom-ui,
   .tab-dock::after,
   .desktop-nav,
@@ -5912,6 +5916,7 @@ a.watch-option-card {
 }
 
 @media (max-width: 899px) {
+
   .home-screen .home-hero,
   .browse-screen .home-hero {
     min-height: 72svh;
@@ -6772,6 +6777,7 @@ a.watch-option-card {
 
 /* Compact mobile Search and Library surfaces. */
 @media (max-width: 899px) {
+
   .search-screen,
   .library-screen {
     padding-bottom: 116px;
@@ -6858,7 +6864,7 @@ a.watch-option-card {
     padding: 0 12px;
   }
 
-  .search-form > svg {
+  .search-form>svg {
     width: 25px;
     height: 25px;
   }
@@ -6920,6 +6926,7 @@ a.watch-option-card {
 
 /* Mobile reference pass: taller heroes, no typed movie logo, smaller dock. */
 @media (max-width: 899px) {
+
   .home-screen .home-hero,
   .browse-screen .home-hero {
     min-height: 78svh;
@@ -7080,6 +7087,7 @@ a.watch-option-card {
 
 /* Final mobile hero control calibration against the Apple TV reference. */
 @media (max-width: 899px) {
+
   .home-screen .home-hero,
   .browse-screen .home-hero {
     min-height: 80svh;
@@ -7214,6 +7222,7 @@ a.watch-option-card {
 
 /* Compact mobile scale pass: match the denser reference screen. */
 @media (max-width: 899px) {
+
   .home-screen .home-hero,
   .browse-screen .home-hero {
     min-height: 62svh;
@@ -7371,6 +7380,7 @@ a.watch-option-card {
 
 /* Mobile WebView scroll should stay native; nested vertical scrollers feel laggy. */
 @media (max-width: 899px) {
+
   html,
   body,
   #root {
@@ -7470,7 +7480,7 @@ a.watch-option-card {
     font-size: 9px;
   }
 
-  .home-screen .feature-wide-meta > span:not(.provider-badge, :last-child)::after {
+  .home-screen .feature-wide-meta>span:not(.provider-badge, :last-child)::after {
     padding-left: 6px;
     content: '\00B7';
   }
@@ -7487,6 +7497,7 @@ a.watch-option-card {
 
 /* Final mobile hero depth: keep the first rail lower like the reference. */
 @media (max-width: 899px) {
+
   .home-screen .home-hero,
   .browse-screen .home-hero {
     min-height: 78svh;
@@ -7707,6 +7718,7 @@ a.watch-option-card {
 
 /* Hero swipe and visible mobile title pass. */
 @media (max-width: 899px) {
+
   .home-screen .swipeable-hero,
   .browse-screen .swipeable-hero {
     touch-action: pan-y pinch-zoom;
@@ -8104,6 +8116,7 @@ a.watch-option-card {
 
 /* Mobile hero poster fit: keep the full artwork visible like the Top 10 cards. */
 @media (max-width: 899px) {
+
   .home-screen .home-hero,
   .browse-screen .home-hero {
     background-color: #050505;
@@ -8172,6 +8185,7 @@ a.watch-option-card {
 
 /* Home hero spacing: extend the artwork and soften the handoff into the first rail. */
 @media (min-width: 900px) {
+
   .home-screen .home-hero,
   .browse-screen .home-hero {
     height: 81vh;
@@ -8351,9 +8365,11 @@ body:has(.login-screen) {
   0% {
     transform: translate(0, 0) scale(1);
   }
+
   50% {
     transform: translate(80px, 50px) scale(1.15);
   }
+
   100% {
     transform: translate(-40px, -80px) scale(0.9);
   }
@@ -8396,7 +8412,7 @@ body:has(.login-screen) {
 /* Center the card when it fits, but allow full scrolling when it's taller
    than the viewport (e.g. the Account screen). margin-block: 20px avoids the
    flexbox bug where centered overflow content can't be scrolled into view. */
-.login-content > * {
+.login-content>* {
   margin-block: 20px;
   flex-shrink: 0;
 }
@@ -8408,7 +8424,7 @@ body:has(.login-screen) {
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(20, 20, 25, 0.65);
-  box-shadow: 
+  box-shadow:
     0 4px 30px rgba(0, 0, 0, 0.4),
     inset 0 1px 1px rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(25px) saturate(180%);
@@ -8595,8 +8611,13 @@ body:has(.login-screen) {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .divider-or {
@@ -8877,7 +8898,7 @@ body:has(.login-screen) {
 
   /* margin-block: auto centers the card when it fits and still allows it to
      scroll into view on very short windows (avoids the flex-centering clip). */
-  .login-screen .login-content > * {
+  .login-screen .login-content>* {
     margin-block: auto;
   }
 
@@ -8975,6 +8996,7 @@ body:has(.login-screen) {
     align-items: flex-start;
     gap: 16px;
   }
+
   .library-signin-banner .primary-play.small {
     width: 100%;
   }
@@ -8988,7 +9010,8 @@ body:has(.login-screen) {
   inset: 0;
   width: 100vw;
   height: 100vh;
-  background-color: #111115; /* Slate Black */
+  background-color: #111115;
+  /* Slate Black */
   color: #fff;
   z-index: 10000;
   display: flex;
@@ -9008,7 +9031,8 @@ body:has(.login-screen) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end; /* Align profiles at the bottom! */
+  justify-content: flex-end;
+  /* Align profiles at the bottom! */
   align-items: center;
   padding-bottom: clamp(60px, 12vh, 120px);
   position: relative;
@@ -9144,11 +9168,25 @@ body:has(.login-screen) {
   height: 100%;
 }
 
-.stripe.red { background-color: #e50914; }
-.stripe.orange { background-color: #f57c00; }
-.stripe.yellow { background-color: #fdd835; }
-.stripe.green { background-color: #4caf50; }
-.stripe.blue { background-color: #03a9f4; }
+.stripe.red {
+  background-color: #e50914;
+}
+
+.stripe.orange {
+  background-color: #f57c00;
+}
+
+.stripe.yellow {
+  background-color: #fdd835;
+}
+
+.stripe.green {
+  background-color: #4caf50;
+}
+
+.stripe.blue {
+  background-color: #03a9f4;
+}
 
 .kids-text {
   position: relative;
@@ -9285,7 +9323,8 @@ body:has(.login-screen) {
   inset: 0;
   width: 100vw;
   height: 100vh;
-  background-color: #141414; /* Pure dark */
+  background-color: #141414;
+  /* Pure dark */
   color: #fff;
   z-index: 10200;
   display: flex;
@@ -9331,7 +9370,8 @@ body:has(.login-screen) {
 }
 
 .header-text-btn.save-btn {
-  color: #0071e3; /* Apple Blue for Save button */
+  color: #0071e3;
+  /* Apple Blue for Save button */
 }
 
 .header-text-btn.save-btn:disabled {
@@ -9410,7 +9450,8 @@ body:has(.login-screen) {
 }
 
 .ios-toggle-switch.active {
-  background-color: #30d158; /* Apple green */
+  background-color: #30d158;
+  /* Apple green */
 }
 
 .ios-toggle-switch .toggle-handle {
@@ -9473,11 +9514,13 @@ body:has(.login-screen) {
   flex-wrap: nowrap;
   gap: 14px;
   padding: 4px 0 12px;
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none;
+  /* Firefox */
 }
 
 .choose-icon-row::-webkit-scrollbar {
-  display: none; /* Safari/Chrome */
+  display: none;
+  /* Safari/Chrome */
 }
 
 .choose-avatar-btn {
@@ -9517,14 +9560,14 @@ body:has(.login-screen) {
     max-width: 100%;
     padding: 40px 60px;
   }
-  
+
   .choose-avatar-btn,
   .empty-avatar-placeholder {
     width: 140px;
     height: 140px;
     border-radius: 12px;
   }
-  
+
   .choose-icon-section h2 {
     font-size: 24px;
     margin-bottom: 22px;
@@ -9953,37 +9996,46 @@ body:has(.login-screen) {
   .profile-card {
     padding: 24px 20px !important;
   }
+
   .profile-avatar-large {
     width: 70px !important;
     height: 70px !important;
     font-size: 26px !important;
     margin-bottom: 12px !important;
   }
+
   .user-name {
     font-size: 18px !important;
     margin-bottom: 4px !important;
   }
+
   .user-email {
     font-size: 13px !important;
     margin-bottom: 10px !important;
   }
+
   .stats-grid {
     margin-top: 10px !important;
     margin-bottom: 10px !important;
   }
+
   .stat-item .stat-num {
     font-size: 18px !important;
   }
+
   .stat-item .stat-label {
     font-size: 10px !important;
   }
+
   .anilist-sync-section {
     margin: 10px 0 !important;
   }
+
   .anilist-sync-section h3 {
     font-size: 13px !important;
     margin-bottom: 4px !important;
   }
+
   .anilist-sync-section p {
     font-size: 10px !important;
     margin-bottom: 8px !important;
@@ -10424,11 +10476,12 @@ body:has(.login-screen) {
   background-size: contain;
   background-repeat: no-repeat;
   z-index: 5;
-  filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.8));
+  filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.8));
   pointer-events: none;
 }
 
 @media (min-width: 900px) {
+
   /* Desktop Netflix Left Sidebar Container */
   .netflix-theme .desktop-nav {
     position: fixed !important;
@@ -10655,6 +10708,7 @@ body:has(.login-screen) {
    (Play / More Info buttons, hero copy width, rail heading, poster cards)
    ========================================================================== */
 @media (min-width: 900px) {
+
   /* Hero copy column — anchor left and constrain width so the title wraps
      like the reference instead of stretching across the screen. */
   .netflix-theme .home-screen .hero-copy,
@@ -10800,12 +10854,12 @@ body:has(.login-screen) {
   font-weight: 600 !important;
 }
 
-.netflix-theme .netflix-detail-meta > span {
+.netflix-theme .netflix-detail-meta>span {
   display: inline-flex;
   align-items: center;
 }
 
-.netflix-theme .netflix-detail-meta > span:not(:last-child)::after {
+.netflix-theme .netflix-detail-meta>span:not(:last-child)::after {
   content: '·';
   margin-left: 8px;
   color: rgba(255, 255, 255, 0.5);
@@ -10937,6 +10991,7 @@ body:has(.login-screen) {
 }
 
 @media (min-width: 900px) {
+
   /* Hero copy — anchor lower-left, constrain width */
   .netflix-theme .detail-screen .netflix-detail-copy {
     right: auto;
@@ -11378,6 +11433,7 @@ body:has(.login-screen) {
 /* Apple (Lumen) desktop: wrapper takes the old absolute avatar position, and
    the dropdown opens below the avatar, right-aligned. */
 @media (min-width: 900px) {
+
   /* Anime shortcut button mirrored on the left of the bar. */
   .apple-desktop-nav .apple-nav-anime {
     position: absolute;
@@ -11690,6 +11746,7 @@ body:has(.login-screen) {
 }
 
 @media (max-width: 860px) {
+
   /* Mobile mirrors the desktop tabbed account page: back + a horizontal,
      swipeable tab row on top, and the selected section scrolls below it. */
   .account-screen,
@@ -12022,8 +12079,13 @@ body:has(.login-screen) {
 }
 
 @keyframes heroTrailerFade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .home-hero .hero-trailer-preview iframe {
@@ -12072,6 +12134,7 @@ body:has(.login-screen) {
    all at the BOTTOM of the hero section.
 --------------------------------------------------------------------------- */
 @media (min-width: 768px) {
+
   .netflix-theme .home-screen .home-hero,
   .netflix-theme .browse-screen .home-hero {
     height: clamp(560px, 82vh, 820px) !important;
@@ -12340,6 +12403,7 @@ body:has(.login-screen) {
    - Issue 2: profile dropdown anchored top-right under the header avatar
    ========================================================================== */
 @media (max-width: 899px) {
+
   /* Issue 4 — no rail/episode slide arrows on mobile. */
   .rail-arrow,
   .landscape-rail .rail-viewport .rail-arrow,
@@ -12637,7 +12701,7 @@ body:has(.login-screen) {
   }
 
   /* Play — full-width white */
-  .netflix-theme .detail-screen .netflix-detail-actions > .netflix-detail-play {
+  .netflix-theme .detail-screen .netflix-detail-actions>.netflix-detail-play {
     width: 100% !important;
     height: 44px !important;
     border-radius: 4px !important;
@@ -12647,7 +12711,7 @@ body:has(.login-screen) {
   }
 
   /* Download — full-width grey */
-  .netflix-theme .detail-screen .netflix-detail-actions > .netflix-download-btn {
+  .netflix-theme .detail-screen .netflix-detail-actions>.netflix-download-btn {
     width: 100% !important;
     height: 44px !important;
     border-radius: 4px !important;
@@ -12755,6 +12819,7 @@ body:has(.login-screen) {
    dropdown (same menu as desktop). Size the trigger like the round avatar.
    ========================================================================== */
 @media (max-width: 899px) {
+
   /* Match the anime UI header: evenly spaced, icon-style controls. */
   .apple-theme .home-header .header-actions {
     gap: 20px;
@@ -12878,21 +12943,17 @@ body:has(.login-screen) {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(
-      130% 90% at 50% 32%,
+    radial-gradient(130% 90% at 50% 32%,
       rgba(17, 17, 21, 0) 52%,
-      rgba(17, 17, 21, 0.45) 100%
-    ),
-    linear-gradient(
-      180deg,
+      rgba(17, 17, 21, 0.45) 100%),
+    linear-gradient(180deg,
       rgba(17, 17, 21, 0.5) 0%,
       rgba(17, 17, 21, 0) 20%,
       rgba(17, 17, 21, 0) 42%,
       rgba(17, 17, 21, 0.35) 62%,
       rgba(17, 17, 21, 0.72) 80%,
       rgba(17, 17, 21, 0.94) 92%,
-      #111115 100%
-    );
+      #111115 100%);
 }
 
 /* Content column sits at the bottom, right under the artwork. */
@@ -12960,6 +13021,7 @@ body:has(.login-screen) {
 .detail-hero .detail-copy {
   z-index: 2;
 }
+
 .detail-hero .top-actions {
   z-index: 3;
 }
@@ -13011,6 +13073,7 @@ body:has(.login-screen) {
     bottom: 12px;
     gap: 8px;
   }
+
   .hero-trailer-preview .hero-trailer-btn {
     width: 38px;
     height: 38px;
@@ -13084,6 +13147,7 @@ body:has(.login-screen) {
    sidebar on the detail screen) so the hero art is full-bleed.
    ========================================================================== */
 @media (min-width: 900px) {
+
   .netflix-theme .detail-screen,
   .netflix-theme .watch-screen {
     padding-left: 0 !important;
@@ -13869,8 +13933,15 @@ body:has(.login-screen) {
 }
 
 @keyframes seasonDdIn {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .season-dd-option {
@@ -13998,7 +14069,7 @@ body:has(.login-screen) {
   border-radius: 10px;
 }
 
-.notif-item + .notif-item {
+.notif-item+.notif-item {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -14081,6 +14152,7 @@ body:has(.login-screen) {
    BELOW the header row (so the profile avatar doesn't overlap its corner) and
    capped to a compact width instead of stretching across the screen. */
 @media (max-width: 899px) {
+
   .notif-menu-netflix .notif-dropdown,
   .notif-menu-apple .notif-dropdown {
     position: fixed;
@@ -14132,8 +14204,13 @@ body:has(.login-screen) {
 }
 
 @keyframes pullRefreshSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -14468,7 +14545,7 @@ body:has(.login-screen) {
   padding: 12px 0;
 }
 
-.device-group .device-row + .device-row {
+.device-group .device-row+.device-row {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -14841,9 +14918,19 @@ body:has(.login-screen) {
 }
 
 @keyframes lord-shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-8px); }
-  75% { transform: translateX(8px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-8px);
+  }
+
+  75% {
+    transform: translateX(8px);
+  }
 }
 
 .lord-pin-pad {
@@ -14888,7 +14975,6 @@ body:has(.login-screen) {
   min-height: 100vh;
   background: #000;
   color: #fff;
-  overflow-x: hidden;
 }
 
 .lord-topbar {
@@ -14900,12 +14986,12 @@ body:has(.login-screen) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px clamp(16px, 4vw, 48px);
+  padding: 16px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 100%);
   pointer-events: none;
 }
 
-.lord-topbar > * {
+.lord-topbar>* {
   pointer-events: auto;
 }
 
@@ -14957,6 +15043,164 @@ body:has(.login-screen) {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   transition: all 0.2s ease;
+}
+
+.lord-profile-avatar-btn {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(28, 28, 30, 0.66);
+  cursor: pointer;
+}
+
+/* Lord Screen Mobile Floating Bottom Navbar */
+.lord-bottom-ui {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .lord-topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: max(46px, calc(env(safe-area-inset-top, 0px) + 12px)) 16px 12px;
+    height: auto;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 100%);
+    border-bottom: none;
+    z-index: 100;
+  }
+
+  .lord-topbar-left {
+    gap: 12px;
+  }
+
+  .lord-nav-tabs {
+    display: none !important;
+  }
+
+  .lord-incognito-btn,
+  .lord-clear-btn {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .lord-incognito-btn span,
+  .lord-clear-btn span {
+    display: none !important;
+  }
+
+  .lord-incognito-btn svg,
+  .lord-clear-btn svg {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+  }
+
+  .lord-bottom-ui {
+    display: flex;
+    position: fixed;
+    bottom: max(20px, env(safe-area-inset-bottom, 20px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    pointer-events: auto;
+  }
+
+  .lord-bottom-ui .tab-dock {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(20, 20, 24, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+  }
+
+  .lord-bottom-ui .tab-dock::after {
+    width: calc((100% - 8px) / 2) !important;
+    top: 4px !important;
+    bottom: 4px !important;
+    left: 4px !important;
+  }
+
+  .lord-bottom-ui .tab-dock:has(button:nth-child(1).active) {
+    --nav-bubble-x: 0% !important;
+  }
+
+  .lord-bottom-ui .tab-dock:has(button:nth-child(2).active) {
+    --nav-bubble-x: 100% !important;
+  }
+
+  .lord-bottom-ui .tab-dock button {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 14px;
+    min-width: 76px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+
+  .lord-bottom-ui .tab-dock button.active {
+    color: #ffffff !important;
+    background: transparent !important;
+  }
+
+  /* Responsive headers for Live TV & Manga matching Lumen header position */
+  .livetv-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: max(45px, calc(env(safe-area-inset-top, 0px) + 12px)) 16px 12px;
+    background: rgba(10, 10, 14, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .livetv-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .manga-topbar {
+    padding: max(45px, calc(env(safe-area-inset-top, 0px) + 12px)) 16px 12px;
+    background: rgba(10, 10, 14, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
 }
 
 .lord-incognito-btn:hover,
@@ -15259,13 +15503,15 @@ body:has(.login-screen) {
 
 /* Rails */
 .lord-rails {
-  padding: 8px clamp(16px, 4vw, 48px) 64px;
+  padding: 8px 0 64px;
   display: flex;
   flex-direction: column;
   gap: 28px;
   margin-top: -40px;
   position: relative;
   z-index: 2;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .lord-rail-title {
@@ -15302,23 +15548,32 @@ body:has(.login-screen) {
 
 .lord-rail-row {
   display: flex;
-  gap: 14px;
+  gap: 18px;
   overflow-x: auto;
-  padding-bottom: 6px;
-  scroll-snap-type: x mandatory;
+  padding-bottom: 12px;
+  scroll-snap-type: x proximity;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
 }
 
 .lord-rail-row::-webkit-scrollbar {
   display: none;
 }
 
+.lord-rail-row .hanime-card {
+  flex: 0 0 auto;
+  width: clamp(220px, 20vw, 280px);
+  scroll-snap-align: start;
+}
+
 .lord-card {
   flex: 0 0 auto;
-  width: 150px;
+  width: clamp(190px, 18vw, 240px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   border: 0;
   background: transparent;
   color: #fff;
@@ -15327,18 +15582,39 @@ body:has(.login-screen) {
   scroll-snap-align: start;
 }
 
+/* Desktop Lord Page Padding: 0 left padding */
+@media (min-width: 900px) {
+  .lord-hero,
+  .lord-rails,
+  .hanime-container {
+    padding-left: 0 !important;
+  }
+}
+
+/* Mobile Lord Page Padding: 1% padding */
+@media (max-width: 899px) {
+  .lord-hero,
+  .lord-rails,
+  .hanime-container {
+    padding-left: 1% !important;
+    padding-right: 1% !important;
+  }
+}
+
 .lord-card-poster {
   display: block;
   width: 100%;
   aspect-ratio: 2 / 3;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   background: #1c1c1e;
-  transition: transform 0.18s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
 }
 
 .lord-card:hover .lord-card-poster {
-  transform: scale(1.04);
+  transform: scale(1.05);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.7);
 }
 
 .lord-card-poster img {
@@ -15349,11 +15625,12 @@ body:has(.login-screen) {
 }
 
 .lord-card-title {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-top: 2px;
 }
 
 /* ===== Account overview: created-profile tiles ===== */
@@ -16166,9 +16443,11 @@ body:has(.login-screen) {
     flex-direction: column;
     align-items: flex-start;
   }
+
   .phub-endpoint-label {
     min-width: unset;
   }
+
   .phub-copy-btn {
     align-self: flex-end;
   }
@@ -16556,16 +16835,20 @@ body:has(.login-screen) {
 
 /* Hanime Video Streaming Section (Image 1 Style) */
 .hanime-container {
-  padding: 24px;
-  max-width: 1600px;
-  margin: 0 auto;
+  padding: 80px 16px max(110px, calc(env(safe-area-inset-bottom, 0px) + 95px));
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   color: #fff;
+  min-height: 100vh;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
 }
 
 .hanime-header {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   margin-bottom: 28px;
 }
 
@@ -16593,47 +16876,33 @@ body:has(.login-screen) {
 .hanime-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.hanime-search-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  padding: 8px 14px;
-  width: 100%;
-  max-width: 320px;
-}
-
-.hanime-search-bar input {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 13px;
-  outline: none;
   width: 100%;
 }
 
 .hanime-pills {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  overflow-y: hidden;
+  padding: 4px 2px 8px;
+  width: 100%;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+
+.hanime-pills::-webkit-scrollbar {
+  display: none;
 }
 
 .hanime-pill {
-  padding: 6px 14px;
+  padding: 8px 18px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(30, 41, 59, 0.6);
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -16641,7 +16910,7 @@ body:has(.login-screen) {
 }
 
 .hanime-pill:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
 
@@ -16747,6 +17016,30 @@ body:has(.login-screen) {
 
 .hanime-card:hover .hanime-play-overlay {
   opacity: 1;
+}
+
+/* Remove card glow, pop/transform, and play cursor overlay in mobile mode */
+@media (max-width: 899px) {
+  .hanime-card:hover,
+  .hanime-card:active,
+  .hanime-card:focus {
+    transform: none !important;
+    border-color: rgba(255, 255, 255, 0.06) !important;
+    box-shadow: none !important;
+  }
+
+  .hanime-card:hover .hanime-poster-area img,
+  .hanime-card:active .hanime-poster-area img {
+    transform: none !important;
+  }
+
+  .hanime-play-overlay,
+  .hanime-card:hover .hanime-play-overlay,
+  .hanime-card:active .hanime-play-overlay {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+  }
 }
 
 .hanime-play-btn {
