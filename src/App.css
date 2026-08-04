@@ -13686,6 +13686,14 @@ body:has(.login-screen) {
   letter-spacing: -0.01em;
 }
 
+.watch-title-main.phub-title-main {
+  font-size: clamp(16px, 2.2vw, 24px) !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
 .watch-title-genre {
   margin: 6px 0 0;
   font-size: clamp(16px, 1.6vw, 22px);
@@ -13811,11 +13819,19 @@ body:has(.login-screen) {
   font-weight: 800;
 }
 
-/* Desktop: two columns with the episode panel on the right. */
+/* Desktop: two columns ONLY if the episode panel is present; otherwise 100% full width */
 @media (min-width: 900px) {
   .watch-lower {
-    grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 400px);
+    grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .watch-lower.has-episodes {
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 400px);
+  }
+
+  .watch-lower-left {
+    width: 100%;
   }
 
   .watch-episode-list {
@@ -14971,10 +14987,14 @@ body:has(.login-screen) {
 }
 
 /* ---- Lord screen (hero + rails, no navbar) ---- */
+.netflix-theme .screen.lord-screen,
+.apple-theme .screen.lord-screen,
 .lord-screen {
   min-height: 100vh;
   background: #000;
   color: #fff;
+  padding-left: 0 !important;
+  margin-left: 0 !important;
 }
 
 .lord-topbar {
@@ -15460,7 +15480,7 @@ body:has(.login-screen) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 26px;
+  padding: 10px 26px;
   border: 0;
   border-radius: 10px;
   font-size: 16px;
@@ -15487,15 +15507,25 @@ body:has(.login-screen) {
 
 /* Rails */
 .lord-rails {
-  padding: 8px 0 64px;
+  padding: 8px 32px 64px;
   display: flex;
   flex-direction: column;
   gap: 28px;
-  margin-top: -40px;
+  margin-top: -60px;
   position: relative;
   z-index: 2;
   width: 100%;
   box-sizing: border-box;
+}
+
+.lord-rails .continue-rail {
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.lord-rails .continue-row {
+  padding-left: 0 !important;
+  margin-left: 0 !important;
 }
 
 .lord-rail-title {
@@ -15566,23 +15596,57 @@ body:has(.login-screen) {
   scroll-snap-align: start;
 }
 
-/* Desktop Lord Page Padding: 0 left padding */
+/* Desktop Lord Page Padding: 32px side padding matching topbar */
+/* Desktop Lord Page Padding: 32px side padding matching topbar */
 @media (min-width: 900px) {
-  .lord-hero,
-  .lord-rails,
+
+  .netflix-theme .screen.lord-screen,
+  .apple-theme .screen.lord-screen,
+  .lord-screen {
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+  }
+
+  .lord-topbar {
+    left: 0 !important;
+    right: 0 !important;
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+  }
+
+  .lord-hero {
+    width: 100% !important;
+    margin-left: 0 !important;
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+  }
+
+  .lord-rails {
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+  }
+
   .hanime-container {
     padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 100px !important;
   }
 }
 
-/* Mobile Lord Page Padding: top padding so content starts below fixed header, plus 1% side padding */
+/* Mobile Lord Page Padding: top padding so content starts below fixed header, plus 16px side padding */
 @media (max-width: 899px) {
+
   .lord-hero,
-  .lord-rails,
+  .lord-rails {
+    padding-top: max(115px, calc(env(safe-area-inset-top, 0px) + 75px)) !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
   .hanime-container {
     padding-top: max(115px, calc(env(safe-area-inset-top, 0px) + 75px)) !important;
-    padding-left: 1% !important;
-    padding-right: 1% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
   }
 }
 
@@ -16820,7 +16884,7 @@ body:has(.login-screen) {
 
 /* Hanime Video Streaming Section (Image 1 Style) */
 .hanime-container {
-  padding: 80px 16px max(110px, calc(env(safe-area-inset-bottom, 0px) + 95px));
+  padding: 100px 0 max(110px, calc(env(safe-area-inset-bottom, 0px) + 95px)) 0;
   width: 100%;
   max-width: 100%;
   margin: 0;
@@ -17012,6 +17076,7 @@ body:has(.login-screen) {
 
 /* Remove card glow, pop/transform, and play cursor overlay in mobile mode */
 @media (max-width: 899px) {
+
   .hanime-card:hover,
   .hanime-card:active,
   .hanime-card:focus {

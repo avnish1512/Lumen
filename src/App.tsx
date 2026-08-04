@@ -1721,6 +1721,9 @@ function App() {
         .filter(
           (entry) =>
             entry.progress < 100 &&
+            !entry.movie.id.startsWith('phub-') &&
+            entry.movie.label !== 'PHub' &&
+            !entry.movie.hentaiSlug?.startsWith('phub-') &&
             (entry.movie.isHentaiOcean ||
               entry.movie.genres.some((g) => g.toLowerCase() === 'hentai')),
         )
@@ -1838,6 +1841,7 @@ function App() {
   const [lordRails, setLordRails] = useState<LordRail[]>([])
   const [lordLoading, setLordLoading] = useState(false)
   const [lordBackScreen, setLordBackScreen] = useState<Screen>('home')
+  const [activeLordTab, setActiveLordTab] = useState<'collection' | 'phub'>('collection')
 
   const isHentaiSelectedMovie = Boolean(
     selectedMovie &&
@@ -2643,6 +2647,14 @@ function App() {
       setDetailBackScreen(screen)
     }
 
+    if (
+      movie.id.startsWith('phub-') ||
+      movie.label === 'PHub' ||
+      movie.hentaiSlug?.startsWith('phub-')
+    ) {
+      setActiveLordTab('phub')
+    }
+
     setSelectedMovie(movie)
     setScreen('detail')
     void hydrateMovie(movie)
@@ -2651,6 +2663,14 @@ function App() {
   const openWatch = (movie: Movie) => {
     if (screen !== 'detail' && screen !== 'watch') {
       setDetailBackScreen(screen)
+    }
+
+    if (
+      movie.id.startsWith('phub-') ||
+      movie.label === 'PHub' ||
+      movie.hentaiSlug?.startsWith('phub-')
+    ) {
+      setActiveLordTab('phub')
     }
 
     setSelectedMovie(movie)
@@ -3239,11 +3259,26 @@ function App() {
           streamError={streamError}
           streamProvider={streamProvider}
           streamSandboxEnabled={streamSandboxEnabled}
-          onBack={() => setScreen('detail')}
+          onBack={() => {
+            if (
+              detailBackScreen === 'lord' ||
+              (selectedMovie &&
+                (selectedMovie.id.startsWith('phub-') ||
+                  selectedMovie.label === 'PHub' ||
+                  selectedMovie.hentaiSlug?.startsWith('phub-')))
+            ) {
+              setScreen('lord')
+            } else if (detailBackScreen) {
+              setScreen(detailBackScreen)
+            } else {
+              setScreen('home')
+            }
+          }}
           onSave={() => toggleSaved(selectedMovie)}
           onStartWatching={markContinueWatching}
           onStreamSandboxChange={setStreamSandboxEnabled}
           onStreamProviderChange={setStreamProvider}
+          onSelectMovie={openWatch}
           designMode={designMode}
         />
       )}
@@ -3345,8 +3380,8 @@ function App() {
           rails={lordRails}
           loading={lordLoading}
           continueMovies={continueWatchingLord}
-          currentUser={currentUser}
-          profiles={profiles}
+          activeTab={activeLordTab}
+          onTabChange={setActiveLordTab}
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSelectProfile={switchToProfile}
@@ -3380,7 +3415,7 @@ function App() {
       )}
 
       {((designMode === 'netflix' && (screen === 'home' || screen === 'drama' || screen === 'livetv' || screen === 'manga' || screen === 'search' || screen === 'library')) ||
-        (designMode === 'apple' && screen !== 'search' && screen !== 'login' && screen !== 'profiles' && screen !== 'lord')) && (
+        (designMode === 'apple' && screen !== 'search' && screen !== 'login' && screen !== 'profiles' && screen !== 'lord' && screen !== 'watch')) && (
         <BottomNav
           active={activeTab}
           onHome={() => setScreen('home')}
@@ -5789,6 +5824,7 @@ type WatchScreenProps = {
   onStreamSandboxChange: (enabled: boolean) => void
   onStreamProviderChange: (provider: StreamProvider) => void
   designMode: 'apple' | 'netflix'
+  onSelectMovie?: (movie: Movie) => void
 }
 
 function WatchScreen({
@@ -5806,10 +5842,8 @@ function WatchScreen({
   onStreamSandboxChange,
   onStreamProviderChange,
   designMode,
+  onSelectMovie,
 }: WatchScreenProps) {
-  // A TMDB title (drama, K/C-drama, regular movie/series) is anything that
-  // isn't flagged as anime and has no AniList id but does have a TMDB id. These
-  // must stream from the TMDB-based providers, never the AniList anime players.
   const isHentai = Boolean(
     movie.isHentaiOcean ||
       movie.genres.some((g) => g.toLowerCase() === 'hentai'),
@@ -5819,6 +5853,23 @@ function WatchScreen({
       movie.label === 'PHub' ||
       movie.hentaiSlug?.startsWith('phub-'),
   )
+
+  const similarPhubVideos = useMemo(() => {
+    if (!isPhubVideo) return []
+    const currentId = String(movie.id).replace('phub-', '')
+    const cat = (movie.genres && movie.genres[0]) || 'Teen'
+    const catLower = cat.toLowerCase()
+
+    const matched = INITIAL_HANIME_VIDEOS.filter(
+      (v) =>
+        String(v.id) !== currentId &&
+        (v.category.toLowerCase().includes(catLower) ||
+          v.title.toLowerCase().includes(catLower)),
+    )
+    const fallback = INITIAL_HANIME_VIDEOS.filter((v) => String(v.id) !== currentId)
+    const pool = matched.length >= 3 ? matched : fallback
+    return pool.slice(0, 10)
+  }, [isPhubVideo, movie.id, movie.genres])
   const isTmdbTitle = !isHentai && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
   const isAnimeMovie =
     !isTmdbTitle &&
@@ -6082,7 +6133,7 @@ function WatchScreen({
         )}
 
         <div className="watch-title-block">
-          <h2 className="watch-title-main">{movie.title}</h2>
+          <h2 className={`watch-title-main${isPhubVideo ? ' phub-title-main' : ''}`}>{movie.title}</h2>
           <p className="watch-title-genre">{movie.genres[0] ?? 'Movie'}</p>
         </div>
 
@@ -6100,12 +6151,22 @@ function WatchScreen({
         )}
       </div>
 
-      <div className="watch-lower">
+      <div className={`watch-lower${isSeries ? ' has-episodes' : ''}`}>
         <div className="watch-lower-left">
           <p className="watch-synopsis">
             {!isPhubVideo && <strong>{movie.year}: </strong>}
             {movie.synopsis}
           </p>
+
+          {isPhubVideo && similarPhubVideos.length > 0 && (
+            <div className="watch-similar-wrapper" style={{ marginTop: 24, width: '100%' }}>
+              <LordPhubRailRow
+                title="Similar Content"
+                videos={similarPhubVideos}
+                onVideoClick={(video) => onSelectMovie?.(hanimeToMovieHelper(video))}
+              />
+            </div>
+          )}
           {!isPhubVideo && <Metadata movie={movie} />}
 
           {!isPhubVideo && (
@@ -10350,11 +10411,13 @@ type LordScreenProps = {
   rails: LordRail[]
   loading: boolean
   continueMovies?: Movie[]
-  currentUser: UserInfo | null
-  profiles: UserProfile[]
+  currentUser?: UserInfo | null
+  profiles?: UserProfile[]
+  activeTab?: 'collection' | 'phub'
+  onTabChange?: (tab: 'collection' | 'phub') => void
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
-  onSelectProfile: (name: string) => void
+  onSelectProfile?: (name: string) => void
   onBack: () => void
   onClearContinueWatching?: () => void
   onMarkWatched?: (movie: Movie) => void
@@ -10370,6 +10433,8 @@ function LordScreen({
   continueMovies = [],
   currentUser: _currentUser,
   profiles: _profiles = [],
+  activeTab: activeTabProp = 'collection',
+  onTabChange,
   onOpenDetail,
   onPlay,
   onSelectProfile: _onSelectProfile,
@@ -10392,7 +10457,12 @@ function LordScreen({
     }))
   }, [rails])
 
-  const [activeLordTab, setActiveLordTab] = useState<'collection' | 'phub'>('collection')
+  const [internalTab, setInternalTab] = useState<'collection' | 'phub'>(activeTabProp)
+  const activeLordTab = activeTabProp || internalTab
+  const setActiveLordTab = (tab: 'collection' | 'phub') => {
+    setInternalTab(tab)
+    onTabChange?.(tab)
+  }
   const [query, setQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
 
@@ -11031,12 +11101,8 @@ const PHUB_CATEGORIES = [
   'Lesbian',
 ]
 
-function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay: _onPlay }: { searchQuery?: string; onOpenDetail: (movie: Movie) => void; onPlay?: (movie: Movie) => void }) {
-  const [videos, setVideos] = useState<HanimeVideo[]>(INITIAL_HANIME_VIDEOS)
-  const [loading, setLoading] = useState(false)
-
-  const [page] = useState(1)
-  const hanimeToMovie = (video: HanimeVideo): Movie => ({
+function hanimeToMovieHelper(video: HanimeVideo): Movie {
+  return {
     id: `phub-${video.id}`,
     rank: 0,
     title: cleanHtmlEntities(video.title),
@@ -11061,7 +11127,15 @@ function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay: _onPlay }: { 
     embedUrl: video.embedUrl,
     isHentaiOcean: true,
     hentaiSlug: video.code || `phub-${video.id}`,
-  })
+  }
+}
+
+function LordPhubSection({ searchQuery = '', onPlay }: { searchQuery?: string; onOpenDetail?: (movie: Movie) => void; onPlay: (movie: Movie) => void }) {
+  const [videos, setVideos] = useState<HanimeVideo[]>(INITIAL_HANIME_VIDEOS)
+  const [loading, setLoading] = useState(false)
+
+  const [page] = useState(1)
+  const hanimeToMovie = (video: HanimeVideo): Movie => hanimeToMovieHelper(video)
   useEffect(() => {
     let active = true
     async function loadApiVideos() {
@@ -11151,7 +11225,7 @@ function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay: _onPlay }: { 
                 <div
                   key={`${video.id}-${idx}`}
                   className="hanime-card"
-                  onClick={() => onOpenDetail(hanimeToMovie(video))}
+                  onClick={() => onPlay(hanimeToMovie(video))}
                 >
                   <div className="hanime-poster-area">
                     <img
@@ -11162,7 +11236,7 @@ function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay: _onPlay }: { 
                       onError={(event) => {
                         const target = event.target as HTMLImageElement
                         target.onerror = null
-                        target.src = INITIAL_HANIME_VIDEOS[idx % INITIAL_HANIME_VIDEOS.length].thumb
+                        target.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
                       }}
                     />
                     <span className="hanime-badge-4k">4K</span>
@@ -11194,7 +11268,7 @@ function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay: _onPlay }: { 
               key={rail.title}
               title={rail.title}
               videos={rail.items}
-              onVideoClick={(video) => onOpenDetail(hanimeToMovie(video))}
+              onVideoClick={(video) => onPlay(hanimeToMovie(video))}
             />
           ))}
         </div>
@@ -11255,7 +11329,7 @@ function LordPhubRailRow({
                   onError={(event) => {
                     const target = event.target as HTMLImageElement
                     target.onerror = null
-                    target.src = INITIAL_HANIME_VIDEOS[idx % INITIAL_HANIME_VIDEOS.length].thumb
+                    target.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
                   }}
                 />
                 <span className="hanime-badge-4k">4K</span>
