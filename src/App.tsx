@@ -56,7 +56,6 @@ import {
   Delete,
   KeyRound,
   BookOpen,
-  Copy,
   Code,
 } from 'lucide-react'
 import {
@@ -10369,11 +10368,11 @@ function LordScreen({
   rails = [],
   loading = false,
   continueMovies = [],
-  currentUser,
-  profiles = [],
+  currentUser: _currentUser,
+  profiles: _profiles = [],
   onOpenDetail,
   onPlay,
-  onSelectProfile,
+  onSelectProfile: _onSelectProfile,
   onBack,
   onClearContinueWatching,
   onMarkWatched,
@@ -10712,26 +10711,7 @@ function LordRailRow({
   )
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
-  return (
-    <button
-      type="button"
-      className={`phub-copy-btn ${copied ? 'is-copied' : ''}`}
-      onClick={handleCopy}
-      title="Copy URL"
-    >
-      {copied ? <Check size={14} /> : <Copy size={14} />}
-      <span>{copied ? 'Copied' : 'Copy'}</span>
-    </button>
-  )
-}
 export type HanimeVideo = {
   id: string | number
   title: string
@@ -11051,12 +11031,11 @@ const PHUB_CATEGORIES = [
   'Lesbian',
 ]
 
-function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay }: { searchQuery?: string; onOpenDetail: (movie: Movie) => void; onPlay: (movie: Movie) => void }) {
+function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay: _onPlay }: { searchQuery?: string; onOpenDetail: (movie: Movie) => void; onPlay?: (movie: Movie) => void }) {
   const [videos, setVideos] = useState<HanimeVideo[]>(INITIAL_HANIME_VIDEOS)
   const [loading, setLoading] = useState(false)
 
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(6500)
+  const [page] = useState(1)
   const hanimeToMovie = (video: HanimeVideo): Movie => ({
     id: `phub-${video.id}`,
     rank: 0,
@@ -11098,7 +11077,6 @@ function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay }: { searchQue
         if (active && data && Array.isArray(data.list) && data.list.length > 0) {
           const parsed = data.list.map((item: any, idx: number) => normalizeVideoItem(item, idx))
           setVideos(parsed)
-          if (data.pagecount) setTotalPages(Number(data.pagecount))
         }
       } catch {
         // Keep initial dataset on error
@@ -11111,6 +11089,16 @@ function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay }: { searchQue
       active = false
     }
   }, [page, searchQuery])
+
+  const isSearching = Boolean(searchQuery.trim())
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.trim().toLowerCase()
+    return videos.filter(
+      (v) => v.title.toLowerCase().includes(q) || v.category.toLowerCase().includes(q),
+    )
+  }, [videos, searchQuery])
 
   const railsData = useMemo(() => {
     if (videos.length === 0) return []
@@ -11136,14 +11124,9 @@ function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay }: { searchQue
         items = matched.length > 0 ? localRotate(matched, idx * 3) : localRotate(videos, idx * 5)
       }
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase()
-        items = items.filter((v) => v.title.toLowerCase().includes(q))
-      }
-
       return { title: cat, items }
     }).filter((r) => r.items.length > 0)
-  }, [videos, searchQuery])
+  }, [videos])
 
   return (
     <div className="hanime-container">
@@ -11152,10 +11135,57 @@ function LordPhubSection({ searchQuery = '', onOpenDetail, onPlay }: { searchQue
           <LoaderCircle className="spin-icon" size={32} />
           <p>Loading videos...</p>
         </div>
+      ) : isSearching ? (
+        searchResults.length === 0 ? (
+          <div className="phub-empty">
+            <Search size={42} />
+            <p>No videos found matching "{searchQuery.trim()}".</p>
+          </div>
+        ) : (
+          <div className="phub-search-results">
+            <h2 className="lord-rail-title" style={{ marginBottom: 20 }}>
+              Search Results ({searchResults.length})
+            </h2>
+            <div className="hanime-grid">
+              {searchResults.map((video, idx) => (
+                <div
+                  key={`${video.id}-${idx}`}
+                  className="hanime-card"
+                  onClick={() => onOpenDetail(hanimeToMovie(video))}
+                >
+                  <div className="hanime-poster-area">
+                    <img
+                      src={video.thumb}
+                      referrerPolicy="no-referrer"
+                      alt={video.title}
+                      loading="lazy"
+                      onError={(event) => {
+                        const target = event.target as HTMLImageElement
+                        target.onerror = null
+                        target.src = INITIAL_HANIME_VIDEOS[idx % INITIAL_HANIME_VIDEOS.length].thumb
+                      }}
+                    />
+                    <span className="hanime-badge-4k">4K</span>
+                    <span className="hanime-badge-duration">{video.duration}</span>
+                    <div className="hanime-play-overlay">
+                      <div className="hanime-play-btn">
+                        <Play fill="#fff" size={22} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="hanime-card-body">
+                    <h3 className="hanime-card-title">{video.title}</h3>
+                    <span className="hanime-card-tag">{video.category}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
       ) : railsData.length === 0 ? (
         <div className="phub-empty">
           <Search size={42} />
-          <p>No videos found matching your query.</p>
+          <p>No videos found.</p>
         </div>
       ) : (
         <div className="lord-rails phub-rails">
