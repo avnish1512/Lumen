@@ -56,6 +56,8 @@ import {
   Delete,
   KeyRound,
   BookOpen,
+  Copy,
+  Code,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -10335,6 +10337,7 @@ function LordScreen({
 }: LordScreenProps) {
   const hero = movies[0] ?? null
 
+  const [activeLordTab, setActiveLordTab] = useState<'collection' | 'phub'>('collection')
   const [query, setQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
 
@@ -10386,91 +10389,116 @@ function LordScreen({
             <span>Incognito</span>
           </button>
 
-          <button
-            className="lord-clear-btn"
-            type="button"
-            onClick={() => {
-              if (
-                window.confirm(
-                  'Permanently delete all Lord Continue Watching history? This cannot be recovered.',
-                )
-              ) {
-                onClearContinueWatching?.()
-              }
-            }}
-            title="Permanently clear Lord Continue Watching history"
-            aria-label="Permanently clear Lord Continue Watching history"
-            disabled={continueMovies.length === 0}
-          >
-            <Trash2 size={18} />
-            <span>Clear History</span>
-          </button>
+          <div className="lord-nav-tabs">
+            <button
+              className={`lord-tab-btn ${activeLordTab === 'collection' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => setActiveLordTab('collection')}
+            >
+              <Crown size={15} />
+              <span>Collection</span>
+            </button>
+            <button
+              className={`lord-tab-btn ${activeLordTab === 'phub' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => setActiveLordTab('phub')}
+            >
+              <Code size={15} />
+              <span>PHub</span>
+            </button>
+          </div>
+
+          {activeLordTab === 'collection' && (
+            <button
+              className="lord-clear-btn"
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Permanently delete all Lord Continue Watching history? This cannot be recovered.',
+                  )
+                ) {
+                  onClearContinueWatching?.()
+                }
+              }}
+              title="Permanently clear Lord Continue Watching history"
+              aria-label="Permanently clear Lord Continue Watching history"
+              disabled={continueMovies.length === 0}
+            >
+              <Trash2 size={18} />
+              <span>Clear History</span>
+            </button>
+          )}
         </div>
 
         <div className="lord-topbar-right">
-          <div className={`lord-search${searchFocused ? ' is-focused' : ''}`}>
-            <div className="lord-search-bar">
-              <Search size={18} />
-              <input
-                type="text"
-                className="lord-search-input"
-                placeholder="Titles, genres…"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-                aria-label="Search titles"
-              />
-              {query && (
-                <button
-                  type="button"
-                  className="lord-search-clear"
-                  onClick={() => setQuery('')}
-                  aria-label="Clear search"
-                >
-                  <X size={16} />
-                </button>
+          {activeLordTab === 'collection' && (
+            <div className={`lord-search${searchFocused ? ' is-focused' : ''}`}>
+              <div className="lord-search-bar">
+                <Search size={18} />
+                <input
+                  type="text"
+                  className="lord-search-input"
+                  placeholder="Titles, genres…"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                  aria-label="Search titles"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    className="lord-search-clear"
+                    onClick={() => setQuery('')}
+                    aria-label="Clear search"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              {showDropdown && (
+                <ul className="lord-search-results" role="listbox">
+                  {matches.length === 0 ? (
+                    <li className="lord-search-empty">No matches</li>
+                  ) : (
+                    matches.map((movie) => (
+                      <li key={movie.id}>
+                        <button
+                          type="button"
+                          className="lord-search-result"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => pickMatch(movie)}
+                        >
+                          <img
+                            src={movie.poster || movie.still || movie.hero}
+                            alt=""
+                            loading="lazy"
+                            onError={(event) => {
+                              ;(event.target as HTMLImageElement).style.visibility = 'hidden'
+                            }}
+                          />
+                          <span className="lord-search-result-text">
+                            <span className="lord-search-result-title">{movie.title}</span>
+                            <span className="lord-search-result-meta">
+                              {movie.year} · {movie.type}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
               )}
             </div>
-
-            {showDropdown && (
-              <ul className="lord-search-results" role="listbox">
-                {matches.length === 0 ? (
-                  <li className="lord-search-empty">No matches</li>
-                ) : (
-                  matches.map((movie) => (
-                    <li key={movie.id}>
-                      <button
-                        type="button"
-                        className="lord-search-result"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => pickMatch(movie)}
-                      >
-                        <img
-                          src={movie.poster || movie.still || movie.hero}
-                          alt=""
-                          loading="lazy"
-                          onError={(event) => {
-                            ;(event.target as HTMLImageElement).style.visibility = 'hidden'
-                          }}
-                        />
-                        <span className="lord-search-result-text">
-                          <span className="lord-search-result-title">{movie.title}</span>
-                          <span className="lord-search-result-meta">
-                            {movie.year} · {movie.type}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))
-                )}
-              </ul>
-            )}
-          </div>
+          )}
         </div>
       </header>
 
-      {loading ? (
+      {activeLordTab === 'phub' ? (
+        <LordPhubSection />
+      ) : loading ? (
         <div className="lord-empty">
           <LoaderCircle className="spin-icon" />
           <p>Loading collection…</p>
@@ -10604,6 +10632,540 @@ function LordRailRow({
           <ChevronRight />
         </button>
       </div>
+    </div>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <button
+      type="button"
+      className={`phub-copy-btn ${copied ? 'is-copied' : ''}`}
+      onClick={handleCopy}
+      title="Copy URL"
+    >
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+      <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  )
+}
+export type HanimeVideo = {
+  id: string | number
+  title: string
+  thumb: string
+  poster: string
+  category: string
+  duration: string
+  embedUrl: string
+  actors: string[]
+  description: string
+  code: string
+}
+
+const INITIAL_HANIME_VIDEOS: HanimeVideo[] = [
+  {
+    id: '73341265',
+    title: '18 Year Old Latina Beauty With Big Natural Tits And Big Ass _ Nick Morris',
+    thumb: 'https://upload18.cc/video/73341265/poster.jpg',
+    poster: 'https://upload18.cc/video/73341265/poster.jpg',
+    category: 'Teen',
+    duration: '18:31',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341265',
+    actors: ['Nick Morris', 'Andrea'],
+    description: '18 Year Old Latina Beauty With Big Natural Tits And Big Ass _ Nick Morris',
+    code: '73341265',
+  },
+  {
+    id: '73341266',
+    title: 'Sexy Milf Kerry Terry Has Multiple Orgasms _ Nick Morris',
+    thumb: 'https://upload18.cc/video/73341266/poster.jpg',
+    poster: 'https://upload18.cc/video/73341266/poster.jpg',
+    category: 'Femdom',
+    duration: '22:59',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341266',
+    actors: ['Nick Morris', 'Kerry Terry'],
+    description: 'Sexy Milf Kerry Terry Has Multiple Orgasms _ Nick Morris',
+    code: '73341266',
+  },
+  {
+    id: '73341267',
+    title: "Meow Miu Just Turned 18 And She' Already A Little Slut",
+    thumb: 'https://upload18.cc/video/73341267/poster.jpg',
+    poster: 'https://upload18.cc/video/73341267/poster.jpg',
+    category: 'Teen',
+    duration: '20:00',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341267',
+    actors: ['Meow Miu'],
+    description: "Meow Miu Just Turned 18 And She' Already A Little Slut",
+    code: '73341267',
+  },
+  {
+    id: '73341268',
+    title: 'Esposa De Quatro Para Desconhecidos No Dogging...',
+    thumb: 'https://upload18.cc/video/73341268/poster.jpg',
+    poster: 'https://upload18.cc/video/73341268/poster.jpg',
+    category: 'Latina',
+    duration: '04:52',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341268',
+    actors: ['Desconhecidos'],
+    description: 'Esposa De Quatro Para Desconhecidos No Dogging',
+    code: '73341268',
+  },
+  {
+    id: '73341269',
+    title: 'Sex In The Shower With Charming Beauty Vika Lita _ Nick Morris',
+    thumb: 'https://upload18.cc/video/73341269/poster.jpg',
+    poster: 'https://upload18.cc/video/73341269/poster.jpg',
+    category: 'Teen',
+    duration: '20:13',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341269',
+    actors: ['Nick Morris', 'Vika Lita'],
+    description: 'Sex In The Shower With Charming Beauty Vika Lita _ Nick Morris',
+    code: '73341269',
+  },
+  {
+    id: '73341270',
+    title: 'Nick Morris And Pretty Mary Show What Lessons Should Be Given',
+    thumb: 'https://upload18.cc/video/73341270/poster.jpg',
+    poster: 'https://upload18.cc/video/73341270/poster.jpg',
+    category: 'Cumshot',
+    duration: '23:23',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341270',
+    actors: ['Nick Morris', 'Pretty Mary'],
+    description: 'Nick Morris And Pretty Mary Show What Lessons Should Be Given',
+    code: '73341270',
+  },
+  {
+    id: '73341271',
+    title: 'Cum On The Face Of Slender Tanned Gymnast Sofi Li _ Nick Morris',
+    thumb: 'https://upload18.cc/video/73341271/poster.jpg',
+    poster: 'https://upload18.cc/video/73341271/poster.jpg',
+    category: 'Cumshot',
+    duration: '29:46',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341271',
+    actors: ['Nick Morris', 'Sofi Li'],
+    description: 'Cum On The Face Of Slender Tanned Gymnast Sofi Li _ Nick Morris',
+    code: '73341271',
+  },
+  {
+    id: '73341272',
+    title: 'Busty Slut Pinky Cat Is A Real Nymphomaniac _ Nick Morris',
+    thumb: 'https://upload18.cc/video/73341272/poster.jpg',
+    poster: 'https://upload18.cc/video/73341272/poster.jpg',
+    category: 'Cumshot',
+    duration: '24:09',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341272',
+    actors: ['Nick Morris', 'Pinky Cat'],
+    description: 'Busty Slut Pinky Cat Is A Real Nymphomaniac _ Nick Morris',
+    code: '73341272',
+  },
+  {
+    id: '73341273',
+    title: 'Cum On My Ass! Blonde Teen Gets Fucked Hard In Hotel',
+    thumb: 'https://upload18.cc/video/73341273/poster.jpg',
+    poster: 'https://upload18.cc/video/73341273/poster.jpg',
+    category: 'Cumshot',
+    duration: '08:49',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341273',
+    actors: ['Blonde Teen'],
+    description: 'Cum On My Ass! Blonde Teen Gets Fucked Hard In Hotel',
+    code: '73341273',
+  },
+  {
+    id: '73341274',
+    title: 'Who Do You Think Sucks Dick Better, Lissa Miss Or Emily...',
+    thumb: 'https://upload18.cc/video/73341274/poster.jpg',
+    poster: 'https://upload18.cc/video/73341274/poster.jpg',
+    category: 'Cumshot',
+    duration: '15:01',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341274',
+    actors: ['Lissa Miss', 'Emily'],
+    description: 'Who Do You Think Sucks Dick Better, Lissa Miss Or Emily',
+    code: '73341274',
+  },
+  {
+    id: '73341275',
+    title: 'Called A Prostitute, And My Ex-girlfriend Gypsy Queen...',
+    thumb: 'https://upload18.cc/video/73341275/poster.jpg',
+    poster: 'https://upload18.cc/video/73341275/poster.jpg',
+    category: 'Cumshot',
+    duration: '23:02',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341275',
+    actors: ['Gypsy Queen'],
+    description: 'Called A Prostitute, And My Ex-girlfriend Gypsy Queen',
+    code: '73341275',
+  },
+  {
+    id: '73341276',
+    title: 'Fucked His Neighbor Lesya Milk While Fixing Furniture _...',
+    thumb: 'https://upload18.cc/video/73341276/poster.jpg',
+    poster: 'https://upload18.cc/video/73341276/poster.jpg',
+    category: 'Cumshot',
+    duration: '24:14',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341276',
+    actors: ['Lesya Milk'],
+    description: 'Fucked His Neighbor Lesya Milk While Fixing Furniture',
+    code: '73341276',
+  },
+  {
+    id: '73341277',
+    title: 'Stepsis Was A Little Embarrassed By My Dick, B...',
+    thumb: 'https://upload18.cc/video/73341277/poster.jpg',
+    poster: 'https://upload18.cc/video/73341277/poster.jpg',
+    category: 'Cumshot',
+    duration: '36:15',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341277',
+    actors: ['Stepsis'],
+    description: 'Stepsis Was A Little Embarrassed By My Dick',
+    code: '73341277',
+  },
+  {
+    id: '73341278',
+    title: 'Won A Bet With Busty Bitch Emily Ratakovski _ Nick...',
+    thumb: 'https://upload18.cc/video/73341278/poster.jpg',
+    poster: 'https://upload18.cc/video/73341278/poster.jpg',
+    category: 'Cumshot',
+    duration: '18:20',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341278',
+    actors: ['Nick Morris', 'Emily Ratakovski'],
+    description: 'Won A Bet With Busty Bitch Emily Ratakovski _ Nick Morris',
+    code: '73341278',
+  },
+  {
+    id: '73341279',
+    title: 'Girl On Girl Soft Play Video',
+    thumb: 'https://upload18.cc/video/73341279/poster.jpg',
+    poster: 'https://upload18.cc/video/73341279/poster.jpg',
+    category: 'Teen',
+    duration: '03:03',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341279',
+    actors: ['Soft Play'],
+    description: 'Girl On Girl Soft Play Video',
+    code: '73341279',
+  },
+  {
+    id: '73341280',
+    title: 'You_re Only 18 Years Old And You Already Have Such Hug...',
+    thumb: 'https://upload18.cc/video/73341280/poster.jpg',
+    poster: 'https://upload18.cc/video/73341280/poster.jpg',
+    category: 'Cumshot',
+    duration: '18:31',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341280',
+    actors: ['18 Year Old'],
+    description: 'You_re Only 18 Years Old And You Already Have Such Hug',
+    code: '73341280',
+  },
+  {
+    id: '73341281',
+    title: 'Mia Piper (hazel Grace) _ I Forbid You To Jerk Off, Fuc...',
+    thumb: 'https://upload18.cc/video/73341281/poster.jpg',
+    poster: 'https://upload18.cc/video/73341281/poster.jpg',
+    category: 'Cumshot',
+    duration: '19:12',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341281',
+    actors: ['Mia Piper', 'Hazel Grace'],
+    description: 'Mia Piper (hazel Grace) _ I Forbid You To Jerk Off',
+    code: '73341281',
+  },
+  {
+    id: '73341282',
+    title: 'Shy Milf With A Tight Ass Asks To Fuck Her Wet Puss...',
+    thumb: 'https://upload18.cc/video/73341282/poster.jpg',
+    poster: 'https://upload18.cc/video/73341282/poster.jpg',
+    category: 'Cumshot',
+    duration: '17:37',
+    embedUrl: 'https://upload18.net/play/index/xvidapi-73341282',
+    actors: ['Shy Milf'],
+    description: 'Shy Milf With A Tight Ass Asks To Fuck Her Wet Puss',
+    code: '73341282',
+  },
+]
+
+function normalizeVideoItem(item: any, index: number): HanimeVideo {
+  const title = item.name || item.vod_name || item.title || item.origin_name || 'Untitled Video'
+  let thumb = item.thumb_url || item.poster_url || item.vod_pic || ''
+  if (thumb.startsWith('http://')) {
+    thumb = thumb.replace('http://', 'https://')
+  }
+  if (!thumb) {
+    thumb = INITIAL_HANIME_VIDEOS[index % INITIAL_HANIME_VIDEOS.length].thumb
+  }
+
+  let category = 'Teen'
+  if (Array.isArray(item.category) && item.category.length > 0) {
+    category = item.category[0]
+  } else if (item.type_name) {
+    category = item.type_name
+  } else if (item.tag) {
+    category = item.tag.split(',')[0].trim()
+  }
+
+  let embedUrl = ''
+  if (item.episodes?.server_data?.Full?.link_embed) {
+    embedUrl = item.episodes.server_data.Full.link_embed
+  } else if (item.link_embed) {
+    embedUrl = item.link_embed
+  } else if (item.vod_play_url) {
+    let str = item.vod_play_url
+    if (str.includes('$')) {
+      const parts = str.split('$')
+      str = parts[parts.length - 1]
+    }
+    if (str.includes('#')) {
+      str = str.split('#')[0]
+    }
+    embedUrl = str.trim()
+  }
+  if (!embedUrl && item.slug) {
+    embedUrl = `https://upload18.net/play/index/xvidapi-${item.slug}`
+  }
+
+  const DURATIONS = [
+    '18:31', '22:59', '20:00', '04:52', '20:13', '23:23',
+    '29:46', '24:09', '08:49', '15:01', '23:02', '24:14',
+    '36:15', '18:20', '03:03', '19:12', '17:37',
+  ]
+  const duration = item.duration || DURATIONS[index % DURATIONS.length]
+
+  return {
+    id: item.id || item.vod_id || item.slug || index,
+    title,
+    thumb,
+    poster: thumb,
+    category,
+    duration,
+    embedUrl,
+    actors: Array.isArray(item.actor) ? item.actor : [],
+    description: item.description || item.vod_content || '',
+    code: item.movie_code || item.slug || '4K',
+  }
+}
+
+function LordPhubSection() {
+  const [videos, setVideos] = useState<HanimeVideo[]>(INITIAL_HANIME_VIDEOS)
+  const [loading, setLoading] = useState(false)
+  const [selectedCat, setSelectedCat] = useState('All')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(6500)
+  const [activePlayerVideo, setActivePlayerVideo] = useState<HanimeVideo | null>(null)
+
+  useEffect(() => {
+    let active = true
+    async function loadApiVideos() {
+      setLoading(true)
+      try {
+        let url = `https://xvidapi.com/api.php/provide/vod?ac=detail&at=json&pg=${page}`
+        if (searchQuery.trim()) {
+          url += `&wd=${encodeURIComponent(searchQuery.trim())}`
+        }
+        const res = await fetch(url)
+        if (!res.ok) return
+        const data = await res.json()
+        if (active && data && Array.isArray(data.list) && data.list.length > 0) {
+          const parsed = data.list.map((item: any, idx: number) => normalizeVideoItem(item, idx))
+          setVideos(parsed)
+          if (data.pagecount) setTotalPages(Number(data.pagecount))
+        }
+      } catch {
+        // Keep initial dataset on error
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    void loadApiVideos()
+    return () => {
+      active = false
+    }
+  }, [page, searchQuery])
+
+  const filteredVideos = useMemo(() => {
+    return videos.filter((v) => {
+      if (selectedCat !== 'All' && v.category.toLowerCase() !== selectedCat.toLowerCase()) {
+        return false
+      }
+      if (searchQuery.trim() && !v.title.toLowerCase().includes(searchQuery.trim().toLowerCase())) {
+        return false
+      }
+      return true
+    })
+  }, [videos, selectedCat, searchQuery])
+
+  return (
+    <div className="hanime-container">
+      <header className="hanime-header">
+        <div className="hanime-title-wrap">
+          <h2 className="hanime-section-title">Latest Videos</h2>
+          <div className="hanime-title-accent" />
+        </div>
+
+        <div className="hanime-controls">
+          <div className="hanime-search-bar">
+            <Search size={16} />
+            <input
+              type="text"
+              placeholder="Search videos..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setPage(1)
+              }}
+            />
+            {searchQuery && (
+              <button type="button" onClick={() => setSearchQuery('')} className="phub-search-clear">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          <div className="hanime-pills">
+            {['All', 'Teen', 'Femdom', 'Latina', 'Cumshot', 'Amateur', 'MILF', 'Asian Woman', 'ASMR', 'Japanese', 'Lesbian'].map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                className={`hanime-pill ${selectedCat === cat ? 'is-active' : ''}`}
+                onClick={() => setSelectedCat(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      {loading ? (
+        <div className="phub-loading">
+          <LoaderCircle className="spin-icon" size={32} />
+          <p>Loading videos...</p>
+        </div>
+      ) : filteredVideos.length === 0 ? (
+        <div className="phub-empty">
+          <Search size={42} />
+          <p>No videos found matching your query.</p>
+        </div>
+      ) : (
+        <>
+          <div className="hanime-grid">
+            {filteredVideos.map((video, idx) => (
+              <div
+                key={`${video.id}-${idx}`}
+                className="hanime-card"
+                onClick={() => setActivePlayerVideo(video)}
+              >
+                <div className="hanime-poster-area">
+                  <img
+                    src={video.thumb}
+                    referrerPolicy="no-referrer"
+                    alt={video.title}
+                    loading="lazy"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.onerror = null
+                      target.src = INITIAL_HANIME_VIDEOS[idx % INITIAL_HANIME_VIDEOS.length].thumb
+                    }}
+                  />
+
+                  {/* 4K Glowing Purple Badge */}
+                  <span className="hanime-badge-4k">4K</span>
+
+                  {/* Duration Badge */}
+                  <span className="hanime-badge-duration">{video.duration}</span>
+
+                  <div className="hanime-play-overlay">
+                    <div className="hanime-play-btn">
+                      <Play fill="#fff" size={22} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="hanime-card-body">
+                  <h3 className="hanime-card-title" title={video.title}>
+                    {video.title}
+                  </h3>
+                  <span className="hanime-card-tag">{video.category}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="phub-pagination">
+            <button
+              type="button"
+              className="phub-page-btn"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft size={16} /> Previous
+            </button>
+            <span className="phub-page-info">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="phub-page-btn"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next <ChevronRight size={16} />
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Video Streaming Player Modal */}
+      {activePlayerVideo && (
+        <div className="phub-modal-backdrop" onClick={() => setActivePlayerVideo(null)}>
+          <div className="phub-modal-card" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="phub-modal-close"
+              onClick={() => setActivePlayerVideo(null)}
+            >
+              <X size={20} />
+            </button>
+
+            <div className="phub-player-container">
+              {activePlayerVideo.embedUrl.endsWith('.m3u8') ? (
+                <HlsPlayer src={activePlayerVideo.embedUrl} poster={activePlayerVideo.poster} />
+              ) : (
+                <iframe
+                  src={activePlayerVideo.embedUrl}
+                  title={activePlayerVideo.title}
+                  allowFullScreen
+                  allow="autoplay; encrypted-media"
+                />
+              )}
+            </div>
+
+            <div className="phub-modal-body">
+              <div className="phub-modal-header-row">
+                <div>
+                  <h2 className="phub-modal-title">{activePlayerVideo.title}</h2>
+                  <p className="phub-modal-meta">
+                    {activePlayerVideo.category} · Duration: {activePlayerVideo.duration}
+                  </p>
+                </div>
+                <CopyButton text={activePlayerVideo.embedUrl} />
+              </div>
+              {activePlayerVideo.actors.length > 0 && (
+                <p className="phub-modal-detail-line">
+                  <strong>Cast:</strong> {activePlayerVideo.actors.join(', ')}
+                </p>
+              )}
+              {activePlayerVideo.description && (
+                <p className="phub-modal-description">{activePlayerVideo.description}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
