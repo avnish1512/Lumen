@@ -15059,7 +15059,7 @@ body:has(.login-screen) {
 }
 
 /* Lord Screen Mobile Floating Bottom Navbar */
-.lord-bottom-ui {
+.lord-mobile-nav {
   display: none;
 }
 
@@ -15111,68 +15111,52 @@ body:has(.login-screen) {
     margin: 0;
   }
 
-  .lord-bottom-ui {
+  .lord-mobile-nav {
     display: flex;
     position: fixed;
-    bottom: max(20px, env(safe-area-inset-bottom, 20px));
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: max(20px, calc(env(safe-area-inset-bottom, 0px) + 16px));
+    left: 0;
+    right: 0;
+    justify-content: center;
+    align-items: center;
     z-index: 9999;
-    pointer-events: auto;
+    pointer-events: none;
   }
 
-  .lord-bottom-ui .tab-dock {
-    position: relative;
+  .lord-mobile-nav-pill {
+    pointer-events: auto;
     display: inline-flex;
     align-items: center;
     gap: 4px;
     padding: 4px;
-    background: rgba(20, 20, 24, 0.88);
+    background: rgba(18, 18, 22, 0.88);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 999px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
   }
 
-  .lord-bottom-ui .tab-dock::after {
-    width: calc((100% - 8px) / 2) !important;
-    top: 4px !important;
-    bottom: 4px !important;
-    left: 4px !important;
-  }
-
-  .lord-bottom-ui .tab-dock:has(button:nth-child(1).active) {
-    --nav-bubble-x: 0% !important;
-  }
-
-  .lord-bottom-ui .tab-dock:has(button:nth-child(2).active) {
-    --nav-bubble-x: 100% !important;
-  }
-
-  .lord-bottom-ui .tab-dock button {
-    position: relative;
-    z-index: 1;
+  .lord-mobile-nav-item {
     display: flex;
-    flex-direction: row;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 6px 14px;
-    min-width: 76px;
+    padding: 8px 18px;
     border: 0;
     border-radius: 999px;
     background: transparent;
     color: rgba(255, 255, 255, 0.65);
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: color 0.2s ease;
+    transition: all 0.2s ease;
   }
 
-  .lord-bottom-ui .tab-dock button.active {
-    color: #ffffff !important;
-    background: transparent !important;
+  .lord-mobile-nav-item.is-active {
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 2px 8px rgba(0, 0, 0, 0.4);
   }
 
   /* Responsive headers for Live TV & Manga matching Lumen header position */
@@ -15591,11 +15575,12 @@ body:has(.login-screen) {
   }
 }
 
-/* Mobile Lord Page Padding: 1% padding */
+/* Mobile Lord Page Padding: top padding so content starts below fixed header, plus 1% side padding */
 @media (max-width: 899px) {
   .lord-hero,
   .lord-rails,
   .hanime-container {
+    padding-top: max(115px, calc(env(safe-area-inset-top, 0px) + 75px)) !important;
     padding-left: 1% !important;
     padding-right: 1% !important;
   }

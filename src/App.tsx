@@ -10619,11 +10619,11 @@ function LordScreen({
         </>
       )}
 
-      {/* Mobile Bottom Dock for Lord Screen */}
-      <div className="bottom-ui lord-bottom-ui">
-        <nav className="tab-dock" aria-label="Lord Navigation">
+      {/* Mobile Bottom Navigation Bar for Lord Screen */}
+      <div className="lord-mobile-nav" aria-label="Lord Navigation">
+        <div className="lord-mobile-nav-pill">
           <button
-            className={activeLordTab === 'collection' ? 'active' : ''}
+            className={`lord-mobile-nav-item${activeLordTab === 'collection' ? ' is-active' : ''}`}
             type="button"
             onClick={() => setActiveLordTab('collection')}
           >
@@ -10631,14 +10631,14 @@ function LordScreen({
             <span>Hentai</span>
           </button>
           <button
-            className={activeLordTab === 'phub' ? 'active' : ''}
+            className={`lord-mobile-nav-item${activeLordTab === 'phub' ? ' is-active' : ''}`}
             type="button"
             onClick={() => setActiveLordTab('phub')}
           >
             <Code size={16} />
             <span>PHub</span>
           </button>
-        </nav>
+        </div>
       </div>
     </section>
   )
