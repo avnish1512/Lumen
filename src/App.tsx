@@ -3526,6 +3526,10 @@ function App() {
             .map((m) => m.hero || m.still || m.poster)
             .filter((src): src is string => Boolean(src && src.startsWith('http')))
             .slice(0, 12)}
+          mobileBackdrops={[...tvShows, ...movies, ...anime]
+            .map((m) => m.poster || m.still || m.hero)
+            .filter((src): src is string => Boolean(src && src.startsWith('http')))
+            .slice(0, 12)}
           onBack={() => {
             setScreen('login')
             setTempUser(null)
@@ -8033,6 +8037,7 @@ type ProfilesScreenProps = {
   onDeleteProfile: (name: string) => void
   onBack: () => void
   backdrops?: string[]
+  mobileBackdrops?: string[]
 }
 
 function ProfilesScreen({
@@ -8043,21 +8048,32 @@ function ProfilesScreen({
   onDeleteProfile,
   onBack,
   backdrops = [],
+  mobileBackdrops = [],
 }: ProfilesScreenProps) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 900)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 900)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const activeList = isMobile && mobileBackdrops.length > 0 ? mobileBackdrops : backdrops
+
   // Rotating TV/movie key-art behind the profile chooser (changes every 5s).
   const [backdropIndex, setBackdropIndex] = useState(0)
 
   useEffect(() => {
-    if (backdrops.length < 2) {
+    if (activeList.length < 2) {
       return
     }
     const timer = window.setInterval(() => {
-      setBackdropIndex((current) => (current + 1) % backdrops.length)
+      setBackdropIndex((current) => (current + 1) % activeList.length)
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [backdrops.length])
+  }, [activeList.length])
 
-  const activeBackdrop = backdrops[backdropIndex] ?? backdrops[0]
+  const activeBackdrop = activeList[backdropIndex] ?? activeList[0]
   const [isAdding, setIsAdding] = useState(false)
   const [isChoosingIcon, setIsChoosingIcon] = useState(false)
   const [newName, setNewName] = useState('')
@@ -8769,7 +8785,7 @@ function ProfilesScreen({
     <section className="screen profiles-screen profiles-screen-hero">
       {activeBackdrop && (
         <div className="profiles-backdrop" aria-hidden="true">
-          {backdrops.map((src, index) => (
+          {activeList.map((src, index) => (
             <img
               key={src}
               src={src}
@@ -8840,7 +8856,7 @@ function ProfilesScreen({
 
             <button className="profile-item" type="button" onClick={() => setIsAdding(true)}>
               <div className="profile-avatar avatar-add">
-                <Plus size={36} strokeWidth={2.4} />
+                <Plus size={26} strokeWidth={2.2} />
               </div>
               <span className="profile-name">Add</span>
             </button>
@@ -8851,7 +8867,7 @@ function ProfilesScreen({
               onClick={() => setIsManaging((value) => !value)}
             >
               <div className={`profile-avatar avatar-add${isManaging ? ' avatar-edit-active' : ''}`}>
-                <Pencil size={32} strokeWidth={2.4} />
+                <Pencil size={22} strokeWidth={2.2} />
               </div>
               <span className="profile-name">{isManaging ? 'Done' : 'Edit'}</span>
             </button>
