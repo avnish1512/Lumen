@@ -207,8 +207,7 @@ function pickLocalized(map?: Record<string, string>): string {
 function coverUrl(entity: MdexManga): string {
   const cover = entity.relationships?.find((rel) => rel.type === 'cover_art')
   const file = cover?.attributes?.fileName
-  // 512px thumbnail keeps the browse grid light.
-  return file ? `${MDEX_COVERS}/${entity.id}/${file}.512.jpg` : ''
+  return file ? `${MDEX_COVERS}/${entity.id}/${file}` : ''
 }
 
 function mangaToItem(entity: MdexManga) {

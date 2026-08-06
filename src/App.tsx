@@ -141,6 +141,7 @@ import {
 import { topPosterUrl, hasTopPoster, proxiedAnimeImage } from './posters'
 import { fetchTrailerYoutubeId } from './kinocheck'
 import { WatchRecommenderEntry } from './watch-recommender/WatchRecommender'
+import { SplashScreen } from './SplashScreen'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -253,6 +254,7 @@ type LandscapeCard = {
 const savedMoviesKey = 'omdb.apple-tv-style.saved-movies'
 const likedMoviesKey = 'omdb.apple-tv-style.liked-movies'
 const watchHistoryKey = 'omdb.apple-tv-style.watch-history'
+const removedHistoryKey = 'omdb.apple-tv-style.removed-history'
 const streamProviderKey = 'omdb.apple-tv-style.stream-provider'
 const streamSandboxKey = 'omdb.apple-tv-style.stream-sandbox'
 const homeCacheKey = 'omdb.apple-tv-style.home-cache-v3'
@@ -269,10 +271,15 @@ function readSelectedMovie(): Movie | null {
   }
 }
 
-type UserInfo = {
+export type UserInfo = {
   name: string
   email: string
   avatarColor?: string
+}
+
+export type UserProfile = {
+  name: string
+  avatarColor: string
 }
 
 // Profiles are stored per login account (keyed by email) so each of the
@@ -368,28 +375,7 @@ const searchCategories = [
   'Sci-Fi',
 ]
 
-function getInitialScreen(): Screen {
-  const hash = window.location.hash.replace('#', '')
 
-  if (
-    hash === 'movies' ||
-    hash === 'tv' ||
-    hash === 'detail' ||
-    hash === 'watch' ||
-    hash === 'search' ||
-    hash === 'library' ||
-    hash === 'drama' ||
-    hash === 'livetv'
-  ) {
-    return hash
-  }
-
-  if (hash === 'browse') {
-    return 'movies'
-  }
-
-  return 'home'
-}
 
 function isStreamProvider(value: string | null): value is StreamProvider {
   return (
@@ -593,24 +579,115 @@ function deviceLastUsedLabel(session: DeviceSession): string {
   return `${months} Month${months === 1 ? '' : 's'} Ago`
 }
 
+type RemovedHistoryMap = Record<string, number>
+
+function removedHistoryKeyFor(user: UserInfo | null) {
+  return user ? `${removedHistoryKey}.${user.name}` : removedHistoryKey
+}
+
+function readRemovedHistory(user?: UserInfo | null): RemovedHistoryMap {
+  try {
+    const currentUser = user !== undefined ? user : readCurrentUser()
+    const key = removedHistoryKeyFor(currentUser)
+    const saved = window.localStorage.getItem(key)
+    return saved ? (JSON.parse(saved) as RemovedHistoryMap) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveRemovedHistory(removed: RemovedHistoryMap, user?: UserInfo | null) {
+  try {
+    const currentUser = user !== undefined ? user : readCurrentUser()
+    const key = removedHistoryKeyFor(currentUser)
+    window.localStorage.setItem(key, JSON.stringify(removed))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function recordMovieRemoved(movie: Movie, user?: UserInfo | null): RemovedHistoryMap {
+  const current = readRemovedHistory(user)
+  const now = Date.now()
+  const next = { ...current }
+  if (movie.id) next[movie.id] = now
+  if (movie.tmdbId) next[`tmdb:${movie.tmdbType || 'movie'}:${movie.tmdbId}`] = now
+  const titleNorm = normalizeMovieIdentity(movie.title)
+  if (titleNorm) next[`title:${titleNorm}`] = now
+  saveRemovedHistory(next, user)
+  return next
+}
+
+function unmarkMovieRemoved(movie: Movie, user?: UserInfo | null) {
+  const current = readRemovedHistory(user)
+  const next = { ...current }
+  let changed = false
+  if (movie.id && next[movie.id]) {
+    delete next[movie.id]
+    changed = true
+  }
+  if (movie.tmdbId && next[`tmdb:${movie.tmdbType || 'movie'}:${movie.tmdbId}`]) {
+    delete next[`tmdb:${movie.tmdbType || 'movie'}:${movie.tmdbId}`]
+    changed = true
+  }
+  const titleNorm = normalizeMovieIdentity(movie.title)
+  if (titleNorm && next[`title:${titleNorm}`]) {
+    delete next[`title:${titleNorm}`]
+    changed = true
+  }
+  if (changed) {
+    saveRemovedHistory(next, user)
+  }
+}
+
+function isMovieRemoved(movie: Movie, removed: RemovedHistoryMap, entryUpdatedAt = 0): boolean {
+  const check = (k: string) => {
+    const removedAt = removed[k]
+    return typeof removedAt === 'number' && (entryUpdatedAt === 0 || removedAt >= entryUpdatedAt)
+  }
+  if (movie.id && check(movie.id)) return true
+  if (movie.tmdbId && check(`tmdb:${movie.tmdbType || 'movie'}:${movie.tmdbId}`)) return true
+  const titleNorm = normalizeMovieIdentity(movie.title)
+  if (titleNorm && check(`title:${titleNorm}`)) return true
+  return false
+}
+
 function readWatchHistory(): WatchHistory {
   try {
     const user = readCurrentUser()
     const key = user ? `${watchHistoryKey}.${user.name}` : watchHistoryKey
     const saved = window.localStorage.getItem(key)
-    return saved ? (JSON.parse(saved) as WatchHistory) : {}
+    const history = saved ? (JSON.parse(saved) as WatchHistory) : {}
+    const removed = readRemovedHistory(user)
+    const cleaned: WatchHistory = {}
+    for (const [k, entry] of Object.entries(history)) {
+      if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt)) {
+        cleaned[k] = entry
+      }
+    }
+    return cleaned
   } catch {
     return {}
   }
 }
 
 // Merge two watch-history maps, keeping the most-recently-updated entry per
-// key. Used to reconcile the local cache with the cross-device remote copy.
-function mergeWatchHistory(a: WatchHistory, b: WatchHistory): WatchHistory {
-  const merged: WatchHistory = { ...a }
+// key, ignoring any entries tombstoned by user removal.
+function mergeWatchHistory(a: WatchHistory, b: WatchHistory, removedMap?: RemovedHistoryMap): WatchHistory {
+  const removed = removedMap ?? readRemovedHistory()
+  const merged: WatchHistory = {}
+
+  for (const [key, entry] of Object.entries(a)) {
+    if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt)) {
+      merged[key] = entry
+    }
+  }
+
   for (const [key, entry] of Object.entries(b)) {
+    if (!entry?.movie) continue
+    if (isMovieRemoved(entry.movie, removed, entry.updatedAt)) continue
     const existing = merged[key]
-    if (!existing || (entry?.updatedAt ?? 0) > (existing.updatedAt ?? 0)) {
+    if (!existing || (entry.updatedAt ?? 0) > (existing.updatedAt ?? 0)) {
       merged[key] = entry
     }
   }
@@ -1294,10 +1371,7 @@ async function fetchAnimeRails(): Promise<AnimeHomeExtras> {
   }
 }
 
-type UserProfile = {
-  name: string
-  avatarColor: string
-}
+
 
 // Pull-to-refresh for the WebView / mobile web app. Native browser pull-to-
 // refresh is disabled inside the Expo WebView, so we replicate it: when the
@@ -1435,20 +1509,27 @@ function PullToRefresh({ containerRef }: { containerRef: RefObject<HTMLElement |
 
 function App() {
   const appShellRef = useRef<HTMLElement | null>(null)
+  // Show splash only on cold start (new session) or after login.
+  // sessionStorage persists across page refresh but clears when the
+  // app/tab is closed, matching Netflix's behaviour.
+  const [showSplash, setShowSplash] = useState(() => {
+    try {
+      return !window.sessionStorage.getItem('lumen.splash-done')
+    } catch {
+      return true
+    }
+  })
+
   const [screen, setScreenState] = useState<Screen>(() => {
     const savedUser = readCurrentUser()
     if (!savedUser) {
       return 'login'
     }
-    // Restore the actual screen the viewer was on (from the URL hash) after a
-    // refresh, on every device. A returning, already-signed-in user keeps their
-    // last-selected profile; the "Choose your profile" screen stays reachable
-    // from the profile menu instead of interrupting every refresh.
-    return getInitialScreen()
+    return 'profiles'
   })
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(readCurrentUser)
   const [loginBackScreen, setLoginBackScreen] = useState<Screen>('home')
-  const [tempUser, setTempUser] = useState<UserInfo | null>(null)
+  const [tempUser, setTempUser] = useState<UserInfo | null>(readCurrentUser)
   const [profiles, setProfiles] = useState<UserProfile[]>(() =>
     readProfilesFor(readCurrentUser()),
   )
@@ -1712,7 +1793,12 @@ function App() {
     [continueWatching],
   )
   const continueWatchingDrama = useMemo(
-    () => continueWatching.filter((m) => m.genres.some((g) => g.toLowerCase().includes('drama'))),
+    () =>
+      continueWatching.filter(
+        (m) =>
+          !m.isAnime &&
+          m.genres.some((g) => g.toLowerCase() === 'drama'),
+      ),
     [continueWatching],
   )
   const continueWatchingLord = useMemo(
@@ -1970,6 +2056,7 @@ function App() {
 
   const signOut = () => {
     setCurrentUser(null)
+    try { window.sessionStorage.removeItem('lumen.splash-done') } catch { /* ignore */ }
     setScreen('login')
   }
 
@@ -2334,6 +2421,7 @@ function App() {
   }, [])
 
   const markContinueWatching = useCallback((movie: Movie) => {
+    unmarkMovieRemoved(movie, currentUser)
     if (movie.isAnime && movie.anilistId && aniListToken) {
       const episode = movie.streamEpisode ?? 1
       const progressPercent = continueProgressFor(movie)
@@ -2807,11 +2895,19 @@ function App() {
     })
   }
 
-  const removeContinueMovie = useCallback((movie: Movie) => {
-    setWatchHistory((current) =>
-      removeMatchingMovieRecords(current, movie, (entry) => entry.movie),
-    )
-  }, [])
+  const removeContinueMovie = useCallback(
+    (movie: Movie) => {
+      recordMovieRemoved(movie, currentUser)
+      setWatchHistory((current) => {
+        const next = removeMatchingMovieRecords(current, movie, (entry) => entry.movie)
+        if (watchHistorySyncKey) {
+          void saveRemoteWatchHistory(watchHistorySyncKey, next)
+        }
+        return next
+      })
+    },
+    [currentUser, watchHistorySyncKey],
+  )
 
   const markWatchedMovie = useCallback((movie: Movie) => {
     setWatchHistory((current) => {
@@ -2863,13 +2959,17 @@ function App() {
           entry.movie.isHentaiOcean ||
           entry.movie.genres.some((g) => g.toLowerCase() === 'hentai')
         ) {
+          recordMovieRemoved(entry.movie, currentUser)
           delete next[key]
           changed = true
         }
       })
+      if (changed && watchHistorySyncKey) {
+        void saveRemoteWatchHistory(watchHistorySyncKey, next)
+      }
       return changed ? next : current
     })
-  }, [])
+  }, [currentUser, watchHistorySyncKey])
 
   const mapAniListToMovie = useCallback((anime: any, rank = 1): Movie => {
     return mapAniListToMovieStandalone(anime, rank)
@@ -3081,6 +3181,14 @@ function App() {
       className={`app-shell ${designMode}-theme ${navScrolled ? 'nav-scrolled' : ''}`}
       style={appShellStyle}
     >
+      {showSplash && (
+        <SplashScreen
+          onFinish={() => {
+            try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
+            setShowSplash(false)
+          }}
+        />
+      )}
       <PullToRefresh containerRef={appShellRef} />
       {screen === 'home' && featuredMovie && (
         <HomeScreen
@@ -3175,10 +3283,36 @@ function App() {
       )}
 
       {screen === 'livetv' && (
-        <LiveTvScreen onSearch={() => setScreen('search')} currentUser={currentUser} onProfile={openProfileOrLogin} profiles={profiles} />
+        <LiveTvScreen
+          onSearch={() => setScreen('search')}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          profiles={profiles}
+          onSelectProfile={switchToProfile}
+          onManageProfiles={openManageProfiles}
+          onTransferProfile={openLord}
+          onAccount={openProfileOrLogin}
+          onHelp={openHelpCenter}
+          onSignOut={signOut}
+          onSetLordPin={() => setShowSetLordPin(true)}
+        />
       )}
 
-      {screen === 'manga' && <MangaScreen onBack={() => setScreen('home')} />}
+      {screen === 'manga' && (
+        <MangaScreen
+          onBack={() => setScreen('home')}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          profiles={profiles}
+          onSelectProfile={switchToProfile}
+          onManageProfiles={openManageProfiles}
+          onTransferProfile={openLord}
+          onAccount={openProfileOrLogin}
+          onHelp={openHelpCenter}
+          onSignOut={signOut}
+          onSetLordPin={() => setShowSetLordPin(true)}
+        />
+      )}
 
       {(screen === 'movies' || screen === 'tv' || screen === 'anime') && (
         <BrowseScreen
@@ -3188,11 +3322,22 @@ function App() {
           collection={designMode === 'netflix' ? animeCollection : (screen === 'anime' ? animeCollection : screen === 'tv' ? tvShowCollection : movieCollection)}
           featuredMovie={designMode === 'netflix' ? (anime[0] || featuredMovie) : (screen === 'anime' ? anime[0] : screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0])}
           savedMovies={savedMovies}
+          likedMovies={likedList}
+          invites={incomingInvites}
+          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+          onDismissInvite={dismissInvite}
           onOpenDetail={openDetail}
           onPlay={openWatch}
           onSave={toggleSaved}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
+          onSelectProfile={switchToProfile}
+          onManageProfiles={openManageProfiles}
+          onTransferProfile={openLord}
+          onAccount={openProfileOrLogin}
+          onHelp={openHelpCenter}
+          onSignOut={signOut}
+          onSetLordPin={() => setShowSetLordPin(true)}
           profiles={profiles}
           onSearch={() => setScreen('search')}
           designMode={designMode}
@@ -3315,11 +3460,23 @@ function App() {
       {screen === 'library' && (
         <LibraryScreen
           savedMovies={savedList}
+          likedMovies={likedList}
+          invites={incomingInvites}
+          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+          onDismissInvite={dismissInvite}
           onOpenDetail={openDetail}
           currentUser={currentUser}
           onProfile={openProfileOrLogin}
+          onSelectProfile={switchToProfile}
+          onManageProfiles={openManageProfiles}
+          onTransferProfile={openLord}
+          onAccount={openProfileOrLogin}
+          onHelp={openHelpCenter}
+          onSignOut={signOut}
+          onSetLordPin={() => setShowSetLordPin(true)}
           profiles={profiles}
           onSearch={() => setScreen('search')}
+          designMode={designMode}
         />
       )}
 
@@ -3328,6 +3485,8 @@ function App() {
           currentUser={currentUser}
           onLogin={(user) => {
             setTempUser(user)
+            try { window.sessionStorage.removeItem('lumen.splash-done') } catch { /* ignore */ }
+            setShowSplash(true)
             setScreen('profiles')
           }}
           onLogout={() => {
@@ -3983,101 +4142,51 @@ function HomeScreen({
           }}
         />
         <HeroTrailerPreview key={`${designMode}-${screen ?? 'home'}-${featuredMovie.id}`} movie={featuredMovie} />
-        {designMode === 'netflix' ? (
-          <header className="netflix-mobile-header">
-            <div className="netflix-mobile-header-top">
-              <span className="netflix-user-greeting">For {currentUser?.name || 'Avnish'}</span>
-              <div className="netflix-mobile-header-icons">
-                <button className="netflix-icon-btn" type="button" title="Search" onClick={onSearch}>
-                  <Search size={22} />
-                </button>
-                {onAcceptInvite && onDismissInvite && (
-                  <NotificationBell
-                    variant="netflix"
-                    invites={invites}
-                    onAccept={onAcceptInvite}
-                    onDismiss={onDismissInvite}
-                  />
-                )}
-                <WatchRecommenderEntry
-                  designMode={designMode}
-                  onOpenDetail={onOpenDetail}
-                  likedMovies={likedMovies}
-                  variant="icon"
-                />
-                {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
-                  <ProfileMenu
-                    currentUser={currentUser}
-                    profiles={profiles}
-                    variant="netflix"
-                    onSelectProfile={onSelectProfile}
-                    onManageProfiles={onManageProfiles}
-                    onTransferProfile={onTransferProfile}
-                    onAccount={onAccount}
-                    onHelp={onHelp}
-                    onSignOut={onSignOut}
-                    onSetLordPin={onSetLordPin}
-                  />
-                ) : (
-                  <button
-                    className="netflix-icon-btn netflix-header-avatar-btn"
-                    type="button"
-                    title="Profile"
-                    onClick={onProfile}
-                  >
-                    {renderProfileAvatarMini(currentUser, profiles)}
-                  </button>
-                )}
-              </div>
-            </div>
-          </header>
-        ) : (
-          <header className="home-header">
-            <h1>Home</h1>
-            <div className="header-actions">
-              <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
-                <Search />
-              </button>
-              {onAcceptInvite && onDismissInvite && (
-                <NotificationBell
-                  variant="apple"
-                  invites={invites}
-                  onAccept={onAcceptInvite}
-                  onDismiss={onDismissInvite}
-                />
-              )}
-              <WatchRecommenderEntry
-                designMode={designMode}
-                onOpenDetail={onOpenDetail}
-                likedMovies={likedMovies}
-                variant="icon"
+        <header className="home-header">
+          <h1>{isDramaMode ? 'Drama' : 'Home'}</h1>
+          <div className="header-actions">
+            <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
+              <Search />
+            </button>
+            {onAcceptInvite && onDismissInvite && (
+              <NotificationBell
+                variant="apple"
+                invites={invites}
+                onAccept={onAcceptInvite}
+                onDismiss={onDismissInvite}
               />
-              {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
-                <ProfileMenu
-                  currentUser={currentUser}
-                  profiles={profiles}
-                  variant="apple"
-                  onSelectProfile={onSelectProfile}
-                  onManageProfiles={onManageProfiles}
-                  onTransferProfile={onTransferProfile}
-                  onAccount={onAccount}
-                  onHelp={onHelp}
-                  onSignOut={onSignOut}
-                  onSetLordPin={onSetLordPin}
-                />
-              ) : (
-                <button
-                  className={`avatar-button ${currentUser ? 'has-avatar' : ''}`}
-                  type="button"
-                  title="Profile"
-                  onClick={onProfile}
-                >
-                  {renderProfileAvatarMini(currentUser, profiles)}
-                </button>
-              )}
-            </div>
-          </header>
-        )}
+            )}
+            <WatchRecommenderEntry
+              designMode={designMode}
+              onOpenDetail={onOpenDetail}
+              likedMovies={likedMovies}
+              variant="icon"
+            />
+            {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
+              <ProfileMenu
+                currentUser={currentUser}
+                profiles={profiles}
+                variant="apple"
+                onSelectProfile={onSelectProfile}
+                onManageProfiles={onManageProfiles}
+                onTransferProfile={onTransferProfile}
+                onAccount={onAccount}
+                onHelp={onHelp}
+                onSignOut={onSignOut}
+                onSetLordPin={onSetLordPin}
+              />
+            ) : (
+              <button
+                className={`avatar-button ${currentUser ? 'has-avatar' : ''}`}
+                type="button"
+                title="Profile"
+                onClick={onProfile}
+              >
+                {renderProfileAvatarMini(currentUser, profiles)}
+              </button>
+            )}
+          </div>
+        </header>
 
         <div className="hero-copy">
           {designMode === 'netflix' ? (
@@ -4261,11 +4370,22 @@ type BrowseScreenProps = {
   collection: MediaCollection
   featuredMovie?: Movie
   savedMovies: SavedMovies
+  likedMovies?: Movie[]
+  invites?: WatchParty[]
+  onAcceptInvite?: (invite: WatchParty) => void
+  onDismissInvite?: (invite: WatchParty) => void
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSave: (movie: Movie) => void
   currentUser: UserInfo | null
   onProfile: () => void
+  onSelectProfile?: (profileName: string) => void
+  onManageProfiles?: () => void
+  onTransferProfile?: () => void
+  onAccount?: () => void
+  onHelp?: () => void
+  onSignOut?: () => void
+  onSetLordPin?: () => void
   profiles: UserProfile[]
   onSearch: () => void
   designMode: 'apple' | 'netflix'
@@ -4277,11 +4397,22 @@ function BrowseScreen({
   collection,
   featuredMovie,
   savedMovies,
+  likedMovies = [],
+  invites = [],
+  onAcceptInvite,
+  onDismissInvite,
   onOpenDetail,
   onPlay,
   onSave,
   currentUser,
   onProfile,
+  onSelectProfile,
+  onManageProfiles,
+  onTransferProfile,
+  onAccount,
+  onHelp,
+  onSignOut,
+  onSetLordPin,
   profiles,
   onSearch,
   designMode,
@@ -4345,8 +4476,9 @@ function BrowseScreen({
           ...collection.thrilling.slice(3),
           ...collection.adventure.slice(3),
           ...collection.kidsFamily.slice(3),
+          ...topItems,
         ],
-        movies,
+        topItems,
       ),
     [
       collection.adventure,
@@ -4354,6 +4486,7 @@ function BrowseScreen({
       collection.thrilling,
       collection.top,
       movies,
+      topItems,
     ],
   )
   const essentialItems = useMemo(
@@ -4433,17 +4566,43 @@ function BrowseScreen({
               <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
                 <Search />
               </button>
-              <button className="mute-button" type="button" title="Muted">
-                <VolumeX />
-              </button>
-              <button 
-                className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
-                type="button" 
-                title="Profile"
-                onClick={onProfile}
-              >
-                {renderProfileAvatarMini(currentUser, profiles)}
-              </button>
+              {onAcceptInvite && onDismissInvite && (
+                <NotificationBell
+                  variant="apple"
+                  invites={invites}
+                  onAccept={onAcceptInvite}
+                  onDismiss={onDismissInvite}
+                />
+              )}
+              <WatchRecommenderEntry
+                designMode={designMode}
+                onOpenDetail={onOpenDetail}
+                likedMovies={likedMovies}
+                variant="icon"
+              />
+              {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut && onSetLordPin ? (
+                <ProfileMenu
+                  currentUser={currentUser}
+                  profiles={profiles}
+                  variant="apple"
+                  onSelectProfile={onSelectProfile}
+                  onManageProfiles={onManageProfiles}
+                  onTransferProfile={onTransferProfile}
+                  onAccount={onAccount}
+                  onHelp={onHelp}
+                  onSignOut={onSignOut}
+                  onSetLordPin={onSetLordPin}
+                />
+              ) : (
+                <button
+                  className={`avatar-button ${currentUser ? 'has-avatar' : ''}`}
+                  type="button"
+                  title="Profile"
+                  onClick={onProfile}
+                >
+                  {renderProfileAvatarMini(currentUser, profiles)}
+                </button>
+              )}
             </div>
           </header>
 
@@ -7812,7 +7971,7 @@ function getAvatarSrc(avatarKey: string): string {
   return avatarAssets[assetPath] ?? `/src/assets/${assetPath}`
 }
 
-function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserProfile[]) {
+export function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserProfile[]) {
   if (!currentUser) return '👤'
   const matched = profiles.find((p) => p.name.toLowerCase() === currentUser.name.toLowerCase())
   const avatarColor = currentUser.avatarColor ?? matched?.avatarColor
@@ -8630,73 +8789,75 @@ function ProfilesScreen({
       </header>
 
       <div className="profiles-container">
-        <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : 'Choose your profile'}</h1>
-        
-        <div className="profiles-grid">
-          {profiles.map((profile) => (
-            <button 
-              key={profile.name}
-              className="profile-item" 
-              type="button" 
-              onClick={() => {
-                if (isManaging) {
-                  setEditingProfile(profile)
-                  setEditName(profile.name)
-                  setEditIsKids(profile.avatarColor === 'kids')
-                  setSelectedAvatarColor(profile.avatarColor === 'kids' ? 'red' : profile.avatarColor)
-                } else {
-                  onSelectProfile(profile.name)
-                }
-              }}
-            >
-              <div className="profile-avatar-container" style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
-                {profile.avatarColor === 'kids' ? (
-                  <div className="profile-avatar avatar-kids">
-                    <div className="kids-bg">
-                      <div className="stripe red"></div>
-                      <div className="stripe orange"></div>
-                      <div className="stripe yellow"></div>
-                      <div className="stripe green"></div>
-                      <div className="stripe blue"></div>
+        <div className="profiles-sheet-container">
+          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : 'Choose your profile'}</h1>
+          
+          <div className="profiles-grid">
+            {profiles.map((profile) => (
+              <button 
+                key={profile.name}
+                className="profile-item" 
+                type="button" 
+                onClick={() => {
+                  if (isManaging) {
+                    setEditingProfile(profile)
+                    setEditName(profile.name)
+                    setEditIsKids(profile.avatarColor === 'kids')
+                    setSelectedAvatarColor(profile.avatarColor === 'kids' ? 'red' : profile.avatarColor)
+                  } else {
+                    onSelectProfile(profile.name)
+                  }
+                }}
+              >
+                <div className="profile-avatar-container" style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
+                  {profile.avatarColor === 'kids' ? (
+                    <div className="profile-avatar avatar-kids">
+                      <div className="kids-bg">
+                        <div className="stripe red"></div>
+                        <div className="stripe orange"></div>
+                        <div className="stripe yellow"></div>
+                        <div className="stripe green"></div>
+                        <div className="stripe blue"></div>
+                      </div>
+                      <span className="kids-text">kids</span>
                     </div>
-                    <span className="kids-text">kids</span>
-                  </div>
-                ) : (
-                  <div className="profile-avatar" style={{ overflow: 'hidden', width: '100%', height: '100%' }}>
-                    <img 
-                      src={getAvatarSrc(profile.avatarColor)} 
-                      alt={profile.name} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    />
-                  </div>
-                )}
-                {isManaging && (
-                  <div className="profile-avatar-manage-overlay">
-                    <Pencil size={32} className="manage-pencil-icon" />
-                  </div>
-                )}
+                  ) : (
+                    <div className="profile-avatar" style={{ overflow: 'hidden', width: '100%', height: '100%' }}>
+                      <img 
+                        src={getAvatarSrc(profile.avatarColor)} 
+                        alt={profile.name} 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    </div>
+                  )}
+                  {isManaging && (
+                    <div className="profile-avatar-manage-overlay">
+                      <Pencil size={26} className="manage-pencil-icon" />
+                    </div>
+                  )}
+                </div>
+                <span className="profile-name">{profile.name}</span>
+              </button>
+            ))}
+
+            <button className="profile-item" type="button" onClick={() => setIsAdding(true)}>
+              <div className="profile-avatar avatar-add">
+                <Plus size={28} strokeWidth={2.2} />
               </div>
-              <span className="profile-name">{profile.name}</span>
+              <span className="profile-name">Add</span>
             </button>
-          ))}
 
-          <button className="profile-item" type="button" onClick={() => setIsAdding(true)}>
-            <div className="profile-avatar avatar-add">
-              <Plus size={32} />
-            </div>
-            <span className="profile-name">Add</span>
-          </button>
-
-          <button
-            className="profile-item"
-            type="button"
-            onClick={() => setIsManaging((value) => !value)}
-          >
-            <div className={`profile-avatar avatar-add${isManaging ? ' avatar-edit-active' : ''}`}>
-              <Pencil size={30} />
-            </div>
-            <span className="profile-name">{isManaging ? 'Done' : 'Edit'}</span>
-          </button>
+            <button
+              className="profile-item"
+              type="button"
+              onClick={() => setIsManaging((value) => !value)}
+            >
+              <div className={`profile-avatar avatar-add${isManaging ? ' avatar-edit-active' : ''}`}>
+                <Pencil size={24} strokeWidth={2.2} />
+              </div>
+              <span className="profile-name">{isManaging ? 'Done' : 'Edit'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -8705,37 +8866,90 @@ function ProfilesScreen({
 
 type LibraryScreenProps = {
   savedMovies: Movie[]
+  likedMovies?: Movie[]
+  invites?: WatchParty[]
+  onAcceptInvite?: (invite: WatchParty) => void
+  onDismissInvite?: (invite: WatchParty) => void
   onOpenDetail: (movie: Movie) => void
   currentUser: UserInfo | null
   onProfile: () => void
+  onSelectProfile?: (profileName: string) => void
+  onManageProfiles?: () => void
+  onTransferProfile?: () => void
+  onAccount?: () => void
+  onHelp?: () => void
+  onSignOut?: () => void
+  onSetLordPin?: () => void
   profiles: UserProfile[]
   onSearch: () => void
+  designMode?: 'apple' | 'netflix'
 }
 
 function LibraryScreen({
   savedMovies,
+  likedMovies = [],
+  invites = [],
+  onAcceptInvite,
+  onDismissInvite,
   onOpenDetail,
   currentUser,
   onProfile,
+  onSelectProfile,
+  onManageProfiles,
+  onTransferProfile,
+  onAccount,
+  onHelp,
+  onSignOut,
+  onSetLordPin,
   profiles,
   onSearch,
+  designMode = 'apple',
 }: LibraryScreenProps) {
   return (
     <section className="screen library-screen">
-      <header className="library-header">
+      <header className="home-header">
         <h1>Library</h1>
         <div className="header-actions">
           <button className="mobile-search-btn" type="button" title="Search" onClick={onSearch}>
             <Search />
           </button>
-          <button 
-            className={`avatar-button ${currentUser ? 'has-avatar' : ''}`} 
-            type="button" 
-            title="Profile"
-            onClick={onProfile}
-          >
-            {renderProfileAvatarMini(currentUser, profiles)}
-          </button>
+          {onAcceptInvite && onDismissInvite && (
+            <NotificationBell
+              variant="apple"
+              invites={invites}
+              onAccept={onAcceptInvite}
+              onDismiss={onDismissInvite}
+            />
+          )}
+          <WatchRecommenderEntry
+            designMode={designMode}
+            onOpenDetail={onOpenDetail}
+            likedMovies={likedMovies}
+            variant="icon"
+          />
+          {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut && onSetLordPin ? (
+            <ProfileMenu
+              currentUser={currentUser}
+              profiles={profiles}
+              variant="apple"
+              onSelectProfile={onSelectProfile}
+              onManageProfiles={onManageProfiles}
+              onTransferProfile={onTransferProfile}
+              onAccount={onAccount}
+              onHelp={onHelp}
+              onSignOut={onSignOut}
+              onSetLordPin={onSetLordPin}
+            />
+          ) : (
+            <button
+              className={`avatar-button ${currentUser ? 'has-avatar' : ''}`}
+              type="button"
+              title="Profile"
+              onClick={onProfile}
+            >
+              {renderProfileAvatarMini(currentUser, profiles)}
+            </button>
+          )}
         </div>
       </header>
 
@@ -9610,12 +9824,6 @@ function LiveTvPlayer({ stream, title }: { stream: LiveStream; title: string }) 
   )
 }
 
-type LiveTvScreenProps = {
-  onSearch: () => void
-  currentUser: UserInfo | null
-  onProfile: () => void
-  profiles: UserProfile[]
-}
 
 function formatMatchTime(date: number): string {
   if (!date) {
@@ -9683,13 +9891,39 @@ function LiveMatchCard({
   )
 }
 
-function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScreenProps) {
+type LiveTvScreenProps = {
+  onSearch?: () => void
+  currentUser: UserInfo | null
+  onProfile: () => void
+  profiles: UserProfile[]
+  onSelectProfile?: (profileName: string) => void
+  onManageProfiles?: () => void
+  onTransferProfile?: () => void
+  onAccount?: () => void
+  onHelp?: () => void
+  onSignOut?: () => void
+  onSetLordPin?: () => void
+}
+
+function LiveTvScreen({
+  currentUser,
+  onProfile,
+  profiles,
+  onSelectProfile,
+  onManageProfiles,
+  onTransferProfile,
+  onAccount,
+  onHelp,
+  onSignOut,
+  onSetLordPin,
+}: LiveTvScreenProps) {
   const [sports, setSports] = useState<LiveSport[]>([])
   const [scope, setScope] = useState<LiveMatchScope>('live')
   const [matches, setMatches] = useState<LiveMatch[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
 
   const [selectedMatch, setSelectedMatch] = useState<LiveMatch | null>(null)
   const [streams, setStreams] = useState<LiveStream[]>([])
@@ -9784,20 +10018,67 @@ function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScre
 
   return (
     <section className="screen livetv-screen">
-      <header className="livetv-header">
-        <div className="livetv-header-title">
-          <Radio />
-          <h1>Live TV</h1>
-        </div>
-        <div className="livetv-header-actions">
-          <button className="netflix-icon-btn" type="button" title="Search" onClick={onSearch}>
+      <header className="home-header">
+        <h1>Live TV</h1>
+        <div className="header-actions">
+          <button
+            className="mobile-search-btn"
+            type="button"
+            title="Search Live TV"
+            onClick={() => setShowSearch((prev) => !prev)}
+          >
             <Search size={22} />
           </button>
-          <button className="netflix-sidebar-avatar livetv-avatar" type="button" onClick={onProfile} title="Profile">
-            {renderProfileAvatarMini(currentUser, profiles)}
-          </button>
+          {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
+            <ProfileMenu
+              currentUser={currentUser}
+              profiles={profiles}
+              variant="apple"
+              onSelectProfile={onSelectProfile}
+              onManageProfiles={onManageProfiles}
+              onTransferProfile={onTransferProfile}
+              onAccount={onAccount}
+              onHelp={onHelp}
+              onSignOut={onSignOut}
+              onSetLordPin={onSetLordPin}
+            />
+          ) : (
+            <button
+              className={`avatar-button ${currentUser ? 'has-avatar' : ''}`}
+              type="button"
+              title="Profile"
+              onClick={onProfile}
+            >
+              {renderProfileAvatarMini(currentUser, profiles)}
+            </button>
+          )}
         </div>
       </header>
+
+      {(showSearch || query.trim().length > 0) && (
+        <div className="manga-search-bar-row">
+          <Search size={18} className="manga-search-icon" />
+          <input
+            type="text"
+            className="manga-horizontal-search-input"
+            placeholder="Search live events..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            autoFocus
+            aria-label="Search live events"
+          />
+          {query && (
+            <button
+              type="button"
+              className="manga-search-clear-btn"
+              onClick={() => setQuery('')}
+              title="Clear search"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      )}
 
       {selectedMatch && (
         <div className="livetv-now-playing">
@@ -9839,18 +10120,6 @@ function LiveTvScreen({ onSearch, currentUser, onProfile, profiles }: LiveTvScre
           </div>
         </div>
       )}
-
-      <div className="livetv-controls">
-        <label className="livetv-search">
-          <Search size={18} />
-          <input
-            type="search"
-            value={query}
-            placeholder="Search live events"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-      </div>
 
       <div className="livetv-category-chips">
         <button
@@ -9996,7 +10265,7 @@ function BottomNav({
             onClick={onGoLumen}
             title="Switch to Lumen"
           >
-            <img className="lumen-tab-icon" src="/icon.jpeg" alt="" />
+            <span className="lumen-tab-letter">L</span>
             <span>Lumen</span>
           </button>
         </nav>
@@ -11361,7 +11630,7 @@ function LordPhubRailRow({
   )
 }
 
-function ProfileMenu({
+export function ProfileMenu({
   currentUser,
   profiles,
   variant,

@@ -1,8 +1,8 @@
 // Manga browsing + reading screen (Netflix/Anime UI). Backed by MangaDex via
 // src/manga.ts, proxied through /api/mangahook.
 
-import { ChevronLeft, LoaderCircle, Search, BookOpen } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronLeft, LoaderCircle, Search, BookOpen, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchChapterPages,
   fetchChapters,
@@ -11,16 +11,40 @@ import {
   type MangaChapter,
   type MangaSummary,
 } from './manga'
+import { ProfileMenu, renderProfileAvatarMini, type UserInfo, type UserProfile } from './App'
 
 type MangaScreenProps = {
   onBack: () => void
+  currentUser?: UserInfo | null
+  onProfile?: () => void
+  profiles?: UserProfile[]
+  onSelectProfile?: (profileName: string) => void
+  onManageProfiles?: () => void
+  onTransferProfile?: () => void
+  onAccount?: () => void
+  onHelp?: () => void
+  onSignOut?: () => void
+  onSetLordPin?: () => void
 }
 
 type View = 'browse' | 'detail' | 'reader'
 
-export function MangaScreen({ onBack }: MangaScreenProps) {
+export function MangaScreen({
+  onBack: _onBack,
+  currentUser = null,
+  onProfile,
+  profiles = [],
+  onSelectProfile,
+  onManageProfiles,
+  onTransferProfile,
+  onAccount,
+  onHelp,
+  onSignOut,
+  onSetLordPin,
+}: MangaScreenProps) {
   const [view, setView] = useState<View>('browse')
   const [query, setQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
   const [list, setList] = useState<MangaSummary[]>([])
   const [listLoading, setListLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -38,6 +62,7 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
   const [pages, setPages] = useState<string[]>([])
   const [pagesLoading, setPagesLoading] = useState(false)
   const readerRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   // Load (or reload) the first page whenever the query changes. Empty query
   // loads the popular list immediately; typed queries are debounced.
@@ -65,51 +90,33 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
 
   const loadMore = useCallback(() => {
     if (listLoading || loadingMore || !hasMore) return
-    const token = requestToken.current
     const nextPage = page + 1
-    const trimmed = query.trim()
+    const token = requestToken.current
     setLoadingMore(true)
+    const trimmed = query.trim()
     const request = trimmed ? searchManga(trimmed, nextPage) : fetchPopularManga(nextPage)
     void request
       .then((result) => {
         if (token !== requestToken.current) return
-        setList((prev) => {
-          const seen = new Set(prev.map((m) => m.id))
-          return [...prev, ...result.items.filter((m) => !seen.has(m.id))]
-        })
+        setList((prev) => [...prev, ...result.items])
         setPage(nextPage)
         setHasMore(result.hasMore)
       })
       .finally(() => {
         if (token === requestToken.current) setLoadingMore(false)
       })
-  }, [listLoading, loadingMore, hasMore, page, query])
+  }, [hasMore, listLoading, loadingMore, page, query])
 
-  // Keep a live ref to loadMore so the IntersectionObserver callback always
-  // calls the latest version without needing to re-create the observer.
-  const loadMoreRef = useRef(loadMore)
-  loadMoreRef.current = loadMore
+  useEffect(() => {
+    if (!sentinelRef.current) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) loadMore()
+    })
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [loadMore])
 
-  // Callback ref: (re)attach the observer whenever the sentinel element mounts,
-  // which happens each time we return to the browse view.
-  const observerRef = useRef<IntersectionObserver | null>(null)
-  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
-    if (observerRef.current) {
-      observerRef.current.disconnect()
-      observerRef.current = null
-    }
-    if (node) {
-      observerRef.current = new IntersectionObserver(
-        (entries) => {
-          if (entries[0]?.isIntersecting) loadMoreRef.current()
-        },
-        { rootMargin: '600px' },
-      )
-      observerRef.current.observe(node)
-    }
-  }, [])
-
-  const openManga = (manga: MangaSummary) => {
+  const openManga = useCallback((manga: MangaSummary) => {
     setSelected(manga)
     setView('detail')
     setChapters([])
@@ -117,9 +124,9 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
     void fetchChapters(manga.id)
       .then(setChapters)
       .finally(() => setChaptersLoading(false))
-  }
+  }, [])
 
-  const openChapter = (index: number) => {
+  const openChapter = useCallback((index: number) => {
     const chapter = chapters[index]
     if (!chapter || !selected) return
     setChapterIndex(index)
@@ -130,43 +137,60 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
       .then(setPages)
       .finally(() => setPagesLoading(false))
     readerRef.current?.scrollTo({ top: 0 })
-  }
+  }, [chapters, selected])
 
-  const hasPrev = chapterIndex > 0
   const hasNext = chapterIndex < chapters.length - 1
 
-  const currentChapter = chapters[chapterIndex]
-
-  const readerTitle = useMemo(() => {
-    if (!selected) return 'Reader'
-    const num = currentChapter?.chapter ? `Ch. ${currentChapter.chapter}` : ''
-    return `${selected.title}${num ? ` · ${num}` : ''}`
-  }, [selected, currentChapter])
+  const renderHeaderProfile = () => {
+    if (onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut) {
+      return (
+        <ProfileMenu
+          currentUser={currentUser}
+          profiles={profiles}
+          variant="apple"
+          onSelectProfile={onSelectProfile}
+          onManageProfiles={onManageProfiles}
+          onTransferProfile={onTransferProfile}
+          onAccount={onAccount}
+          onHelp={onHelp}
+          onSignOut={onSignOut}
+          onSetLordPin={onSetLordPin}
+        />
+      )
+    }
+    return (
+      <button
+        className={`avatar-button ${currentUser ? 'has-avatar' : ''}`}
+        type="button"
+        title="Profile"
+        onClick={onProfile}
+      >
+        {renderProfileAvatarMini(currentUser, profiles)}
+      </button>
+    )
+  }
 
   // ---- Reader ----
-  if (view === 'reader') {
+  if (view === 'reader' && selected) {
+    const currentChapter = chapters[chapterIndex]
     return (
-      <section className="screen manga-screen">
-        <header className="manga-reader-bar">
-          <button className="manga-back" type="button" onClick={() => setView('detail')}>
+      <section className="screen manga-screen manga-reader-screen" ref={readerRef}>
+        <header className="home-header">
+          <button className="manga-back" type="button" onClick={() => setView('detail')} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 0, color: '#fff' }}>
             <ChevronLeft size={22} />
+            <span>Back</span>
           </button>
-          <span className="manga-reader-title">{readerTitle}</span>
-          <div className="manga-reader-nav">
-            <button type="button" disabled={!hasPrev} onClick={() => openChapter(chapterIndex - 1)}>
-              Prev
-            </button>
-            <button type="button" disabled={!hasNext} onClick={() => openChapter(chapterIndex + 1)}>
-              Next
-            </button>
-          </div>
+          <h1 style={{ fontSize: '18px', fontWeight: '700' }}>
+            {currentChapter?.chapter ? `Ch. ${currentChapter.chapter}` : selected.title}
+          </h1>
+          {renderHeaderProfile()}
         </header>
 
-        <div className="manga-reader" ref={readerRef}>
+        <div className="manga-reader-body">
           {pagesLoading ? (
             <div className="manga-empty">
               <LoaderCircle className="spin-icon" />
-              <p>Loading pages…</p>
+              <p>Loading chapter pages…</p>
             </div>
           ) : pages.length === 0 ? (
             <div className="manga-empty">
@@ -174,9 +198,11 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
               <p>No pages available for this chapter.</p>
             </div>
           ) : (
-            pages.map((src, index) => (
-              <img key={src} src={src} alt={`Page ${index + 1}`} loading="lazy" />
-            ))
+            <div className="manga-pages-vertical">
+              {pages.map((src, index) => (
+                <img key={src} src={src} alt={`Page ${index + 1}`} loading="lazy" className="manga-page-img" referrerPolicy="no-referrer" />
+              ))}
+            </div>
           )}
           {!pagesLoading && pages.length > 0 && (
             <div className="manga-reader-footer">
@@ -198,16 +224,18 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
   if (view === 'detail' && selected) {
     return (
       <section className="screen manga-screen">
-        <header className="manga-topbar">
-          <button className="manga-back" type="button" onClick={() => setView('browse')}>
+        <header className="home-header">
+          <button className="manga-back" type="button" onClick={() => setView('browse')} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 0, color: '#fff' }}>
             <ChevronLeft size={22} />
             <span>Back</span>
           </button>
+          <h1 style={{ fontSize: '18px', fontWeight: '700' }}>{selected.title}</h1>
+          {renderHeaderProfile()}
         </header>
 
         <div className="manga-detail">
           <div className="manga-detail-head">
-            <img className="manga-detail-cover" src={selected.coverUrl} alt={selected.title} />
+            <img className="manga-detail-cover" src={selected.coverUrl} alt={selected.title} referrerPolicy="no-referrer" />
             <div className="manga-detail-meta">
               <h1>{selected.title}</h1>
               <p className="manga-detail-sub">
@@ -223,7 +251,7 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
             </div>
           </div>
 
-          <h2 className="manga-chapters-title">Chapters</h2>
+          <h2 className="manga-chapters-heading">Chapters ({chapters.length})</h2>
           {chaptersLoading ? (
             <div className="manga-empty">
               <LoaderCircle className="spin-icon" />
@@ -235,7 +263,7 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
               <p>No chapters found for this title.</p>
             </div>
           ) : (
-            <ul className="manga-chapters">
+            <ul className="manga-chapter-list">
               {chapters.map((chapter, index) => (
                 <li key={chapter.id}>
                   <button type="button" onClick={() => openChapter(index)}>
@@ -256,25 +284,47 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
   // ---- Browse (grid) ----
   return (
     <section className="screen manga-screen">
-      <header className="manga-topbar">
-        <button className="manga-back" type="button" onClick={onBack}>
-          <ChevronLeft size={22} />
-          <span>Back</span>
-        </button>
-        <div className="manga-search">
-          <Search size={18} />
-          <input
-            type="text"
-            placeholder="Search manga…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            aria-label="Search manga"
-          />
+      <header className="home-header">
+        <h1>Manga</h1>
+        <div className="header-actions">
+          <button
+            className="mobile-search-btn"
+            type="button"
+            title="Search Manga"
+            onClick={() => setShowSearch((prev) => !prev)}
+          >
+            <Search size={22} />
+          </button>
+          {renderHeaderProfile()}
         </div>
       </header>
 
+      {(showSearch || query.trim().length > 0) && (
+        <div className="manga-search-bar-row">
+          <Search size={18} className="manga-search-icon" />
+          <input
+            type="text"
+            className="manga-horizontal-search-input"
+            placeholder="Search manga by title…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            autoFocus
+            aria-label="Search manga"
+          />
+          {query && (
+            <button
+              type="button"
+              className="manga-search-clear-btn"
+              onClick={() => setQuery('')}
+              title="Clear search"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="manga-browse">
-        <h1 className="manga-heading">Manga</h1>
         {listLoading ? (
           <div className="manga-empty">
             <LoaderCircle className="spin-icon" />
@@ -296,7 +346,7 @@ export function MangaScreen({ onBack }: MangaScreenProps) {
                   onClick={() => openManga(manga)}
                 >
                   <span className="manga-card-cover">
-                    <img src={manga.coverUrl} alt={manga.title} loading="lazy" />
+                    <img src={manga.coverUrl} alt={manga.title} loading="lazy" referrerPolicy="no-referrer" />
                   </span>
                   <span className="manga-card-title">{manga.title}</span>
                 </button>

@@ -6,8 +6,15 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./public/icon.jpeg",
+    "splash": {
+      "image": "./public/icon.jpeg",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
     "ios": {
       "supportsTablet": true,
+      "icon": "./public/icon.jpeg",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
@@ -17,7 +24,12 @@
     },
     "android": {
       "package": "com.lumen.app",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "icon": "./public/icon.jpeg",
+      "adaptiveIcon": {
+        "foregroundImage": "./public/icon.jpeg",
+        "backgroundColor": "#000000"
+      }
     },
     "extra": {
       "eas": {

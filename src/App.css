@@ -43,57 +43,87 @@ button {
   min-height: 88svh;
 }
 
-.home-header {
-  position: sticky;
-  top: 0;
-  z-index: 3000;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 28px 12px;
-  background: rgba(10, 10, 14, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  transition: background 0.3s ease;
+.home-header,
+.library-header,
+.netflix-mobile-header,
+.apple-mobile-header,
+.app-unified-topbar {
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  z-index: 3000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-top: max(env(safe-area-inset-top, 0px), 48px) !important;
+  padding-bottom: 12px !important;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 65%, rgba(0, 0, 0, 0) 100%) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  transition: background 0.3s ease !important;
+  box-sizing: border-box !important;
 }
 
-.home-header h1 {
-  margin: 0;
-  color: #fff;
-  font-size: clamp(44px, 13vw, 62px);
-  font-weight: 800;
-  line-height: 1;
+.home-header h1,
+.library-header h1,
+.netflix-mobile-header h1,
+.apple-mobile-header h1,
+.app-unified-topbar h1 {
+  margin: 0 !important;
+  color: #ffffff !important;
+  font-size: 32px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  letter-spacing: -0.5px !important;
+  padding: 0 !important;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5) !important;
 }
 
-.avatar-button {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  place-items: center;
-  color: #fff;
-  border: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 28% 20%, #c8e5ff, transparent 38%),
-    linear-gradient(145deg, #b7cef4, #5874d0);
-  font-size: 25px;
-  font-weight: 900;
-  line-height: 1;
-  overflow: hidden;
-  padding: 0;
-  cursor: pointer;
+.avatar-button,
+.apple-nav-profile,
+.netflix-sidebar-avatar,
+.livetv-avatar,
+.netflix-header-avatar-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  border-radius: 50% !important;
+  border: 2px solid rgba(255, 255, 255, 0.4) !important;
+  background: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
-.avatar-button.has-avatar {
-  background: none;
-  padding: 0;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-}
-
-.avatar-button.has-avatar .profile-avatar {
-  width: 100%;
-  height: 100%;
+.avatar-button img,
+.apple-nav-profile img,
+.netflix-sidebar-avatar img,
+.livetv-avatar img,
+.netflix-header-avatar-btn img,
+.avatar-button .profile-avatar,
+.apple-nav-profile .profile-avatar,
+.netflix-sidebar-avatar .profile-avatar,
+.livetv-avatar .profile-avatar,
+.netflix-header-avatar-btn .profile-avatar {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  display: block !important;
 }
 
 .profile-avatar-large.has-avatar-img {
@@ -104,15 +134,15 @@ button {
 }
 
 .header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
 }
 
 .mute-button {
   display: grid;
-  width: 58px;
-  height: 58px;
+  width: 38px;
+  height: 38px;
   place-items: center;
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -122,39 +152,38 @@ button {
 }
 
 .mute-button svg {
-  width: 30px;
-  height: 30px;
+  width: 20px;
+  height: 20px;
 }
 
 .mobile-search-btn {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  place-items: center;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 50%;
-  background: rgba(28, 28, 30, 0.66);
-  backdrop-filter: blur(18px);
-  cursor: pointer;
-  padding: 0;
-  transition: background-color 0.25s, transform 0.2s, border-color 0.25s;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  opacity: 0.9 !important;
+  transition: opacity 0.2s ease, transform 0.2s ease !important;
 }
 
 .mobile-search-btn:active {
-  transform: scale(0.92);
-  background: rgba(28, 28, 30, 0.85);
+  opacity: 0.7 !important;
+  transform: scale(0.92) !important;
+  background: transparent !important;
 }
 
 .mobile-search-btn svg {
-  width: 28px;
-  height: 28px;
-}
-
-@media (min-width: 900px) {
-  .mobile-search-btn {
-    display: none;
-  }
+  width: 22px !important;
+  height: 22px !important;
 }
 
 
@@ -12360,11 +12389,17 @@ body:has(.login-screen) {
   height: 24px;
 }
 
-.netflix-tab-bar .netflix-tab .lumen-tab-icon {
+.netflix-tab-bar .netflix-tab .lumen-tab-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 24px;
   height: 24px;
-  object-fit: contain;
-  border-radius: 5px;
+  font-size: 18px;
+  font-weight: 900;
+  color: #e50914;
+  text-shadow: 0 0 12px rgba(229, 9, 20, 0.7);
+  line-height: 1;
 }
 
 .netflix-tab-bar .netflix-tab-avatar {
@@ -12956,28 +12991,97 @@ body:has(.login-screen) {
       #111115 100%);
 }
 
-/* Content column sits at the bottom, right under the artwork. */
+/* Bottom curved sheet container matching Netflix reference image */
 .profiles-screen-hero .profiles-container {
   justify-content: flex-end !important;
-  padding-bottom: clamp(36px, 6vh, 64px) !important;
+  align-items: stretch !important;
+  padding: 0 !important;
+  width: 100% !important;
 }
 
-/* Smaller, softer heading like the reference ("Choose your profile"). */
+.profiles-sheet-container {
+  width: 100%;
+  background: linear-gradient(180deg, rgba(28, 25, 24, 0.92) 0%, rgba(16, 14, 13, 0.98) 100%);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top-left-radius: 28px;
+  border-top-right-radius: 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 16px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Heading ("Choose your profile") */
 .profiles-screen-hero .profiles-title {
-  margin-bottom: clamp(14px, 2.6vh, 24px);
-  font-size: clamp(15px, 4vw, 19px);
-  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 24px;
+  font-size: 15px;
+  font-weight: 500;
   color: rgba(255, 255, 255, 0.82);
+  text-align: center;
+  letter-spacing: -0.01em;
 }
 
+/* Fixed 3-Column Grid Layout matching reference image */
 .profiles-screen-hero .profiles-grid {
-  margin-bottom: 0;
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 22px 16px !important;
+  width: 100% !important;
+  max-width: 320px !important;
+  margin: 0 auto !important;
+  justify-items: center !important;
+  align-items: start !important;
 }
 
-/* Edit tile shows an active (red) state while managing. */
-.avatar-add.avatar-edit-active {
-  border-color: rgba(229, 9, 20, 0.8) !important;
-  color: #e50914 !important;
+.profiles-screen-hero .profile-item {
+  width: 100% !important;
+  max-width: 82px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.profiles-screen-hero .profile-avatar {
+  width: 100% !important;
+  aspect-ratio: 1 !important;
+  border-radius: 18px !important;
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Solid rounded dark card for Add and Edit buttons (No dashed border!) */
+.profiles-screen-hero .avatar-add {
+  border: none !important;
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  border-radius: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.profiles-screen-hero .avatar-add:hover {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+}
+
+.profiles-screen-hero .avatar-add.avatar-edit-active {
+  background-color: rgba(229, 9, 20, 0.25) !important;
+  color: #ff453a !important;
+}
+
+.profiles-screen-hero .profile-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 2px;
+  text-align: center;
 }
 
 /* No back button on the profile chooser (it's the entry screen). */
@@ -17140,4 +17244,56 @@ body:has(.login-screen) {
   padding: 2px 8px;
   border-radius: 4px;
   align-self: flex-start;
+}
+
+/* Horizontal Manga Search Bar Row */
+.manga-search-bar-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin: 8px 16px 12px 16px !important;
+  padding: 10px 16px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+  transition: all 0.25s ease !important;
+}
+
+.manga-search-icon {
+  color: rgba(255, 255, 255, 0.65) !important;
+  flex-shrink: 0 !important;
+}
+
+.manga-horizontal-search-input {
+  flex: 1 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: #ffffff !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.manga-horizontal-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.manga-search-clear-btn {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: none !important;
+  color: #ffffff !important;
+  border-radius: 50% !important;
+  width: 24px !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
 }

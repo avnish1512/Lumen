@@ -1,0 +1,33 @@
+.lumen-splash-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #ededf0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  opacity: 1;
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.6s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.lumen-splash-overlay.lumen-splash-fadeout {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.lumen-splash-video {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  background: #ededf0;
+}
