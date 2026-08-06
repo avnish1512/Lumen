@@ -1,114 +1,54 @@
-# Movie Info App
+# 🍿 Lumen — Premium Media & Streaming Platform
 
-Apple TV-inspired movie information app powered by OMDb.
+![Lumen Platform](https://img.shields.io/badge/Platform-Lumen%20Streaming-blueviolet?style=for-the-badge)
+![UI Design](https://img.shields.io/badge/UI-Apple%20TV%20Inspired-000000?style=for-the-badge&logo=apple)
+![Streaming](https://img.shields.io/badge/Stream-Movies%20%7C%20TV%20%7C%20Anime%20%7C%20Live%20TV-red?style=for-the-badge)
+![Status](https://img.shields.io/badge/Status-Active%20%26%20Updated-success?style=for-the-badge)
 
-## Features
+**Lumen** is a next-generation, high-performance web and mobile streaming platform inspired by Apple TV. Built with a sleek glassmorphic interface, dynamic animations, and zero-ad minimalist design, Lumen brings together Movies, TV Shows, Anime, K-Dramas, and Live TV into a unified streaming ecosystem.
 
-- Real OMDb search and movie detail data
-- Server-side `/api/omdb` proxy so the OMDb key is not shipped in the browser bundle
-- Curated home screen, movie detail view, watch/info view, Discover search, and saved Library
-- Saved movies persisted in `localStorage`
-- Mobile-first UI ready for deployment
+---
 
-## Local Setup
+## ✨ Key Features & Capabilities
 
-Create `.env.local`:
+### 🎬 Movies & TV Series
+- **Extensive Library**: Stream thousands of Hollywood blockbusters, trending series, and timeless classics in HD.
+- **Multiple High-Speed Streaming Servers**: Seamlessly switch between server nodes (Vidking, Rivestream, VIP Server, and Old Server) with built-in auto-fallback for 100% playback reliability.
+- **Episode & Season Selector**: Browse complete season guides, episode summaries, runtime details, and release dates.
 
-```bash
-OMDB_API_KEY=your_omdb_api_key
-TMDB_API_KEY=your_tmdb_api_key
-TMDB_API_READ_ACCESS_TOKEN=your_tmdb_api_read_access_token
-TMDB_SECONDARY_API_KEY=your_secondary_tmdb_api_key
-TMDB_SECONDARY_API_READ_ACCESS_TOKEN=your_secondary_tmdb_api_read_access_token
-```
+### 🎌 Anime & Asian Dramas
+- **AniList Native Integration**: Subbed & Dubbed anime streams powered by AniList metadata (MegaPlay & VidNest servers).
+- **K-Drama & C-Drama Hubs**: Dedicated collections for Korean and Chinese dramas with curated rails and full episode navigation.
 
-Install and run:
+### 📺 Live TV & Sports Channels
+- Real-time streaming of live television channels, news broadcasts, and sports channels integrated directly into the player.
 
-```bash
-npm install
-npm run dev
-```
+### 👥 Watch Party Mode
+- **Synchronized Viewing**: Create virtual rooms to watch movies or series synchronously with friends.
+- **Live Room Controls**: Real-time host controls for play, pause, and timestamp sync.
 
-Open:
+### 🤖 AI-Powered Watch Recommender
+- **Smart Discovery**: Personalized recommendation engine that matches titles based on your mood, preferred genre, duration, and viewing history.
 
-```bash
-http://127.0.0.1:5173/
-```
+### 🔒 Profiles & Privacy Control
+- **Multi-Profile Support**: Custom profiles for family members with individual viewing histories and saved libraries.
+- **PIN-Protected Lord Profile**: Secure adult animation and private collections guarded by customizable security PINs.
+- **Smart History Management**: Automatic isolation between public continue-watching history and private profiles.
 
-## Deploy to Vercel
+### 📱 Cross-Device Accessibility
+- **Responsive Web & Native Mobile App**: Accessible on desktop browsers, tablets, iOS, and Android devices (via Expo / EAS native APK).
 
-This project is ready for Vercel deployment. The included `vercel.json`
-configures Vite, the static output folder, API functions, and SPA fallback
-rewrites.
+---
 
-Use these Vercel project settings:
+## 🎨 User Experience Highlights
 
-```bash
-Framework Preset: Vite
-Install Command: npm ci
-Build Command: npm run build
-Output Directory: dist
-```
+- **Cinematic Apple TV Aesthetic**: Elegant dark mode with smooth backdrop blur, fluid transitions, and poster art.
+- **Instant Search**: Lightning-fast search across movies, TV series, anime titles, cast, and directors.
+- **Personal Watchlist**: One-click bookmarking to save titles to your personal Library with progress tracking.
+- **Customizable Player Controls**: Adjust stream quality, servers, audio language (Sub/Dub), auto-play next episode, and full-screen modes.
 
-Add these Environment Variables in Vercel:
+---
 
-```bash
-OMDB_API_KEY=your_omdb_api_key
-TMDB_API_READ_ACCESS_TOKEN=your_tmdb_read_access_token
-TMDB_SECONDARY_API_KEY=your_secondary_tmdb_api_key
-TMDB_SECONDARY_API_READ_ACCESS_TOKEN=your_secondary_tmdb_read_access_token
-WATCHMODE_API_KEY=your_watchmode_api_key
-WATCHMODE_API_KEYS=your_extra_watchmode_key,your_next_watchmode_key
-STREAMING_AVAILABILITY_API_KEY=your_streaming_availability_api_key
-STREAMING_AVAILABILITY_API_KEYS=your_extra_streaming_availability_key,your_next_streaming_availability_key
-STREAMING_AVAILABILITY_COUNTRY=IN
-STREAMING_AVAILABILITY_CATALOGS=apple
-```
-
-`TMDB_API_KEY` can also be used, but the read access token is preferred. Do
-not expose these as `VITE_*` variables because Vite client env vars are bundled
-into the frontend.
-
-`STREAMING_AVAILABILITY_API_KEY` powers the live home hero and home rails. If it
-is missing or unavailable, the app falls back to TMDB and then to curated local
-data. `STREAMING_AVAILABILITY_API_KEYS` can hold extra comma-separated keys; the
-server rotates to the next key when the active key is rate-limited.
-
-`WATCHMODE_API_KEY` powers the Where to Watch section and cast/crew details on
-detail pages. `WATCHMODE_API_KEYS` can hold extra comma-separated keys; the
-server rotates to the next key when the active key is rate-limited. TMDB remains
-a fallback for watch providers and cast/crew portraits, with Wikimedia thumbnails
-used when neither API returns a portrait.
-
-`TMDB_SECONDARY_API_READ_ACCESS_TOKEN` and `TMDB_SECONDARY_API_KEY` are optional
-fallback credentials. The server tries the primary TMDB credential first and
-switches to the secondary credential only when TMDB returns a rate/request-limit
-error.
-
-Serverless API routes:
-
-```bash
-/api/omdb
-/api/tmdb
-/api/tmdb-home-rails
-/api/watchmode-cast-crew
-```
-
-After deploying, quick smoke checks:
-
-```bash
-https://your-project.vercel.app/api/omdb?id=tt1375666
-https://your-project.vercel.app/api/tmdb?imdbId=tt1375666
-```
-
-The app itself uses hash routes, and `vercel.json` also includes a fallback to
-`index.html` for direct page refreshes.
-
-## Scripts
-
-```bash
-npm run dev
-npm run build
-npm run lint
-npm run preview
-```
+<p align="center">
+  <i>Stream anytime, anywhere with <b>Lumen</b>.</i>
+</p>
