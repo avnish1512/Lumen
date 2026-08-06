@@ -16,7 +16,14 @@
       }
     },
     "android": {
+      "package": "com.lumen.app",
       "usesCleartextTraffic": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "59f53887-17f8-418b-ab8a-d4c0a520a403"
+      }
+    },
+    "owner": "avnish.bhosale"
   }
 }

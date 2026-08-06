@@ -368,7 +368,7 @@ function buildVidsyncUrl(movie: Movie) {
       theme: streamTheme,
     })
 
-    return `https://vidsync.xyz/embed/tv/${movie.tmdbId}/${season}/${episode}?${params}`
+    return `https://vidsrc.pm/embed/tv/${movie.tmdbId}/${season}/${episode}?${params}`
   }
 
   const params = new URLSearchParams({
@@ -376,8 +376,9 @@ function buildVidsyncUrl(movie: Movie) {
     theme: streamTheme,
   })
 
-  return `https://vidsync.xyz/embed/movie/${movie.tmdbId}?${params}`
+  return `https://vidsrc.pm/embed/movie/${movie.tmdbId}?${params}`
 }
+
 
 function buildRivestreamUrl(movie: Movie) {
   const params = new URLSearchParams({

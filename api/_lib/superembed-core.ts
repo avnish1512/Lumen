@@ -124,5 +124,6 @@ export async function resolveSuperEmbedPlayerUrl(
 }
 
 export function isSuperEmbedRedirectUrl(value: string) {
-  return value.startsWith('https://')
+  return value.trim().startsWith('https://')
 }
+

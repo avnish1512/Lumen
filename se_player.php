@@ -31,6 +31,91 @@ $player_sources_toggle_type = 2;
 //////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////
 
-if(isset($_GET['video_id'])) { $video_id = $_GET['video_id']; $is_tmdb = 0; $season = 0; $episode = 0; $player_url = ""; if(isset($_GET['tmdb'])) { $is_tmdb = $_GET['tmdb']; } if(isset($_GET['season'])) { $season = $_GET['season']; } else if (isset($_GET['s'])) { $season = $_GET['s']; } if(isset($_GET['episode'])) { $episode = $_GET['episode']; } else if(isset($_GET['e'])) { $episode = $_GET['e']; } if(!empty(trim($video_id))) { $request_url = "https://getsuperembed.link/?video_id=$video_id&tmdb=$is_tmdb&season=$season&episode=$episode&player_font=$player_font&player_bg_color=$player_bg_color&player_font_color=$player_font_color&player_primary_color=$player_primary_color&player_secondary_color=$player_secondary_color&player_loader=$player_loader&preferred_server=$preferred_server&player_sources_toggle_type=$player_sources_toggle_type"; if(function_exists('curl_version')) { $curl = curl_init(); curl_setopt($curl, CURLOPT_URL, $request_url); curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true); curl_setopt($curl, CURLOPT_TIMEOUT, 7); curl_setopt($curl, CURLOPT_HEADER, false); curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, FALSE); $player_url = curl_exec($curl); curl_close($curl); } else { $player_url = file_get_contents($request_url); } if(!empty($player_url)) { if(strpos($player_url,"https://") !== false) { header("Location: $player_url"); } else { echo "<span style='color:red'>$player_url</span>"; } } else { echo "Request server didn't respond"; } } else { echo "Missing video_id"; } } else { echo "Missing video_id"; }
+if (!isset($_GET['video_id']) || !is_string($_GET['video_id'])) {
+    echo "Missing video_id";
+    exit;
+}
+
+$video_id = trim($_GET['video_id']);
+if (empty($video_id)) {
+    echo "Missing video_id";
+    exit;
+}
+
+$is_tmdb = isset($_GET['tmdb']) && is_string($_GET['tmdb']) ? trim($_GET['tmdb']) : "0";
+
+$season = "0";
+if (isset($_GET['season']) && is_string($_GET['season'])) {
+    $season = trim($_GET['season']);
+} elseif (isset($_GET['s']) && is_string($_GET['s'])) {
+    $season = trim($_GET['s']);
+}
+
+$episode = "0";
+if (isset($_GET['episode']) && is_string($_GET['episode'])) {
+    $episode = trim($_GET['episode']);
+} elseif (isset($_GET['e']) && is_string($_GET['e'])) {
+    $episode = trim($_GET['e']);
+}
+
+$preferred_srv = $preferred_server;
+if (isset($_GET['preferred_server']) && is_string($_GET['preferred_server'])) {
+    $pref = trim($_GET['preferred_server']);
+    if (in_array($pref, ['0', '7', '11', '12', '17', '18', '21', '25', '26', '29', '33'], true)) {
+        $preferred_srv = $pref;
+    }
+}
+
+$queryParams = http_build_query([
+    'video_id'                   => $video_id,
+    'tmdb'                       => $is_tmdb,
+    'season'                     => $season,
+    'episode'                    => $episode,
+    'player_font'                => $player_font,
+    'player_bg_color'            => $player_bg_color,
+    'player_font_color'          => $player_font_color,
+    'player_primary_color'       => $player_primary_color,
+    'player_secondary_color'     => $player_secondary_color,
+    'player_loader'              => $player_loader,
+    'preferred_server'           => $preferred_srv,
+    'player_sources_toggle_type' => $player_sources_toggle_type,
+]);
+
+$request_url = "https://getsuperembed.link/?" . $queryParams;
+$player_url = "";
+
+if (function_exists('curl_version')) {
+    $curl = curl_init();
+    curl_setopt_array($curl, [
+        CURLOPT_URL            => $request_url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 7,
+        CURLOPT_HEADER         => false,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ]);
+    $player_url = curl_exec($curl);
+    curl_close($curl);
+} else {
+    $context = stream_context_create([
+        'http' => [
+            'timeout' => 7,
+        ],
+    ]);
+    $player_url = @file_get_contents($request_url, false, $context);
+}
+
+if (!empty($player_url) && is_string($player_url)) {
+    $player_url = trim($player_url);
+    if (strpos($player_url, "https://") === 0) {
+        header("Location: " . $player_url, true, 302);
+        exit;
+    } else {
+        echo "<span style='color:red'>" . htmlspecialchars($player_url, ENT_QUOTES, 'UTF-8') . "</span>";
+    }
+} else {
+    echo "Request server didn't respond";
+}
 
 ?>
