@@ -3523,7 +3523,7 @@ function App() {
           onEditProfile={handleEditProfile}
           onDeleteProfile={handleDeleteProfile}
           backdrops={[...tvShows, ...movies, ...anime]
-            .map((m) => m.poster || m.still || m.hero)
+            .map((m) => m.hero || m.still || m.poster)
             .filter((src): src is string => Boolean(src && src.startsWith('http')))
             .slice(0, 12)}
           onBack={() => {
@@ -8790,8 +8790,6 @@ function ProfilesScreen({
 
       <div className="profiles-container">
         <div className="profiles-sheet-container">
-          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : 'Choose your profile'}</h1>
-          
           <div className="profiles-grid">
             {profiles.map((profile) => (
               <button 
@@ -8842,7 +8840,7 @@ function ProfilesScreen({
 
             <button className="profile-item" type="button" onClick={() => setIsAdding(true)}>
               <div className="profile-avatar avatar-add">
-                <Plus size={28} strokeWidth={2.2} />
+                <Plus size={36} strokeWidth={2.4} />
               </div>
               <span className="profile-name">Add</span>
             </button>
@@ -8853,11 +8851,13 @@ function ProfilesScreen({
               onClick={() => setIsManaging((value) => !value)}
             >
               <div className={`profile-avatar avatar-add${isManaging ? ' avatar-edit-active' : ''}`}>
-                <Pencil size={24} strokeWidth={2.2} />
+                <Pencil size={32} strokeWidth={2.4} />
               </div>
               <span className="profile-name">{isManaging ? 'Done' : 'Edit'}</span>
             </button>
           </div>
+
+          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : 'Choose your profile'}</h1>
         </div>
       </div>
     </section>
