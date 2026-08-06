@@ -9,6 +9,16 @@
 
 ---
 
+## 🖼️ Interface Preview
+
+### Home & Movie Showcase
+![Lumen Home Experience](./public/screenshots/lumen-home.png)
+
+### Anime & Series Hub
+![Lumen Anime Experience](./public/screenshots/lumen-anime.png)
+
+---
+
 ## ✨ Key Features & Capabilities
 
 ### 🎬 Movies & TV Series
