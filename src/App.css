@@ -13564,6 +13564,338 @@ body:has(.login-screen) {
 }
 
 /* ==========================================================================
+   Watch Party Screen Sharing & Live Video Sync
+   ========================================================================== */
+.screen-share-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.screen-share-error-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(255, 59, 48, 0.92);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.screen-share-video {
+  width: 100%;
+  height: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+  background: #000;
+}
+
+.screen-share-overlay-bar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(12, 12, 16, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 13px;
+  z-index: 20;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.screen-share-overlay-bar.host-overlay {
+  top: 10px;
+  z-index: 50;
+  background: rgba(10, 10, 14, 0.95);
+  border: 1px solid rgba(255, 59, 48, 0.4);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.7);
+}
+
+.host-start-share-banner {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(90deg, rgba(255, 59, 48, 0.22) 0%, rgba(20, 20, 26, 0.9) 100%);
+  border: 1px solid rgba(255, 59, 48, 0.4);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.host-share-now-btn {
+  background: #ff3b30;
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.2s ease, background 0.2s ease;
+  box-shadow: 0 4px 14px rgba(255, 59, 48, 0.4);
+}
+
+.host-share-now-btn:hover {
+  background: #e02d23;
+  transform: scale(1.03);
+}
+
+.screen-share-frame-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.screen-share-live-img {
+  width: 100%;
+  height: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+  background: #000;
+}
+
+.screen-share-viewport.is-big-screen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  z-index: 999999 !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+}
+
+.screen-share-viewport.is-big-screen .screen-share-video,
+.screen-share-viewport.is-big-screen .screen-share-live-img {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  object-fit: contain !important;
+}
+
+.screen-share-bigscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.screen-share-bigscreen-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+  transform: translateY(-1px);
+}
+
+.live-share-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 59, 48, 0.2);
+  border: 1px solid rgba(255, 59, 48, 0.5);
+  color: #ff453a;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.live-dot-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff3b30;
+  box-shadow: 0 0 8px #ff3b30;
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.35); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+
+.screen-share-info {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.screen-share-stop-btn,
+.screen-share-start-btn {
+  background: #ff3b30;
+  color: #fff;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.screen-share-stop-btn:hover,
+.screen-share-start-btn:hover {
+  background: #e02d23;
+  transform: translateY(-1px);
+}
+
+.screen-share-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 36px;
+  text-align: center;
+  color: #fff;
+  background-size: cover;
+  background-position: center;
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+}
+
+.screen-share-placeholder h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.screen-share-placeholder p {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  max-width: 420px;
+  margin: 0;
+}
+
+.watch-screenshare-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.watch-screenshare-trigger-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.watch-screenshare-trigger-btn.sharing {
+  background: rgba(255, 59, 48, 0.25);
+  border-color: rgba(255, 59, 48, 0.6);
+  color: #ff453a;
+}
+
+.watch-screenshare-badge.guest-watch-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(255, 59, 48, 0.15);
+  border: 1px solid rgba(255, 59, 48, 0.4);
+  color: #ff453a;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.bff-chip-badge.watch-only {
+  background: rgba(255, 149, 0, 0.2);
+  color: #ff9f0a;
+  border: 1px solid rgba(255, 149, 0, 0.4);
+}
+
+.bff-invite-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bff-invite-subtext {
+  font-size: 11.5px;
+  color: #ff453a;
+  font-weight: 600;
+}
+
+.bff-chip-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 59, 48, 0.25);
+  color: #ff453a;
+  border: 1px solid rgba(255, 59, 48, 0.5);
+}
+
+.bff-chip-share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.16);
+  border: none;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.bff-chip-share-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ==========================================================================
    Manage Accounts admin panel (main account only).
    ========================================================================== */
 .account-manage-modal {

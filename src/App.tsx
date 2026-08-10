@@ -57,6 +57,8 @@ import {
   KeyRound,
   BookOpen,
   Code,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -106,6 +108,9 @@ import {
   endParty,
   fetchFriends,
   fetchIncomingInvites,
+  fetchParty,
+  pushPartySignal,
+  pushScreenShareState,
   sendInvite,
   type WatchParty,
 } from './watch-party'
@@ -1704,6 +1709,14 @@ function App() {
   const [incomingInvite, setIncomingInvite] = useState<WatchParty | null>(null)
   const [incomingInvites, setIncomingInvites] = useState<WatchParty[]>([])
   const [activeParty, setActiveParty] = useState<WatchParty | null>(null)
+  const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null)
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
+  const [isScreenSharing, setIsScreenSharing] = useState<boolean>(false)
+  const [remoteScreenSharing, setRemoteScreenSharing] = useState<boolean>(false)
+  const [screenShareError, setScreenShareError] = useState<string>('')
+  const [latestFrameUrl, setLatestFrameUrl] = useState<string | null>(null)
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
+  const frameLoopRef = useRef<number | null>(null)
 
   const [kcDramas, setKcDramas] = useState<Movie[]>([])
   const [dramaRails, setDramaRails] = useState<DramaRails>({
@@ -2780,6 +2793,167 @@ function App() {
     void fetchFriends(currentUser.email).then(setBffFriends)
   }
 
+  const startScreenShare = async () => {
+    try {
+      setScreenShareError('')
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        setScreenShareError('Screen sharing is not supported by your browser.')
+        return null
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+      })
+      setScreenShareStream(stream)
+      setIsScreenSharing(true)
+
+      const videoTrack = stream.getVideoTracks()[0]
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          stopScreenShare()
+        }
+      }
+
+      // Start real-time BroadcastChannel canvas frame stream engine with DOM-attached video element
+      try {
+        let procVideo = document.getElementById('lumen-host-share-proc') as HTMLVideoElement | null
+        if (!procVideo) {
+          procVideo = document.createElement('video')
+          procVideo.id = 'lumen-host-share-proc'
+          procVideo.style.position = 'fixed'
+          procVideo.style.top = '-9999px'
+          procVideo.style.left = '-9999px'
+          procVideo.style.width = '640px'
+          procVideo.style.height = '360px'
+          procVideo.style.opacity = '0'
+          procVideo.style.pointerEvents = 'none'
+          procVideo.autoplay = true
+          procVideo.muted = true
+          procVideo.playsInline = true
+          document.body.appendChild(procVideo)
+        }
+        procVideo.srcObject = stream
+        void procVideo.play().catch(() => {})
+
+        const procCanvas = document.createElement('canvas')
+        procCanvas.width = 640
+        procCanvas.height = 360
+        const ctx = procCanvas.getContext('2d')
+
+        if (frameLoopRef.current) {
+          window.clearInterval(frameLoopRef.current)
+        }
+
+        const bcStream = new BroadcastChannel('lumen_live_canvas_stream')
+        frameLoopRef.current = window.setInterval(() => {
+          if (!stream.active) return
+          if (ctx) {
+            ctx.drawImage(procVideo, 0, 0, procCanvas.width, procCanvas.height)
+            const frameUrl = procCanvas.toDataURL('image/jpeg', 0.55)
+            bcStream.postMessage({ type: 'FRAME', frame: frameUrl, partyId: activeParty?.id })
+          }
+        }, 40)
+      } catch (procErr) {
+        console.warn('Canvas frame loop setup warning:', procErr)
+      }
+
+      if (activeParty && currentUser?.email) {
+        void pushScreenShareState(activeParty.id, {
+          active: true,
+          sharing_user: currentUser.email,
+        })
+
+        try {
+          if (peerConnectionRef.current) {
+            peerConnectionRef.current.close()
+          }
+          const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+          })
+          peerConnectionRef.current = pc
+
+          stream.getTracks().forEach((track) => {
+            pc.addTrack(track, stream)
+          })
+
+          pc.onicecandidate = (event) => {
+            if (event.candidate && activeParty?.id) {
+              void pushPartySignal(activeParty.id, {
+                type: 'candidate',
+                candidate: event.candidate.toJSON(),
+                sender: currentUser.email,
+              })
+            }
+          }
+
+          const offer = await pc.createOffer()
+          await pc.setLocalDescription(offer)
+          void pushPartySignal(activeParty.id, {
+            type: 'offer',
+            sdp: offer.sdp,
+            sender: currentUser.email,
+          })
+        } catch (webrtcErr) {
+          console.warn('WebRTC offer setup warning:', webrtcErr)
+        }
+      }
+
+      try {
+        const bc = new BroadcastChannel('lumen_watch_party_screenshare')
+        bc.postMessage({
+          type: 'SCREEN_SHARE_START',
+          partyId: activeParty?.id,
+          sharingUser: currentUser?.email,
+        })
+        bc.close()
+      } catch {}
+
+      return stream
+    } catch (err: unknown) {
+      const errorObj = err as { name?: string; message?: string }
+      if (errorObj?.name !== 'NotAllowedError') {
+        setScreenShareError(
+          'Could not start screen sharing: ' + (errorObj?.message || String(err)),
+        )
+      }
+      return null
+    }
+  }
+
+  const stopScreenShare = () => {
+    const procVideo = document.getElementById('lumen-host-share-proc') as HTMLVideoElement | null
+    if (procVideo) {
+      procVideo.pause()
+      procVideo.srcObject = null
+      procVideo.remove()
+    }
+    if (frameLoopRef.current) {
+      window.clearInterval(frameLoopRef.current)
+      frameLoopRef.current = null
+    }
+    setLatestFrameUrl(null)
+    if (screenShareStream) {
+      screenShareStream.getTracks().forEach((track) => track.stop())
+      setScreenShareStream(null)
+    }
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close()
+      peerConnectionRef.current = null
+    }
+    setIsScreenSharing(false)
+    if (activeParty && currentUser?.email) {
+      void pushScreenShareState(activeParty.id, {
+        active: false,
+        sharing_user: currentUser.email,
+      })
+    }
+    try {
+      const bc = new BroadcastChannel('lumen_watch_party_screenshare')
+      bc.postMessage({ type: 'SCREEN_SHARE_STOP', partyId: activeParty?.id })
+      bc.close()
+    } catch {}
+  }
+
   const inviteFriend = async (friendEmail: string) => {
     if (!bffMovie || !currentUser?.email) {
       return
@@ -2788,11 +2962,12 @@ function App() {
     const party = await sendInvite(currentUser.email, friendEmail, bffMovie)
     if (party) {
       setActiveParty(party)
-      setBffStatus(`Invite sent to ${friendEmail}. Opening the movie…`)
+      setBffStatus(`Invite sent to ${friendEmail}. Opening movie & starting screen share…`)
       const movieToPlay = bffMovie
       window.setTimeout(() => {
         setBffMovie(null)
         openWatch(movieToPlay)
+        void startScreenShare()
       }, 900)
     } else {
       setBffStatus('Could not send the invite (is the backend configured?).')
@@ -2847,6 +3022,128 @@ function App() {
       window.clearInterval(timer)
     }
   }, [currentUser, activeParty])
+
+  // Monitor active watch party live screen share state and WebRTC negotiation across participants.
+  useEffect(() => {
+    if (!activeParty) {
+      setRemoteScreenSharing(false)
+      setRemoteStream(null)
+      setLatestFrameUrl(null)
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close()
+        peerConnectionRef.current = null
+      }
+      return
+    }
+    let active = true
+
+    const handleOfferSignal = async (offerSdp: string) => {
+      try {
+        if (peerConnectionRef.current) {
+          peerConnectionRef.current.close()
+        }
+        const pc = new RTCPeerConnection({
+          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        })
+        peerConnectionRef.current = pc
+
+        pc.ontrack = (event) => {
+          if (event.streams && event.streams[0]) {
+            setRemoteStream(event.streams[0])
+            setRemoteScreenSharing(true)
+          }
+        }
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate && activeParty?.id) {
+            void pushPartySignal(activeParty.id, {
+              type: 'candidate',
+              candidate: event.candidate.toJSON(),
+              sender: currentUser?.email,
+            })
+          }
+        }
+
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offerSdp }))
+        const answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+
+        void pushPartySignal(activeParty.id, {
+          type: 'answer',
+          sdp: answer.sdp,
+          sender: currentUser?.email,
+        })
+      } catch (err) {
+        console.warn('Failed to handle WebRTC offer:', err)
+      }
+    }
+
+    const checkPartyState = () => {
+      void fetchParty(activeParty.id).then((party) => {
+        if (!active || !party) return
+        if (
+          party.screen_share?.active &&
+          party.screen_share.sharing_user !== currentUser?.email
+        ) {
+          setRemoteScreenSharing(true)
+          if (party.signal?.type === 'offer' && party.signal.sdp && party.signal.sender !== currentUser?.email) {
+            void handleOfferSignal(party.signal.sdp)
+          }
+        } else if (!party.screen_share?.active && !isScreenSharing) {
+          setRemoteScreenSharing(false)
+          setRemoteStream(null)
+          setLatestFrameUrl(null)
+        }
+
+        if (
+          party.signal?.type === 'answer' &&
+          party.signal.sdp &&
+          party.signal.sender !== currentUser?.email &&
+          peerConnectionRef.current &&
+          isScreenSharing
+        ) {
+          peerConnectionRef.current
+            .setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: party.signal.sdp }))
+            .catch(() => {})
+        }
+      })
+    }
+    checkPartyState()
+    const timer = window.setInterval(checkPartyState, 2500)
+
+    let bc: BroadcastChannel | null = null
+    let bcFrames: BroadcastChannel | null = null
+    try {
+      bc = new BroadcastChannel('lumen_watch_party_screenshare')
+      bc.onmessage = (event) => {
+        if (
+          event.data?.type === 'SCREEN_SHARE_START' &&
+          event.data.sharingUser !== currentUser?.email
+        ) {
+          setRemoteScreenSharing(true)
+        } else if (event.data?.type === 'SCREEN_SHARE_STOP' && !isScreenSharing) {
+          setRemoteScreenSharing(false)
+          setRemoteStream(null)
+          setLatestFrameUrl(null)
+        }
+      }
+
+      bcFrames = new BroadcastChannel('lumen_live_canvas_stream')
+      bcFrames.onmessage = (event) => {
+        if (event.data?.type === 'FRAME' && event.data.frame && currentUser?.email !== activeParty.host_email) {
+          setLatestFrameUrl(event.data.frame)
+          setRemoteScreenSharing(true)
+        }
+      }
+    } catch {}
+
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      if (bc) bc.close()
+      if (bcFrames) bcFrames.close()
+    }
+  }, [activeParty, currentUser?.email, isScreenSharing])
 
   const toggleSaved = (movie: Movie) => {
     setSavedMovies((current) => {
@@ -3425,6 +3722,14 @@ function App() {
           onStreamProviderChange={setStreamProvider}
           onSelectMovie={openWatch}
           designMode={designMode}
+          activeParty={activeParty}
+          isScreenSharing={isScreenSharing}
+          remoteStream={remoteStream}
+          latestFrameUrl={latestFrameUrl}
+          onStartScreenShare={startScreenShare}
+          onStopScreenShare={stopScreenShare}
+          screenShareError={screenShareError}
+          currentUserEmail={currentUser?.email}
         />
       )}
 
@@ -3686,13 +3991,18 @@ function App() {
 
       {incomingInvite && (
         <div className="bff-invite-banner" role="alert">
-          <span className="bff-invite-text">
-            <strong>{incomingInvite.host_email}</strong> invited you to watch{' '}
-            <strong>{incomingInvite.movie?.title}</strong>
-          </span>
+          <div className="bff-invite-info">
+            <span className="bff-invite-text">
+              <strong>{incomingInvite.host_email}</strong> invited you to watch{' '}
+              <strong>{incomingInvite.movie?.title}</strong>
+            </span>
+            <span className="bff-invite-subtext">
+              🔴 Live video screen share will start upon accept
+            </span>
+          </div>
           <div className="bff-invite-actions">
             <button className="bff-invite-accept" type="button" onClick={() => void acceptIncomingInvite()}>
-              Join
+              Accept & Watch Live (Screen Share)
             </button>
             <button
               className="bff-invite-dismiss"
@@ -3717,10 +4027,30 @@ function App() {
               ? activeParty.guest_email
               : activeParty.host_email}
           </span>
+          {isScreenSharing ? (
+            <span className="bff-chip-badge live">🔴 Sharing Screen</span>
+          ) : remoteScreenSharing ? (
+            <span className="bff-chip-badge live">🔴 Screen Share Live</span>
+          ) : activeParty.host_email === currentUser?.email ? (
+            <button
+              type="button"
+              className="bff-chip-share-btn"
+              onClick={() => void startScreenShare()}
+              title="Start Live Screen Share"
+            >
+              <Tv size={13} />
+              <span>Share Screen</span>
+            </button>
+          ) : (
+            <span className="bff-chip-badge watch-only">🔴 Watch Only</span>
+          )}
           <button
             type="button"
             className="bff-party-leave"
-            onClick={() => setActiveParty(null)}
+            onClick={() => {
+              stopScreenShare()
+              setActiveParty(null)
+            }}
             aria-label="Leave watch party"
           >
             <X size={13} />
@@ -5988,6 +6318,14 @@ type WatchScreenProps = {
   onStreamProviderChange: (provider: StreamProvider) => void
   designMode: 'apple' | 'netflix'
   onSelectMovie?: (movie: Movie) => void
+  activeParty?: WatchParty | null
+  isScreenSharing?: boolean
+  remoteStream?: MediaStream | null
+  latestFrameUrl?: string | null
+  onStartScreenShare?: () => void
+  onStopScreenShare?: () => void
+  screenShareError?: string
+  currentUserEmail?: string
 }
 
 function WatchScreen({
@@ -6006,7 +6344,20 @@ function WatchScreen({
   onStreamProviderChange,
   designMode,
   onSelectMovie,
+  activeParty,
+  isScreenSharing,
+  remoteStream,
+  latestFrameUrl,
+  onStartScreenShare,
+  onStopScreenShare,
+  screenShareError,
+  currentUserEmail,
 }: WatchScreenProps) {
+  const isPartyHost = activeParty ? currentUserEmail === activeParty.host_email : false
+  const isPartyGuest = activeParty ? currentUserEmail !== activeParty.host_email : false
+  const [isBigScreen, setIsBigScreen] = useState(false)
+  const remoteViewportRef = useRef<HTMLDivElement | null>(null)
+
   const isHentai = Boolean(
     movie.isHentaiOcean ||
       movie.genres.some((g) => g.toLowerCase() === 'hentai'),
@@ -6207,7 +6558,128 @@ function WatchScreen({
       <DetailTopBar onBack={onBack} dark />
 
       <section className="stream-player-section">
-        {streamUrl && isHlsStream ? (
+        {screenShareError && (
+          <div className="screen-share-error-banner" role="alert">
+            <AlertCircle size={15} />
+            <span>{screenShareError}</span>
+          </div>
+        )}
+        {isPartyHost && !isScreenSharing && (
+          <div className="host-start-share-banner">
+            <span className="live-share-badge">
+              <span className="live-dot-pulse" /> 🔴 WATCH PARTY READY
+            </span>
+            <span>
+              You are watching with {activeParty?.guest_email}. Click below to stream your playing video live!
+            </span>
+            <button
+              type="button"
+              className="host-share-now-btn"
+              onClick={onStartScreenShare}
+            >
+              Start Screen Share Now
+            </button>
+          </div>
+        )}
+        {isScreenSharing && (
+          <div className="screen-share-overlay-bar host-overlay">
+            <span className="live-share-badge">
+              <span className="live-dot-pulse" /> 🔴 LIVE SCREEN SHARING ACTIVE
+            </span>
+            <span className="screen-share-info">
+              Sharing video with{' '}
+              {activeParty?.host_email === currentUserEmail
+                ? activeParty?.guest_email
+                : activeParty?.host_email}
+            </span>
+            <button
+              type="button"
+              className="screen-share-stop-btn"
+              onClick={onStopScreenShare}
+            >
+              Stop Sharing
+            </button>
+          </div>
+        )}
+        {isPartyGuest && (remoteStream || latestFrameUrl) ? (
+          <div
+            ref={remoteViewportRef}
+            className={`screen-share-viewport remote-viewport${isBigScreen ? ' is-big-screen' : ''}`}
+          >
+            {remoteStream ? (
+              <>
+                <video
+                  ref={(node) => {
+                    if (node && remoteStream && node.srcObject !== remoteStream) {
+                      node.srcObject = remoteStream
+                      node.play().catch(() => {})
+                    }
+                  }}
+                  className="screen-share-video"
+                  autoPlay
+                  playsInline
+                  controls
+                />
+                <div className="screen-share-overlay-bar">
+                  <span className="live-share-badge">
+                    <span className="live-dot-pulse" /> 🔴 WATCHING HOST LIVE STREAM
+                  </span>
+                  <span className="screen-share-info">
+                    Receiving live stream from {activeParty?.host_email}
+                  </span>
+                  <button
+                    type="button"
+                    className="screen-share-bigscreen-btn"
+                    onClick={() => {
+                      setIsBigScreen((prev) => !prev)
+                      if (!isBigScreen && remoteViewportRef.current?.requestFullscreen) {
+                        remoteViewportRef.current.requestFullscreen().catch(() => {})
+                      } else if (document.fullscreenElement && document.exitFullscreen) {
+                        document.exitFullscreen().catch(() => {})
+                      }
+                    }}
+                    title={isBigScreen ? 'Exit Big Screen Mode' : 'Enter Big Screen Mode'}
+                  >
+                    {isBigScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    <span>{isBigScreen ? 'Exit Big Screen' : 'Big Screen'}</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="screen-share-frame-viewport">
+                <img
+                  src={latestFrameUrl!}
+                  className="screen-share-video screen-share-live-img"
+                  alt="Host Live Video Stream"
+                />
+                <div className="screen-share-overlay-bar">
+                  <span className="live-share-badge">
+                    <span className="live-dot-pulse" /> 🔴 WATCHING HOST LIVE STREAM
+                  </span>
+                  <span className="screen-share-info">
+                    Receiving live video from {activeParty?.host_email}
+                  </span>
+                  <button
+                    type="button"
+                    className="screen-share-bigscreen-btn"
+                    onClick={() => {
+                      setIsBigScreen((prev) => !prev)
+                      if (!isBigScreen && remoteViewportRef.current?.requestFullscreen) {
+                        remoteViewportRef.current.requestFullscreen().catch(() => {})
+                      } else if (document.fullscreenElement && document.exitFullscreen) {
+                        document.exitFullscreen().catch(() => {})
+                      }
+                    }}
+                    title={isBigScreen ? 'Exit Big Screen Mode' : 'Enter Big Screen Mode'}
+                  >
+                    {isBigScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    <span>{isBigScreen ? 'Exit Big Screen' : 'Big Screen'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : streamUrl && isHlsStream ? (
           <HlsPlayer
             className="stream-player"
             src={streamUrl}
@@ -6277,7 +6749,7 @@ function WatchScreen({
       </section>
 
       <div className="watch-topbar">
-        {!isPhubVideo && (
+        {!isPhubVideo && !isPartyGuest && (
           <button
             className="watch-play"
             type="button"
@@ -6293,6 +6765,24 @@ function WatchScreen({
             <Play fill="currentColor" strokeWidth={0} />
             <span>Watch</span>
           </button>
+        )}
+
+        {activeParty && isPartyHost && (
+          <button
+            type="button"
+            className={`watch-screenshare-trigger-btn${isScreenSharing ? ' sharing' : ''}`}
+            onClick={isScreenSharing ? onStopScreenShare : onStartScreenShare}
+            title={isScreenSharing ? 'Stop Screen Sharing' : 'Start Live Video Screen Share'}
+          >
+            <Tv size={16} />
+            <span>{isScreenSharing ? 'Stop Share' : 'Screen Share'}</span>
+          </button>
+        )}
+
+        {activeParty && isPartyGuest && (
+          <span className="watch-screenshare-badge guest-watch-only">
+            🔴 Watching {activeParty.host_email}&apos;s Screen
+          </span>
         )}
 
         <div className="watch-title-block">
@@ -6357,7 +6847,7 @@ function WatchScreen({
             </button>
           )}
 
-          {!isPhubVideo && (
+          {!isPhubVideo && !isPartyGuest && (
             <label className="stream-sandbox-toggle">
               <span>
                 <strong>Sandbox</strong>
@@ -6376,7 +6866,7 @@ function WatchScreen({
             </label>
           )}
 
-          {!isPhubVideo && (
+          {!isPhubVideo && !isPartyGuest && (
             <div className="server-selector" role="radiogroup" aria-label="Streaming server">
               {(() => {
                 const filteredOptions = isHentai

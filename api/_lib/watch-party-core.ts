@@ -36,6 +36,8 @@ export type WatchParty = {
   movie: unknown
   status: 'pending' | 'accepted' | 'ended'
   playback: { playing: boolean; time: number }
+  screen_share?: { active: boolean; sharing_user?: string }
+  signal?: { type: 'offer' | 'answer' | 'candidate'; sdp?: string; candidate?: unknown; sender?: string }
   updated_at: string
 }
 
@@ -97,19 +99,45 @@ export async function getParty(
     return null
   }
   const rows = (await response.json()) as WatchParty[]
-  return rows[0] ?? null
+  const party = rows[0] ?? null
+  if (party && party.playback) {
+    const pb = party.playback as Record<string, unknown>
+    if (!party.screen_share && pb.screen_share) {
+      party.screen_share = pb.screen_share as WatchParty['screen_share']
+    }
+    if (!party.signal && pb.signal) {
+      party.signal = pb.signal as WatchParty['signal']
+    }
+  }
+  return party
 }
 
 export async function updateParty(
   config: SupabaseConfig,
   id: string,
-  patch: Partial<Pick<WatchParty, 'status' | 'playback'>>,
+  patch: Partial<Pick<WatchParty, 'status' | 'playback' | 'screen_share' | 'signal'>>,
 ): Promise<void> {
+  const current = await getParty(config, id)
+  const currentPlayback = (current?.playback ?? { playing: false, time: 0 }) as Record<string, unknown>
+
+  const updatedPlayback = {
+    ...currentPlayback,
+    ...(patch.playback || {}),
+    ...(patch.screen_share ? { screen_share: patch.screen_share } : {}),
+    ...(patch.signal ? { signal: patch.signal } : {}),
+  }
+
+  const bodyObj: Record<string, unknown> = {
+    playback: updatedPlayback,
+    updated_at: new Date().toISOString(),
+  }
+  if (patch.status) bodyObj.status = patch.status
+
   const url = `${REST(config)}?id=eq.${encodeURIComponent(id)}`
   const response = await fetch(url, {
     method: 'PATCH',
     headers: headers(config),
-    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+    body: JSON.stringify(bodyObj),
   })
   if (!response.ok) {
     throw new Error(`Update failed (${response.status}).`)

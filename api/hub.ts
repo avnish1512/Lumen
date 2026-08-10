@@ -471,7 +471,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         return
       }
       if (action === 'state') {
-        await updateParty(config, String(body.id), { playback: body.playback as { playing: boolean; time: number } })
+        const patch: Record<string, unknown> = {}
+        if (body.playback) patch.playback = body.playback as { playing: boolean; time: number }
+        if (body.screen_share) patch.screen_share = body.screen_share as { active: boolean; sharing_user?: string }
+        if (body.signal) patch.signal = body.signal as Record<string, unknown>
+        await updateParty(config, String(body.id), patch)
         res.status(200).json({ ok: true })
         return
       }

@@ -10,6 +10,8 @@ export type WatchParty = {
   movie: Movie
   status: 'pending' | 'accepted' | 'ended'
   playback: { playing: boolean; time: number }
+  screen_share?: { active: boolean; sharing_user?: string }
+  signal?: { type: 'offer' | 'answer' | 'candidate'; sdp?: string; candidate?: unknown; sender?: string }
   updated_at: string
 }
 
@@ -76,6 +78,22 @@ export async function pushPlaybackState(
   await postJson('/api/watch-party?action=state', { id, playback })
 }
 
+export async function pushScreenShareState(
+  id: string,
+  screen_share: { active: boolean; sharing_user?: string },
+): Promise<void> {
+  await postJson('/api/watch-party?action=state', { id, screen_share })
+}
+
+export async function pushPartySignal(
+  id: string,
+  signal: { type: 'offer' | 'answer' | 'candidate'; sdp?: string; candidate?: unknown; sender?: string },
+): Promise<void> {
+  await postJson('/api/watch-party?action=state', { id, signal })
+}
+
 export async function endParty(id: string): Promise<void> {
   await postJson('/api/watch-party?action=end', { id })
 }
+
+
