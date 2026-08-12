@@ -6410,6 +6410,7 @@ function WatchScreen({
   const [episode, setEpisode] = useState(movie.streamEpisode ?? 1)
   const [season, setSeason] = useState(movie.streamSeason ?? 1)
   const [language, setLanguage] = useState<'sub' | 'dub'>(movie.streamLanguage ?? 'sub')
+  const [epSearchQuery, setEpSearchQuery] = useState('')
 
   useEffect(() => {
     setEpisode(movie.streamEpisode ?? 1)
@@ -6494,6 +6495,25 @@ function WatchScreen({
     ? Array.from({ length: activeWatchSeason.episodeCount }, (_, index) => index + 1)
     : []
 
+  const filteredEpisodeNumbers = useMemo(() => {
+    if (!epSearchQuery.trim()) return episodeNumbers
+    const q = epSearchQuery.trim().toLowerCase()
+    return episodeNumbers.filter((number) => {
+      if (
+        `episode ${number}`.toLowerCase().includes(q) ||
+        `ep ${number}`.toLowerCase().includes(q) ||
+        String(number) === q
+      ) {
+        return true
+      }
+      const epData = movie.animeEpisodes?.[number - 1]
+      if (epData?.title && epData.title.toLowerCase().includes(q)) {
+        return true
+      }
+      return false
+    })
+  }, [episodeNumbers, epSearchQuery, movie.animeEpisodes])
+
   // MegaPlay (VidNest) posts playback events to the parent window. Use the
   // first time/watching-log event to flag the title as "continue watching".
   useEffect(() => {
@@ -6553,200 +6573,296 @@ function WatchScreen({
     window.open(streamUrl, '_blank', 'noopener,noreferrer')
   }
 
+  const renderEpisodePanel = (isAnimeLayout = false) => {
+    if (!isSeries) return null
+    return (
+      <aside className={`watch-episode-panel${isAnimeLayout ? ' anime-episode-panel' : ''}`} aria-label="Episodes">
+        <div className="anime-ep-header-row">
+          <SeasonDropdown
+            seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
+            value={season}
+            onChange={(newSeason) => {
+              setSeason(newSeason)
+              setEpisode(1)
+            }}
+            labels={seasonLabels}
+          />
+          {isAnimeLayout && (
+            <div className="anime-ep-search-wrapper">
+              <Search size={14} className="anime-ep-search-icon" />
+              <input
+                type="text"
+                placeholder="Search ep..."
+                className="anime-ep-search-input"
+                value={epSearchQuery}
+                onChange={(e) => setEpSearchQuery(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="watch-episode-list">
+          {filteredEpisodeNumbers.map((number) => {
+            const epData = movie.animeEpisodes?.[number - 1]
+            const isActive = number === episode
+
+            if (isAnimeLayout) {
+              const epTitle = epData?.title || ''
+              const displayTitle = epTitle ? `Episode ${number} - ${epTitle}` : `Episode ${number}`
+              const langText = language === 'dub' ? 'English Dub' : 'English Sub'
+              const thumbUrl = epData?.thumbnail || movie.still
+
+              return (
+                <button
+                  key={number}
+                  type="button"
+                  className={`watch-episode-item anime-ep-card-ref${isActive ? ' active' : ''}`}
+                  onClick={() => setEpisode(number)}
+                  style={{
+                    backgroundImage: `linear-gradient(90deg, rgba(10, 10, 14, 0.94) 0%, rgba(10, 10, 14, 0.76) 52%, rgba(10, 10, 14, 0.28) 100%), url(${thumbUrl})`,
+                  }}
+                >
+                  <div className="anime-ep-card-content">
+                    <div className="anime-ep-card-header">
+                      <span className="anime-ep-card-main-title">{displayTitle}</span>
+                      <ChevronRight size={16} className="anime-ep-card-chevron" />
+                    </div>
+                    <div className="anime-ep-card-sub">
+                      Episode {number} · {langText}
+                    </div>
+                    {epTitle && <div className="anime-ep-card-ep-title">{epTitle}</div>}
+                    <div className="anime-ep-card-badge">
+                      <span>{currentProvider?.name || 'MegaPlay'}</span>
+                    </div>
+                  </div>
+                </button>
+              )
+            }
+
+            return (
+              <button
+                key={number}
+                type="button"
+                className={`watch-episode-item${isActive ? ' active' : ''}`}
+                onClick={() => setEpisode(number)}
+              >
+                Episode {number}
+              </button>
+            )
+          })}
+          {filteredEpisodeNumbers.length === 0 && (
+            <div className="anime-ep-empty">No episodes matching &quot;{epSearchQuery}&quot;</div>
+          )}
+        </div>
+      </aside>
+    )
+  }
+
+  const renderPlayerSection = () => (
+    <section className="stream-player-section">
+      {screenShareError && (
+        <div className="screen-share-error-banner" role="alert">
+          <AlertCircle size={15} />
+          <span>{screenShareError}</span>
+        </div>
+      )}
+      {isPartyHost && !isScreenSharing && (
+        <div className="host-start-share-banner">
+          <span className="live-share-badge">
+            <span className="live-dot-pulse" /> 🔴 WATCH PARTY READY
+          </span>
+          <span>
+            You are watching with {activeParty?.guest_email}. Click below to stream your playing video live!
+          </span>
+          <button
+            type="button"
+            className="host-share-now-btn"
+            onClick={onStartScreenShare}
+          >
+            Start Screen Share Now
+          </button>
+        </div>
+      )}
+      {isScreenSharing && (
+        <div className="screen-share-overlay-bar host-overlay">
+          <span className="live-share-badge">
+            <span className="live-dot-pulse" /> 🔴 LIVE SCREEN SHARING ACTIVE
+          </span>
+          <span className="screen-share-info">
+            Sharing video with{' '}
+            {activeParty?.host_email === currentUserEmail
+              ? activeParty?.guest_email
+              : activeParty?.host_email}
+          </span>
+          <button
+            type="button"
+            className="screen-share-stop-btn"
+            onClick={onStopScreenShare}
+          >
+            Stop Sharing
+          </button>
+        </div>
+      )}
+      {isPartyGuest && (remoteStream || latestFrameUrl) ? (
+        <div
+          ref={remoteViewportRef}
+          className={`screen-share-viewport remote-viewport${isBigScreen ? ' is-big-screen' : ''}`}
+        >
+          {remoteStream ? (
+            <>
+              <video
+                ref={(node) => {
+                  if (node && remoteStream && node.srcObject !== remoteStream) {
+                    node.srcObject = remoteStream
+                    node.play().catch(() => {})
+                  }
+                }}
+                className="screen-share-video"
+                autoPlay
+                playsInline
+                controls
+              />
+              <div className="screen-share-overlay-bar">
+                <span className="live-share-badge">
+                  <span className="live-dot-pulse" /> 🔴 WATCHING HOST LIVE STREAM
+                </span>
+                <span className="screen-share-info">
+                  Receiving live stream from {activeParty?.host_email}
+                </span>
+                <button
+                  type="button"
+                  className="screen-share-bigscreen-btn"
+                  onClick={() => {
+                    setIsBigScreen((prev) => !prev)
+                    if (!isBigScreen && remoteViewportRef.current?.requestFullscreen) {
+                      remoteViewportRef.current.requestFullscreen().catch(() => {})
+                    } else if (document.fullscreenElement && document.exitFullscreen) {
+                      document.exitFullscreen().catch(() => {})
+                    }
+                  }}
+                  title={isBigScreen ? 'Exit Big Screen Mode' : 'Enter Big Screen Mode'}
+                >
+                  {isBigScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  <span>{isBigScreen ? 'Exit Big Screen' : 'Big Screen'}</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="screen-share-frame-viewport">
+              <img
+                src={latestFrameUrl!}
+                className="screen-share-video screen-share-live-img"
+                alt="Host Live Video Stream"
+              />
+              <div className="screen-share-overlay-bar">
+                <span className="live-share-badge">
+                  <span className="live-dot-pulse" /> 🔴 WATCHING HOST LIVE STREAM
+                </span>
+                <span className="screen-share-info">
+                  Receiving live video from {activeParty?.host_email}
+                </span>
+                <button
+                  type="button"
+                  className="screen-share-bigscreen-btn"
+                  onClick={() => {
+                    setIsBigScreen((prev) => !prev)
+                    if (!isBigScreen && remoteViewportRef.current?.requestFullscreen) {
+                      remoteViewportRef.current.requestFullscreen().catch(() => {})
+                    } else if (document.fullscreenElement && document.exitFullscreen) {
+                      document.exitFullscreen().catch(() => {})
+                    }
+                  }}
+                  title={isBigScreen ? 'Exit Big Screen Mode' : 'Enter Big Screen Mode'}
+                >
+                  {isBigScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  <span>{isBigScreen ? 'Exit Big Screen' : 'Big Screen'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : streamUrl && isHlsStream ? (
+        <HlsPlayer
+          className="stream-player"
+          src={streamUrl}
+          poster={movie.still}
+          title={`${movie.title} stream`}
+          autoPlay
+          controls
+          onPlay={() => onStartWatching(movie)}
+          onError={() => {}}
+        />
+      ) : streamUrl && !opensExternally ? (
+        <iframe
+          className="stream-player"
+          src={streamUrl}
+          title={`${movie.title} stream`}
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowFullScreen
+          // MegaBuzz (megaplay.buzz) requires a referer; every other embed is
+          // sent with no referer for privacy.
+          referrerPolicy={activeProviderId === 'megabuzz' ? 'origin' : 'no-referrer'}
+          sandbox={
+            streamSandboxEnabled
+              ? 'allow-forms allow-presentation allow-same-origin allow-scripts'
+              : undefined
+          }
+        />
+      ) : streamUrl ? (
+        <div
+          className="stream-placeholder external-stream-placeholder"
+          style={{
+            backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.2), rgba(0,0,0,.84)), url(${movie.still})`,
+          }}
+        >
+          <Play fill="currentColor" strokeWidth={0} />
+          <h2>{currentProvider.name}</h2>
+          <p>This server opens outside the embedded player.</p>
+          <button
+            className="stream-open-button"
+            type="button"
+            onClick={openCurrentStream}
+          >
+            <span>Open Player</span>
+          </button>
+        </div>
+      ) : (
+        <div
+          className="stream-placeholder"
+          style={{
+            backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.22), rgba(0,0,0,.82)), url(${movie.still})`,
+          }}
+        >
+          {streamLoading ? (
+            <>
+              <LoaderCircle className="spin-icon" />
+              <h2>Preparing Stream</h2>
+              <p>Finding the TMDB id and loading {currentProvider.name}.</p>
+            </>
+          ) : (
+            <>
+              <AlertCircle />
+              <h2>Stream Not Ready</h2>
+              <p>{streamError || 'TMDB did not return a playable movie id yet.'}</p>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  )
+
   return (
     <section className="screen watch-screen">
       <DetailTopBar onBack={onBack} dark />
 
-      <section className="stream-player-section">
-        {screenShareError && (
-          <div className="screen-share-error-banner" role="alert">
-            <AlertCircle size={15} />
-            <span>{screenShareError}</span>
-          </div>
-        )}
-        {isPartyHost && !isScreenSharing && (
-          <div className="host-start-share-banner">
-            <span className="live-share-badge">
-              <span className="live-dot-pulse" /> 🔴 WATCH PARTY READY
-            </span>
-            <span>
-              You are watching with {activeParty?.guest_email}. Click below to stream your playing video live!
-            </span>
-            <button
-              type="button"
-              className="host-share-now-btn"
-              onClick={onStartScreenShare}
-            >
-              Start Screen Share Now
-            </button>
-          </div>
-        )}
-        {isScreenSharing && (
-          <div className="screen-share-overlay-bar host-overlay">
-            <span className="live-share-badge">
-              <span className="live-dot-pulse" /> 🔴 LIVE SCREEN SHARING ACTIVE
-            </span>
-            <span className="screen-share-info">
-              Sharing video with{' '}
-              {activeParty?.host_email === currentUserEmail
-                ? activeParty?.guest_email
-                : activeParty?.host_email}
-            </span>
-            <button
-              type="button"
-              className="screen-share-stop-btn"
-              onClick={onStopScreenShare}
-            >
-              Stop Sharing
-            </button>
-          </div>
-        )}
-        {isPartyGuest && (remoteStream || latestFrameUrl) ? (
-          <div
-            ref={remoteViewportRef}
-            className={`screen-share-viewport remote-viewport${isBigScreen ? ' is-big-screen' : ''}`}
-          >
-            {remoteStream ? (
-              <>
-                <video
-                  ref={(node) => {
-                    if (node && remoteStream && node.srcObject !== remoteStream) {
-                      node.srcObject = remoteStream
-                      node.play().catch(() => {})
-                    }
-                  }}
-                  className="screen-share-video"
-                  autoPlay
-                  playsInline
-                  controls
-                />
-                <div className="screen-share-overlay-bar">
-                  <span className="live-share-badge">
-                    <span className="live-dot-pulse" /> 🔴 WATCHING HOST LIVE STREAM
-                  </span>
-                  <span className="screen-share-info">
-                    Receiving live stream from {activeParty?.host_email}
-                  </span>
-                  <button
-                    type="button"
-                    className="screen-share-bigscreen-btn"
-                    onClick={() => {
-                      setIsBigScreen((prev) => !prev)
-                      if (!isBigScreen && remoteViewportRef.current?.requestFullscreen) {
-                        remoteViewportRef.current.requestFullscreen().catch(() => {})
-                      } else if (document.fullscreenElement && document.exitFullscreen) {
-                        document.exitFullscreen().catch(() => {})
-                      }
-                    }}
-                    title={isBigScreen ? 'Exit Big Screen Mode' : 'Enter Big Screen Mode'}
-                  >
-                    {isBigScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                    <span>{isBigScreen ? 'Exit Big Screen' : 'Big Screen'}</span>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="screen-share-frame-viewport">
-                <img
-                  src={latestFrameUrl!}
-                  className="screen-share-video screen-share-live-img"
-                  alt="Host Live Video Stream"
-                />
-                <div className="screen-share-overlay-bar">
-                  <span className="live-share-badge">
-                    <span className="live-dot-pulse" /> 🔴 WATCHING HOST LIVE STREAM
-                  </span>
-                  <span className="screen-share-info">
-                    Receiving live video from {activeParty?.host_email}
-                  </span>
-                  <button
-                    type="button"
-                    className="screen-share-bigscreen-btn"
-                    onClick={() => {
-                      setIsBigScreen((prev) => !prev)
-                      if (!isBigScreen && remoteViewportRef.current?.requestFullscreen) {
-                        remoteViewportRef.current.requestFullscreen().catch(() => {})
-                      } else if (document.fullscreenElement && document.exitFullscreen) {
-                        document.exitFullscreen().catch(() => {})
-                      }
-                    }}
-                    title={isBigScreen ? 'Exit Big Screen Mode' : 'Enter Big Screen Mode'}
-                  >
-                    {isBigScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                    <span>{isBigScreen ? 'Exit Big Screen' : 'Big Screen'}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : streamUrl && isHlsStream ? (
-          <HlsPlayer
-            className="stream-player"
-            src={streamUrl}
-            poster={movie.still}
-            title={`${movie.title} stream`}
-            autoPlay
-            controls
-            onPlay={() => onStartWatching(movie)}
-            onError={() => {}}
-          />
-        ) : streamUrl && !opensExternally ? (
-          <iframe
-            className="stream-player"
-            src={streamUrl}
-            title={`${movie.title} stream`}
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-            allowFullScreen
-            // MegaBuzz (megaplay.buzz) requires a referer; every other embed is
-            // sent with no referer for privacy.
-            referrerPolicy={activeProviderId === 'megabuzz' ? 'origin' : 'no-referrer'}
-            sandbox={
-              streamSandboxEnabled
-                ? 'allow-forms allow-presentation allow-same-origin allow-scripts'
-                : undefined
-            }
-          />
-        ) : streamUrl ? (
-          <div
-            className="stream-placeholder external-stream-placeholder"
-            style={{
-              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.2), rgba(0,0,0,.84)), url(${movie.still})`,
-            }}
-          >
-            <Play fill="currentColor" strokeWidth={0} />
-            <h2>{currentProvider.name}</h2>
-            <p>This server opens outside the embedded player.</p>
-            <button
-              className="stream-open-button"
-              type="button"
-              onClick={openCurrentStream}
-            >
-              <span>Open Player</span>
-            </button>
-          </div>
-        ) : (
-          <div
-            className="stream-placeholder"
-            style={{
-              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.22), rgba(0,0,0,.82)), url(${movie.still})`,
-            }}
-          >
-            {streamLoading ? (
-              <>
-                <LoaderCircle className="spin-icon" />
-                <h2>Preparing Stream</h2>
-                <p>Finding the TMDB id and loading {currentProvider.name}.</p>
-              </>
-            ) : (
-              <>
-                <AlertCircle />
-                <h2>Stream Not Ready</h2>
-                <p>{streamError || 'TMDB did not return a playable movie id yet.'}</p>
-              </>
-            )}
-          </div>
-        )}
-      </section>
+      {isAnimeMovie && isSeries ? (
+        <div className="anime-watch-stage">
+          {renderPlayerSection()}
+          {renderEpisodePanel(true)}
+        </div>
+      ) : (
+        renderPlayerSection()
+      )}
 
       <div className="watch-topbar">
         {!isPhubVideo && !isPartyGuest && (
@@ -6804,7 +6920,7 @@ function WatchScreen({
         )}
       </div>
 
-      <div className={`watch-lower${isSeries ? ' has-episodes' : ''}`}>
+      <div className={`watch-lower${!isAnimeMovie && isSeries ? ' has-episodes' : ''}`}>
         <div className="watch-lower-left">
           <p className="watch-synopsis">
             {!isPhubVideo && <strong>{movie.year}: </strong>}
@@ -6902,32 +7018,7 @@ function WatchScreen({
           )}
         </div>
 
-        {isSeries && (
-          <aside className="watch-episode-panel" aria-label="Episodes">
-            <SeasonDropdown
-              seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
-              value={season}
-              onChange={(newSeason) => {
-                setSeason(newSeason)
-                setEpisode(1)
-              }}
-              labels={seasonLabels}
-            />
-
-            <div className="watch-episode-list">
-              {episodeNumbers.map((number) => (
-                <button
-                  key={number}
-                  type="button"
-                  className={`watch-episode-item${number === episode ? ' active' : ''}`}
-                  onClick={() => setEpisode(number)}
-                >
-                  Episode {number}
-                </button>
-              ))}
-            </div>
-          </aside>
-        )}
+        {!isAnimeMovie && isSeries && renderEpisodePanel(false)}
       </div>
     </section>
   )

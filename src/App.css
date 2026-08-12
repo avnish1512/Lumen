@@ -14384,6 +14384,284 @@ body:has(.login-screen) {
 }
 
 /* ==========================================================================
+   Anime Watch Page — Side-by-side video screen & episode panel layout
+   ========================================================================== */
+.anime-watch-stage {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 18px 32px 0;
+  background: #000;
+}
+
+@media (min-width: 900px) {
+  .anime-watch-stage {
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 460px);
+    align-items: start;
+  }
+}
+
+.anime-watch-stage .stream-player-section {
+  padding: 0;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #050505;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.anime-watch-stage .stream-player,
+.anime-watch-stage .stream-placeholder {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border-radius: 16px;
+}
+
+.anime-episode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 16px;
+  background: #111115;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  box-sizing: border-box;
+}
+
+@media (min-width: 900px) {
+  .anime-episode-panel {
+    max-height: max(400px, calc((100vw - 520px) * 0.5625));
+  }
+}
+
+.anime-ep-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.anime-ep-search-wrapper {
+  position: relative;
+  flex: 1;
+  max-width: 200px;
+  display: flex;
+  align-items: center;
+}
+
+.anime-ep-search-icon {
+  position: absolute;
+  left: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+.anime-ep-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.anime-ep-search-input:focus {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(229, 9, 20, 0.7);
+}
+
+.anime-ep-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.anime-episode-panel .watch-episode-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  padding-right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (max-width: 899px) {
+  .anime-episode-panel .watch-episode-list {
+    max-height: 440px;
+  }
+}
+
+.anime-episode-panel .watch-episode-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 54px;
+  padding: 14px 18px;
+  font-size: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.anime-episode-panel .watch-episode-item.has-thumb {
+  padding: 8px 12px;
+  min-height: 68px;
+}
+
+.anime-ep-thumb {
+  width: 105px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.anime-ep-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+}
+
+.anime-ep-number {
+  font-weight: 750;
+  font-size: 15.5px;
+  color: inherit;
+  letter-spacing: 0.2px;
+}
+
+.anime-ep-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.anime-episode-panel .watch-episode-item.active .anime-ep-title {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.anime-ep-empty {
+  padding: 28px 14px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+/* Anime Episode Card (New Reference Design) */
+.anime-episode-panel .watch-episode-item.anime-ep-card-ref {
+  position: relative;
+  width: 100%;
+  min-height: 105px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background-size: cover;
+  background-position: center right;
+  background-repeat: no-repeat;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: left;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.anime-episode-panel .watch-episode-item.anime-ep-card-ref:hover,
+.anime-episode-panel .watch-episode-item.anime-ep-card-ref:focus-visible {
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+}
+
+.anime-episode-panel .watch-episode-item.anime-ep-card-ref.active {
+  background-color: transparent;
+  border-color: #2997ff;
+  box-shadow: 0 0 0 2px rgba(41, 151, 255, 0.6), 0 8px 30px rgba(0, 0, 0, 0.75);
+}
+
+.anime-ep-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  z-index: 1;
+}
+
+.anime-ep-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.anime-ep-card-main-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 24px);
+}
+
+.anime-ep-card-chevron {
+  color: rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+
+.anime-ep-card-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.anime-ep-card-ep-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.anime-ep-card-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 6px;
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 11px;
+  font-weight: 750;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: 0.2px;
+}
+
+/* ==========================================================================
    Watch screen — server cards side by side, and a mobile top row that stacks
    the title above the Watch + SUB/DUB controls (fixes the overlap on phones).
    ========================================================================== */
