@@ -6851,18 +6851,101 @@ function WatchScreen({
     </section>
   )
 
+  if (isAnimeMovie && isSeries) {
+    return (
+      <section className="screen watch-screen anime-watch-screen">
+        <DetailTopBar onBack={onBack} dark />
+
+        <div className="anime-watch-main-grid">
+          {/* LEFT COLUMN: Player -> Servers & SUB/DUB row -> Title/Genre/Synopsis/Meta */}
+          <div className="anime-watch-left-col">
+            {renderPlayerSection()}
+
+            <div className="anime-server-subdub-row">
+              {!isPartyGuest && (
+                <div className="server-selector anime-inline-servers" role="radiogroup" aria-label="Streaming server">
+                  {(() => {
+                    const filteredOptions = streamProviderOptions.filter(
+                      (provider) => provider.id !== 'oceanplay' && animeProviderIds.includes(provider.id),
+                    )
+                    return filteredOptions.map((provider) => {
+                      const isActive = provider.id === activeProviderId
+                      return (
+                        <button
+                          key={provider.id}
+                          className={`server-option${isActive ? ' active' : ''}`}
+                          type="button"
+                          role="radio"
+                          aria-checked={isActive}
+                          onClick={() => onStreamProviderChange(provider.id)}
+                        >
+                          <span className="provider-logo">{provider.logo}</span>
+                          <span className="server-copy">
+                            <strong>{provider.name}</strong>
+                            <small>{provider.description}</small>
+                          </span>
+                          {isActive ? <Check /> : <ChevronRight />}
+                        </button>
+                      )
+                    })
+                  })()}
+                </div>
+              )}
+
+              <div className="watch-lang-toggle" role="group" aria-label="Audio language">
+                <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
+                  SUB
+                </button>
+                <button type="button" className={language === 'dub' ? 'active' : ''} onClick={() => setLanguage('dub')}>
+                  DUB
+                </button>
+              </div>
+            </div>
+
+            <div className="anime-details-block">
+              <h1 className="anime-watch-title">{movie.title}</h1>
+              <p className="anime-watch-genre">{movie.genres[0] ?? 'Anime'}</p>
+              <p className="watch-synopsis">
+                <strong>{movie.year}: </strong>
+                {movie.synopsis}
+              </p>
+              <Metadata movie={movie} />
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: Episode Sidebar -> Sandbox */}
+          <div className="anime-watch-right-col">
+            {renderEpisodePanel(true)}
+
+            {!isPartyGuest && (
+              <label className="stream-sandbox-toggle">
+                <span>
+                  <strong>Sandbox</strong>
+                  <small>
+                    {streamSandboxEnabled ? 'Blocks popups and redirects' : 'Allows full player behavior'}
+                  </small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={streamSandboxEnabled}
+                  onChange={(event) => onStreamSandboxChange(event.target.checked)}
+                />
+                <span aria-hidden="true" className="toggle-track">
+                  <span />
+                </span>
+              </label>
+            )}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="screen watch-screen">
       <DetailTopBar onBack={onBack} dark />
 
-      {isAnimeMovie && isSeries ? (
-        <div className="anime-watch-stage">
-          {renderPlayerSection()}
-          {renderEpisodePanel(true)}
-        </div>
-      ) : (
-        renderPlayerSection()
-      )}
+      {renderPlayerSection()}
 
       <div className="watch-topbar">
         {!isPhubVideo && !isPartyGuest && (
