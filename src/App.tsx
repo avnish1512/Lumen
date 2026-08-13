@@ -6538,7 +6538,7 @@ function WatchScreen({
     if (isPhubVideo) {
       return similarPhubVideos.map(hanimeToMovieHelper)
     }
-    if (isJavVideo) {
+    if (isJavVideo && javRelated.length > 0) {
       return javRelated
     }
     return (relatedMovies || []).filter((m) => m.id !== movie.id).slice(0, 12)
@@ -6821,6 +6821,33 @@ function WatchScreen({
       timeAgo: '1 day ago',
       text: 'Re-watching this episode for the 3rd time and it still holds up. Masterpiece!',
       likes: 12,
+      dislikes: 0,
+    },
+    {
+      id: 'c5',
+      author: 'Levi_Captain',
+      avatarBg: '#d97706',
+      timeAgo: '1 day ago',
+      text: 'The direction and sound design in this scene is absolute perfection.',
+      likes: 34,
+      dislikes: 0,
+    },
+    {
+      id: 'c6',
+      author: 'ShadowNinja',
+      avatarBg: '#4f46e5',
+      timeAgo: '2 days ago',
+      text: 'Anyone else noticed the subtle foreshadowing at 14:20? Mind blown 🤯',
+      likes: 56,
+      dislikes: 1,
+    },
+    {
+      id: 'c7',
+      author: 'KyotoVibes',
+      avatarBg: '#0891b2',
+      timeAgo: '3 days ago',
+      text: 'Super excited for next week’s episode! Big props to the studio team.',
+      likes: 21,
       dislikes: 0,
     },
   ])
@@ -12552,6 +12579,35 @@ function LordPhubSection({ searchQuery = '', onPlay }: { searchQuery?: string; o
               onVideoClick={(video) => onPlay(hanimeToMovie(video))}
             />
           ))}
+          <div className="lord-full-grid-section" style={{ marginTop: 36 }}>
+            <h2 className="lord-rail-title" style={{ marginBottom: 18 }}>
+              All Videos ({videos.length})
+            </h2>
+            <div className="hanime-grid">
+              {videos.map((video, idx) => (
+                <div
+                  key={`all-${video.id}-${idx}`}
+                  className="hanime-card"
+                  onClick={() => onPlay(hanimeToMovie(video))}
+                >
+                  <div className="hanime-poster-area">
+                    <img
+                      src={video.thumb}
+                      referrerPolicy="no-referrer"
+                      alt={video.title}
+                      loading="lazy"
+                    />
+                    <span className="hanime-badge-4k">4K</span>
+                    <span className="hanime-badge-duration">{video.duration}</span>
+                  </div>
+                  <div className="hanime-card-body">
+                    <h3 className="hanime-card-title">{video.title}</h3>
+                    <span className="hanime-card-tag">{video.category}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

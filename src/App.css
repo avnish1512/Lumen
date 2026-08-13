@@ -1,14 +1,13 @@
 .app-shell {
   position: relative;
   width: min(100vw, 576px);
-  height: 100svh;
-  min-height: 100svh;
+  height: auto;
+  min-height: 0;
   margin: 0 auto;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scroll-behavior: smooth;
-  scroll-padding-bottom: 132px;
   color: #f8f8f8;
   background: #000;
   box-shadow: 0 0 80px rgba(0, 0, 0, 0.58);
@@ -21,8 +20,9 @@
 }
 
 .screen {
-  min-height: 100svh;
-  padding-bottom: 132px;
+  height: auto;
+  min-height: 0;
+  padding-bottom: 32px;
   background: #000;
 }
 
@@ -46,167 +46,169 @@ button {
 /* ── Mobile-only header overrides (≤899 px) ── */
 @media (max-width: 899px) {
 
-.home-header,
-.library-header,
-.netflix-mobile-header,
-.apple-mobile-header,
-.app-unified-topbar {
-  position: sticky !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  max-width: 576px !important;
-  margin: 0 auto !important;
-  z-index: 3000 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  padding-top: max(env(safe-area-inset-top, 0px), 48px) !important;
-  padding-bottom: 12px !important;
-  padding-left: 20px !important;
-  padding-right: 20px !important;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 65%, rgba(0, 0, 0, 0) 100%) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  border-bottom: none !important;
-  box-shadow: none !important;
-  transition: background 0.3s ease, padding 0.3s ease, box-shadow 0.3s ease !important;
-  box-sizing: border-box !important;
+  .home-header,
+  .library-header,
+  .netflix-mobile-header,
+  .apple-mobile-header,
+  .app-unified-topbar {
+    position: sticky !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 576px !important;
+    margin: 0 auto !important;
+    z-index: 3000 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding-top: max(env(safe-area-inset-top, 0px), 48px) !important;
+    padding-bottom: 12px !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.65) 65%, rgba(0, 0, 0, 0) 100%) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+    transition: background 0.3s ease, padding 0.3s ease, box-shadow 0.3s ease !important;
+    box-sizing: border-box !important;
+  }
+
+  .app-shell.nav-scrolled .home-header,
+  .app-shell.nav-scrolled .library-header,
+  .app-shell.nav-scrolled .netflix-mobile-header,
+  .app-shell.nav-scrolled .apple-mobile-header,
+  .app-shell.nav-scrolled .app-unified-topbar {
+    background: rgba(10, 10, 12, 0.92) !important;
+    backdrop-filter: blur(20px) saturate(1.2) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(1.2) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6) !important;
+  }
+
+  .home-header h1,
+  .library-header h1,
+  .netflix-mobile-header h1,
+  .apple-mobile-header h1,
+  .app-unified-topbar h1 {
+    margin: 0 !important;
+    color: #ffffff !important;
+    font-size: 32px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    letter-spacing: -0.5px !important;
+    padding: 0 !important;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  .avatar-button,
+  .apple-nav-profile,
+  .netflix-sidebar-avatar,
+  .livetv-avatar,
+  .netflix-header-avatar-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    max-width: 36px !important;
+    max-height: 36px !important;
+    border-radius: 50% !important;
+    border: 2px solid rgba(255, 255, 255, 0.4) !important;
+    background: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    cursor: pointer !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  .avatar-button img,
+  .apple-nav-profile img,
+  .netflix-sidebar-avatar img,
+  .livetv-avatar img,
+  .netflix-header-avatar-btn img,
+  .avatar-button .profile-avatar,
+  .apple-nav-profile .profile-avatar,
+  .netflix-sidebar-avatar .profile-avatar,
+  .livetv-avatar .profile-avatar,
+  .netflix-header-avatar-btn .profile-avatar {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    display: block !important;
+  }
+
+  .profile-avatar-large.has-avatar-img {
+    background: none !important;
+    box-shadow: none;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .header-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+
+  .mobile-search-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 36px !important;
+    height: 36px !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    opacity: 0.9 !important;
+    transition: opacity 0.2s ease, transform 0.2s ease !important;
+  }
+
+  .mobile-search-btn:active {
+    opacity: 0.7 !important;
+    transform: scale(0.92) !important;
+    background: transparent !important;
+  }
+
+  .mobile-search-btn svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .profile-menu {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+  .profile-menu-dropdown {
+    position: absolute !important;
+    top: calc(100% + 10px) !important;
+    right: 0 !important;
+    left: auto !important;
+    bottom: auto !important;
+    min-width: 220px !important;
+    max-width: calc(100vw - 32px) !important;
+    background: #16161a !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    z-index: 4000 !important;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7) !important;
+  }
+
 }
 
-.app-shell.nav-scrolled .home-header,
-.app-shell.nav-scrolled .library-header,
-.app-shell.nav-scrolled .netflix-mobile-header,
-.app-shell.nav-scrolled .apple-mobile-header,
-.app-shell.nav-scrolled .app-unified-topbar {
-  background: rgba(10, 10, 12, 0.92) !important;
-  backdrop-filter: blur(20px) saturate(1.2) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.2) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6) !important;
-}
-
-.home-header h1,
-.library-header h1,
-.netflix-mobile-header h1,
-.apple-mobile-header h1,
-.app-unified-topbar h1 {
-  margin: 0 !important;
-  color: #ffffff !important;
-  font-size: 32px !important;
-  font-weight: 800 !important;
-  line-height: 1 !important;
-  letter-spacing: -0.5px !important;
-  padding: 0 !important;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5) !important;
-}
-
-.avatar-button,
-.apple-nav-profile,
-.netflix-sidebar-avatar,
-.livetv-avatar,
-.netflix-header-avatar-btn {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 36px !important;
-  height: 36px !important;
-  min-width: 36px !important;
-  min-height: 36px !important;
-  max-width: 36px !important;
-  max-height: 36px !important;
-  border-radius: 50% !important;
-  border: 2px solid rgba(255, 255, 255, 0.4) !important;
-  background: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  overflow: hidden !important;
-  cursor: pointer !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
-}
-
-.avatar-button img,
-.apple-nav-profile img,
-.netflix-sidebar-avatar img,
-.livetv-avatar img,
-.netflix-header-avatar-btn img,
-.avatar-button .profile-avatar,
-.apple-nav-profile .profile-avatar,
-.netflix-sidebar-avatar .profile-avatar,
-.livetv-avatar .profile-avatar,
-.netflix-header-avatar-btn .profile-avatar {
-  width: 100% !important;
-  height: 100% !important;
-  border-radius: 50% !important;
-  object-fit: cover !important;
-  display: block !important;
-}
-
-.profile-avatar-large.has-avatar-img {
-  background: none !important;
-  box-shadow: none;
-  padding: 0;
-  overflow: hidden;
-}
-
-.header-actions {
-  display: flex !important;
-  align-items: center !important;
-  gap: 12px !important;
-}
-
-.mobile-search-btn {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 36px !important;
-  height: 36px !important;
-  color: #fff !important;
-  border: none !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  cursor: pointer !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  opacity: 0.9 !important;
-  transition: opacity 0.2s ease, transform 0.2s ease !important;
-}
-
-.mobile-search-btn:active {
-  opacity: 0.7 !important;
-  transform: scale(0.92) !important;
-  background: transparent !important;
-}
-
-.mobile-search-btn svg {
-  width: 22px !important;
-  height: 22px !important;
-}
-
-.profile-menu {
-  position: relative !important;
-  display: inline-flex !important;
-  align-items: center !important;
-}
-
-.profile-menu-dropdown {
-  position: absolute !important;
-  top: calc(100% + 10px) !important;
-  right: 0 !important;
-  left: auto !important;
-  bottom: auto !important;
-  min-width: 220px !important;
-  max-width: calc(100vw - 32px) !important;
-  background: #16161a !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  z-index: 4000 !important;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7) !important;
-}
-
-} /* end mobile-only header overrides */
+/* end mobile-only header overrides */
 
 .mute-button {
   display: grid;
@@ -2399,7 +2401,8 @@ button:focus-visible {
   }
 
   .center-state {
-    min-height: 100svh;
+    min-height: 0;
+    height: auto;
   }
 }
 
@@ -2407,13 +2410,15 @@ button:focus-visible {
   .app-shell {
     width: min(100vw, 576px);
     max-width: 576px;
-    min-height: 100svh;
+    height: auto;
+    min-height: 0;
     box-shadow: 0 0 80px rgba(0, 0, 0, 0.58);
   }
 
   .screen {
-    min-height: 100svh;
-    padding-bottom: 132px;
+    height: auto;
+    min-height: 0;
+    padding-bottom: 32px;
   }
 
   .bottom-ui {
@@ -4777,7 +4782,9 @@ a.watch-option-card {
   }
 
   .detail-screen {
-    padding-bottom: 112px;
+    padding-bottom: 24px !important;
+    height: auto !important;
+    min-height: 0 !important;
     background: #000;
   }
 
@@ -13758,9 +13765,20 @@ body:has(.login-screen) {
 }
 
 @keyframes livePulse {
-  0% { transform: scale(0.9); opacity: 0.7; }
-  50% { transform: scale(1.35); opacity: 1; }
-  100% { transform: scale(0.9); opacity: 0.7; }
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+
+  50% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
 }
 
 .screen-share-info {
@@ -14397,12 +14415,24 @@ body:has(.login-screen) {
 /* ==========================================================================
    Anime Watch Page — Image 1 Layout (Side-by-side grid, sub/dub bar, right actions)
    ========================================================================== */
+.anime-watch-screen,
+.watch-screen {
+  width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
+  padding-bottom: 24px !important;
+  margin-bottom: 0 !important;
+}
+
 .anime-watch-main-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 24px;
-  padding: 18px 32px 60px;
+  padding: 18px 32px 24px !important;
   background: #000;
+  height: auto !important;
+  min-height: 0 !important;
+  margin-bottom: 0 !important;
 }
 
 @media (min-width: 900px) {
@@ -17944,12 +17974,13 @@ body:has(.login-screen) {
 
 /* Hanime Video Streaming Section (Image 1 Style) */
 .hanime-container {
-  padding: 100px 0 max(110px, calc(env(safe-area-inset-bottom, 0px) + 95px)) 0;
+  padding: 125px 10px 10px 5px !important;
   width: 100%;
   max-width: 100%;
   margin: 0;
   color: #fff;
-  min-height: 100vh;
+  height: auto !important;
+  min-height: 0 !important;
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
 }
@@ -18259,10 +18290,11 @@ body:has(.login-screen) {
    ========================================== */
 
 .jav-container {
-  padding: 24px;
+  padding: 70px 20px 20px !important;
   max-width: 1600px;
   margin: 0 auto;
-  min-height: calc(100vh - 120px);
+  height: auto !important;
+  min-height: 0 !important;
 }
 
 .jav-controls {
@@ -18271,12 +18303,13 @@ body:has(.login-screen) {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  margin-top: 12px;
   margin-bottom: 24px;
   background: rgba(15, 23, 42, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 12px 18px;
+  padding: 14px 20px;
   border-radius: 16px;
 }
 
@@ -18643,14 +18676,17 @@ body:has(.login-screen) {
   .jav-container {
     padding: 16px;
   }
+
   .jav-controls {
     flex-direction: column;
     align-items: stretch;
   }
+
   .jav-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 12px;
   }
+
   .jav-card-title {
     font-size: 12px;
     height: 34px;
@@ -18742,7 +18778,7 @@ body:has(.login-screen) {
   flex-shrink: 0 !important;
 }
 
-.inline-sandbox-toggle input:checked + .toggle-track span {
+.inline-sandbox-toggle input:checked+.toggle-track span {
   transform: translateX(16px) !important;
 }
 
@@ -18969,6 +19005,7 @@ body:has(.login-screen) {
     width: 140px;
     min-width: 140px;
   }
+
   .youtube-related-title {
     font-size: 13px;
   }
@@ -18983,11 +19020,10 @@ body:has(.login-screen) {
   gap: 20px;
   width: 100%;
   margin-top: 28px;
-  padding: 24px;
-  border-radius: 16px;
-  background: #11141c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
   box-sizing: border-box;
 }
 
@@ -19232,4 +19268,26 @@ body:has(.login-screen) {
 .comment-reply-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
+}
+
+/* Global Content-Tightly-Fitted Container Reset for Info, Hentai, JAV & PHub screens */
+.detail-screen,
+.detail-page-body,
+.detail-content,
+.movie-detail,
+.detail-section,
+.detail-about-section,
+.detail-info-grid,
+.hanime-container,
+.jav-container,
+.phub-container,
+.watch-screen,
+.anime-watch-screen,
+.screen,
+.app-shell,
+.jav-pagination {
+  height: auto !important;
+  min-height: 0 !important;
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
 }
