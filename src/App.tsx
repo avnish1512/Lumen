@@ -6546,10 +6546,6 @@ function WatchScreen({
 
     return (
       <div className="youtube-related-sidebar">
-        <div className="youtube-related-header">
-          <h3>Related Videos</h3>
-          <span className="youtube-related-count">{relatedList.length} videos</span>
-        </div>
         <div className="youtube-related-list">
           {relatedList.map((item) => (
             <button
@@ -6563,22 +6559,24 @@ function WatchScreen({
                 {item.runtime && item.runtime !== '00:00:00' && (
                   <span className="youtube-badge duration">{item.runtime}</span>
                 )}
-                {item.logoTitle && (
-                  <span className="youtube-badge code">{item.logoTitle}</span>
-                )}
               </div>
               <div className="youtube-related-info">
                 <h4 className="youtube-related-title" title={item.title}>
                   {item.title}
                 </h4>
+                {item.director && (
+                  <p className="youtube-channel">
+                    <span>{item.director}</span>
+                    <span className="youtube-verified">✓</span>
+                  </p>
+                )}
                 <p className="youtube-related-meta">
                   <span className="youtube-genre">{item.genres[0] ?? item.label ?? 'Video'}</span>
                   {item.year && <span className="youtube-dot">• {item.year}</span>}
+                  {item.rating && item.rating !== 'N/A' && (
+                    <span className="youtube-rating">{item.rating}</span>
+                  )}
                 </p>
-                {item.director && <p className="youtube-channel">{item.director}</p>}
-                {item.rating && item.rating !== 'N/A' && (
-                  <p className="youtube-rating">{item.rating}</p>
-                )}
               </div>
             </button>
           ))}
