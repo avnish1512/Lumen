@@ -6610,30 +6610,66 @@ function WatchScreen({
               const epTitle = epData?.title || ''
               const displayTitle = epTitle ? `Episode ${number} - ${epTitle}` : `Episode ${number}`
               const langText = language === 'dub' ? 'English Dub' : 'English Sub'
-              const thumbUrl = epData?.thumbnail || movie.still
+              const thumbUrl = epData?.thumbnail || movie.still || movie.poster
+              const runtimeStr = episodeRuntime(movie, season, number) || '24m'
+              const providerName = currentProvider?.name || 'MegaPlay'
 
               return (
                 <button
                   key={number}
                   type="button"
-                  className={`watch-episode-item anime-ep-card-ref${isActive ? ' active' : ''}`}
+                  className={`watch-episode-item anime-yt-ep-card${isActive ? ' active' : ''}`}
                   onClick={() => setEpisode(number)}
-                  style={{
-                    backgroundImage: `linear-gradient(90deg, rgba(10, 10, 14, 0.94) 0%, rgba(10, 10, 14, 0.76) 52%, rgba(10, 10, 14, 0.28) 100%), url(${thumbUrl})`,
-                  }}
                 >
-                  <div className="anime-ep-card-content">
-                    <div className="anime-ep-card-header">
-                      <span className="anime-ep-card-main-title">{displayTitle}</span>
-                      <ChevronRight size={16} className="anime-ep-card-chevron" />
+                  <div className="anime-yt-thumb-container">
+                    {thumbUrl ? (
+                      <img
+                        src={thumbUrl}
+                        alt={displayTitle}
+                        className="anime-yt-thumb-img"
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.currentTarget
+                          if (movie.still && target.src !== movie.still) {
+                            target.src = movie.still
+                          } else if (movie.poster && target.src !== movie.poster) {
+                            target.src = movie.poster
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="anime-yt-thumb-fallback">
+                        <span>EP {number}</span>
+                      </div>
+                    )}
+                    <span className="anime-yt-thumb-duration">{runtimeStr}</span>
+                    {isActive && <div className="anime-yt-thumb-active-overlay" />}
+                  </div>
+
+                  <div className="anime-yt-info">
+                    <div className="anime-yt-title" title={displayTitle}>
+                      {displayTitle}
                     </div>
-                    <div className="anime-ep-card-sub">
-                      Episode {number} · {langText}
+
+                    <div className="anime-yt-channel">
+                      <span>{providerName}</span>
+                      <svg className="anime-yt-verified-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                      </svg>
                     </div>
-                    {epTitle && <div className="anime-ep-card-ep-title">{epTitle}</div>}
-                    <div className="anime-ep-card-badge">
-                      <span>{currentProvider?.name || 'MegaPlay'}</span>
+
+                    <div className="anime-yt-meta">
+                      <span>Episode {number}</span>
+                      <span className="anime-yt-dot">•</span>
+                      <span>{langText}</span>
                     </div>
+
+                    {isActive ? (
+                      <div className="anime-yt-badge active">
+                        <span className="anime-yt-badge-dot" />
+                        <span>NOW PLAYING</span>
+                      </div>
+                    ) : null}
                   </div>
                 </button>
               )
