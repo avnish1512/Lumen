@@ -310,5 +310,36 @@ describe('Hentai Ocean integration', () => {
     const relatedForTmdb = getRelatedMedia(tmdbMovie, lordMovies, tmdbMovies)
     expect(relatedForTmdb).toEqual(tmdbMovies)
   })
+
+  it('builds stream URL for apiJAV titles with embed_url cleanly', () => {
+    const javMovie: Movie = {
+      id: 'jav-123298',
+      isJav: true,
+      isHentaiOcean: true,
+      embedUrl: 'https://server.apijav.com/?mvapm_embed=123298',
+      title: 'HONB-496 Demand > Supply 6',
+      logoTitle: 'HONB-496',
+      label: 'JAV',
+      type: 'JAV Video',
+      genres: ['Uncensored', 'Japanese'],
+      year: '2026',
+      runtime: 'HD',
+      rating: '★ 4.8',
+      maturity: '18+',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const url = buildStreamUrl(javMovie)
+    expect(url).toBe('https://server.apijav.com/?mvapm_embed=123298')
+  })
 })
 

@@ -57,6 +57,7 @@ import {
   KeyRound,
   BookOpen,
   Code,
+  Video,
   Maximize2,
   Minimize2,
 } from 'lucide-react'
@@ -1037,6 +1038,10 @@ function continueRuntimeLabel(movie: Movie) {
 }
 
 function isTvShow(movie: Movie) {
+  if (movie.isJav || movie.id.startsWith('jav-') || movie.id.startsWith('phub-') || movie.label === 'PHub' || movie.label === 'JAV') {
+    return false
+  }
+
   if (movie.isHentaiOcean) {
     return (
       (movie.hentaiEpisodes?.length ?? 0) > 1 ||
@@ -1831,6 +1836,9 @@ function App() {
           (entry) =>
             entry.progress < 100 &&
             !entry.movie.isHentaiOcean &&
+            !entry.movie.isJav &&
+            !entry.movie.id.startsWith('jav-') &&
+            entry.movie.label !== 'JAV' &&
             !entry.movie.genres.some((g) => g.toLowerCase() === 'hentai'),
         )
         .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -1868,6 +1876,10 @@ function App() {
             !entry.movie.id.startsWith('phub-') &&
             entry.movie.label !== 'PHub' &&
             !entry.movie.hentaiSlug?.startsWith('phub-') &&
+            !entry.movie.id.startsWith('jav-') &&
+            entry.movie.label !== 'JAV' &&
+            !entry.movie.isJav &&
+            !entry.movie.hentaiSlug?.startsWith('jav-') &&
             (entry.movie.isHentaiOcean ||
               entry.movie.genres.some((g) => g.toLowerCase() === 'hentai')),
         )
@@ -1985,7 +1997,7 @@ function App() {
   const [lordRails, setLordRails] = useState<LordRail[]>([])
   const [lordLoading, setLordLoading] = useState(false)
   const [lordBackScreen, setLordBackScreen] = useState<Screen>('home')
-  const [activeLordTab, setActiveLordTab] = useState<'collection' | 'phub'>('collection')
+  const [activeLordTab, setActiveLordTab] = useState<'collection' | 'phub' | 'jav'>('collection')
 
   const isHentaiSelectedMovie = Boolean(
     selectedMovie &&
@@ -2679,7 +2691,7 @@ function App() {
 
   const hydrateStreamingMovie = useCallback(
     async (movie: Movie) => {
-      if (movie.tmdbId || movie.isHentaiOcean || movie.isFull) {
+      if (movie.tmdbId || movie.isHentaiOcean || movie.isJav || movie.embedUrl || movie.isFull) {
         return movie
       }
 
@@ -2794,6 +2806,13 @@ function App() {
     }
 
     if (
+      movie.id.startsWith('jav-') ||
+      movie.label === 'JAV' ||
+      movie.isJav ||
+      movie.hentaiSlug?.startsWith('jav-')
+    ) {
+      setActiveLordTab('jav')
+    } else if (
       movie.id.startsWith('phub-') ||
       movie.label === 'PHub' ||
       movie.hentaiSlug?.startsWith('phub-')
@@ -2812,6 +2831,13 @@ function App() {
     }
 
     if (
+      movie.id.startsWith('jav-') ||
+      movie.label === 'JAV' ||
+      movie.isJav ||
+      movie.hentaiSlug?.startsWith('jav-')
+    ) {
+      setActiveLordTab('jav')
+    } else if (
       movie.id.startsWith('phub-') ||
       movie.label === 'PHub' ||
       movie.hentaiSlug?.startsWith('phub-')
@@ -6405,14 +6431,22 @@ function WatchScreen({
   const [isBigScreen, setIsBigScreen] = useState(false)
   const remoteViewportRef = useRef<HTMLDivElement | null>(null)
 
-  const isHentai = Boolean(
-    movie.isHentaiOcean ||
-      movie.genres.some((g) => g.toLowerCase() === 'hentai'),
+  const isJavVideo = Boolean(
+    movie.id.startsWith('jav-') ||
+      movie.label === 'JAV' ||
+      movie.isJav ||
+      movie.hentaiSlug?.startsWith('jav-'),
   )
   const isPhubVideo = Boolean(
     movie.id.startsWith('phub-') ||
       movie.label === 'PHub' ||
       movie.hentaiSlug?.startsWith('phub-'),
+  )
+  const isHentai = Boolean(
+    !isJavVideo &&
+      !isPhubVideo &&
+      (movie.isHentaiOcean ||
+        movie.genres.some((g) => g.toLowerCase() === 'hentai')),
   )
 
   const similarPhubVideos = useMemo(() => {
@@ -6431,10 +6465,12 @@ function WatchScreen({
     const pool = matched.length >= 3 ? matched : fallback
     return pool.slice(0, 10)
   }, [isPhubVideo, movie.id, movie.genres])
-  const isTmdbTitle = !isHentai && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
+  const isTmdbTitle = !isHentai && !isJavVideo && !isPhubVideo && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
   const isAnimeMovie =
     !isTmdbTitle &&
     !isHentai &&
+    !isJavVideo &&
+    !isPhubVideo &&
     (movie.isAnime ||
       movie.type === 'Anime' ||
       movie.genres.includes('Anime') ||
@@ -6443,15 +6479,19 @@ function WatchScreen({
 
   const animeProviderIds: StreamProvider[] = ['megaplay', 'megabuzz']
 
-  const activeProviderId = isHentai
-    ? 'oceanplay'
-    : isAnimeMovie
-      ? animeProviderIds.includes(streamProvider)
-        ? streamProvider
-        : 'megaplay'
-      : animeProviderIds.includes(streamProvider)
-        ? 'vidking'
-        : streamProvider
+  const activeProviderId = isJavVideo
+    ? 'apijav'
+    : isPhubVideo
+      ? 'phubplay'
+      : isHentai
+        ? 'oceanplay'
+        : isAnimeMovie
+          ? animeProviderIds.includes(streamProvider)
+            ? streamProvider
+            : 'megaplay'
+          : animeProviderIds.includes(streamProvider)
+            ? 'vidking'
+            : streamProvider
 
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
   const [episode, setEpisode] = useState(movie.streamEpisode ?? 1)
@@ -7156,16 +7196,25 @@ function WatchScreen({
             </label>
           )}
 
-          {!isPhubVideo && !isPartyGuest && (
+          {!isPhubVideo && !isJavVideo && !isPartyGuest && (
             <div className="server-selector" role="radiogroup" aria-label="Streaming server">
               {(() => {
-                const filteredOptions = isHentai
-                  ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
-                  : streamProviderOptions.filter((provider) => {
-                      if (provider.id === 'oceanplay') return false
-                      const isAnimeProvider = animeProviderIds.includes(provider.id)
-                      return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
-                    })
+                const filteredOptions = isJavVideo
+                  ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
+                  : isPhubVideo
+                    ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+                    : isHentai
+                      ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                      : streamProviderOptions.filter((provider) => {
+                          if (
+                            provider.id === 'oceanplay' ||
+                            provider.id === 'apijav' ||
+                            provider.id === 'phubplay'
+                          )
+                            return false
+                          const isAnimeProvider = animeProviderIds.includes(provider.id)
+                          return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
+                        })
 
                 return filteredOptions.map((provider) => {
                   const isActive = provider.id === activeProviderId
@@ -11453,8 +11502,8 @@ type LordScreenProps = {
   continueMovies?: Movie[]
   currentUser?: UserInfo | null
   profiles?: UserProfile[]
-  activeTab?: 'collection' | 'phub'
-  onTabChange?: (tab: 'collection' | 'phub') => void
+  activeTab?: 'collection' | 'phub' | 'jav'
+  onTabChange?: (tab: 'collection' | 'phub' | 'jav') => void
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSelectProfile?: (name: string) => void
@@ -11497,9 +11546,9 @@ function LordScreen({
     }))
   }, [rails])
 
-  const [internalTab, setInternalTab] = useState<'collection' | 'phub'>(activeTabProp)
+  const [internalTab, setInternalTab] = useState<'collection' | 'phub' | 'jav'>(activeTabProp)
   const activeLordTab = activeTabProp || internalTab
-  const setActiveLordTab = (tab: 'collection' | 'phub') => {
+  const setActiveLordTab = (tab: 'collection' | 'phub' | 'jav') => {
     setInternalTab(tab)
     onTabChange?.(tab)
   }
@@ -11571,6 +11620,14 @@ function LordScreen({
               <Code size={15} />
               <span>PHub</span>
             </button>
+            <button
+              className={`lord-tab-btn ${activeLordTab === 'jav' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => setActiveLordTab('jav')}
+            >
+              <Video size={15} />
+              <span>JAV</span>
+            </button>
           </div>
 
           {activeLordTab === 'collection' && (
@@ -11603,7 +11660,13 @@ function LordScreen({
               <input
                 type="text"
                 className="lord-search-input"
-                placeholder={activeLordTab === 'phub' ? 'Search videos…' : 'Titles, genres…'}
+                placeholder={
+                  activeLordTab === 'phub'
+                    ? 'Search PHub videos…'
+                    : activeLordTab === 'jav'
+                      ? 'Search JAV codes, titles…'
+                      : 'Titles, genres…'
+                }
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onFocus={() => setSearchFocused(true)}
@@ -11659,7 +11722,9 @@ function LordScreen({
         </div>
       </header>
 
-      {activeLordTab === 'phub' ? (
+      {activeLordTab === 'jav' ? (
+        <LordJavSection searchQuery={query} onOpenDetail={onOpenDetail} onPlay={onPlay} />
+      ) : activeLordTab === 'phub' ? (
         <LordPhubSection searchQuery={query} onOpenDetail={onOpenDetail} onPlay={onPlay} />
       ) : loading ? (
         <div className="lord-empty">
@@ -11746,6 +11811,14 @@ function LordScreen({
           >
             <Code size={16} />
             <span>PHub</span>
+          </button>
+          <button
+            className={`lord-mobile-nav-item${activeLordTab === 'jav' ? ' is-active' : ''}`}
+            type="button"
+            onClick={() => setActiveLordTab('jav')}
+          >
+            <Video size={16} />
+            <span>JAV</span>
           </button>
         </div>
       </div>
@@ -12165,7 +12238,7 @@ function hanimeToMovieHelper(video: HanimeVideo): Movie {
     boxOffice: '',
     ratings: [],
     embedUrl: video.embedUrl,
-    isHentaiOcean: true,
+    isHentaiOcean: false,
     hentaiSlug: video.code || `phub-${video.id}`,
   }
 }
@@ -12397,6 +12470,344 @@ function LordPhubRailRow({
           <ChevronRight />
         </button>
       </div>
+    </div>
+  )
+}
+
+export type JavPost = {
+  id: number
+  title: string
+  slug: string
+  date: string
+  thumbnail: string
+  duration: string
+  categories: string[]
+  tags: string[]
+  actors: string[]
+  studio: string
+  code: string
+  views: number
+  likes: number
+  dislikes: number
+  is_hd: boolean
+  player_api: string
+  embed_url: string
+  iframe_html: string
+}
+
+function javToMovieHelper(post: JavPost): Movie {
+  const codePrefix = post.code ? `[${post.code}] ` : ''
+  const displayTitle = post.title.startsWith(post.code)
+    ? post.title
+    : `${codePrefix}${post.title}`
+
+  return {
+    id: `jav-${post.id}`,
+    rank: 0,
+    title: cleanHtmlEntities(displayTitle),
+    logoTitle: post.code || '',
+    label: 'JAV',
+    type: 'JAV Video',
+    genres: post.categories && post.categories.length > 0 ? post.categories : ['JAV', 'Japanese'],
+    year: post.date ? new Date(post.date).getFullYear().toString() : new Date().getFullYear().toString(),
+    runtime: post.duration && post.duration !== '00:00:00' ? post.duration : 'HD',
+    rating: post.likes ? `★ ${(post.likes / Math.max(1, post.likes + post.dislikes) * 5).toFixed(1)}` : 'N/A',
+    maturity: '18+',
+    progress: 0,
+    hero: post.thumbnail,
+    poster: post.thumbnail,
+    still: post.thumbnail,
+    synopsis: cleanHtmlEntities(
+      `${post.code ? `Code: ${post.code} · ` : ''}${post.studio ? `Studio: ${post.studio} · ` : ''}${post.views ? `Views: ${post.views.toLocaleString()} · ` : ''}${(post.categories || []).join(', ')}`,
+    ),
+    cast: (post.actors || []).map(cleanHtmlEntities),
+    director: post.studio ? cleanHtmlEntities(post.studio) : 'apiJAV',
+    awards: post.code || '',
+    boxOffice: '',
+    ratings: [],
+    embedUrl:
+      post.embed_url ||
+      post.embedUrl ||
+      `https://server.apijav.com/?mvapm_embed=${post.id}`,
+    isHentaiOcean: false,
+    isJav: true,
+    hentaiSlug: post.code || `jav-${post.id}`,
+  }
+}
+
+const JAV_CATEGORIES = [
+  'All',
+  'Uncensored',
+  'Famous',
+  'Creampie',
+  'Cosplay',
+  'Adultery',
+  'Oral Sex',
+  'Big Breasts',
+  'Slim',
+  'HD',
+]
+
+function LordJavSection({
+  searchQuery = '',
+  onOpenDetail,
+  onPlay,
+}: {
+  searchQuery?: string
+  onOpenDetail?: (movie: Movie) => void
+  onPlay: (movie: Movie) => void
+}) {
+  const [posts, setPosts] = useState<JavPost[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalPosts, setTotalPosts] = useState(0)
+  const [selectedCategory, setSelectedCategory] = useState('All')
+  const [orderBy, setOrderBy] = useState<'date' | 'views' | 'title'>('views')
+
+  useEffect(() => {
+    setPage(1)
+  }, [selectedCategory, orderBy, searchQuery])
+
+  useEffect(() => {
+    let active = true
+    async function fetchJavPosts() {
+      setLoading(true)
+      setError('')
+      try {
+        let url = `https://server.apijav.com/wp-json/myvideo/v1/posts?per_page=24&page=${page}&orderby=${orderBy}&order=DESC`
+
+        if (selectedCategory !== 'All') {
+          url += `&category=${encodeURIComponent(selectedCategory)}`
+        }
+
+        if (searchQuery.trim()) {
+          url += `&search=${encodeURIComponent(searchQuery.trim())}`
+        }
+
+        const res = await fetch(url)
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`)
+        }
+
+        const wpTotal = res.headers.get('X-WP-Total')
+        const wpTotalPages = res.headers.get('X-WP-TotalPages')
+        if (wpTotal) setTotalPosts(parseInt(wpTotal, 10))
+        if (wpTotalPages) setTotalPages(parseInt(wpTotalPages, 10))
+
+        const data: JavPost[] = await res.json()
+        if (active) {
+          setPosts(Array.isArray(data) ? data : [])
+        }
+      } catch {
+        if (active) {
+          setError('Failed to load JAV catalog. Please try again.')
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void fetchJavPosts()
+    return () => {
+      active = false
+    }
+  }, [page, selectedCategory, orderBy, searchQuery])
+
+  const handlePrevPage = () => {
+    if (page > 1) {
+      setPage((prev) => prev - 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const handleNextPage = () => {
+    if (page < totalPages) {
+      setPage((prev) => prev + 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  return (
+    <div className="jav-container">
+      {/* Category Pills & Order Controls */}
+      <div className="jav-controls">
+        <div className="jav-pills" role="tablist" aria-label="JAV categories">
+          {JAV_CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              className={`jav-pill${selectedCategory === cat ? ' is-active' : ''}`}
+              onClick={() => setSelectedCategory(cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        <div className="jav-sort-group">
+          <span className="jav-sort-label">Sort:</span>
+          <button
+            type="button"
+            className={`jav-sort-btn${orderBy === 'views' ? ' is-active' : ''}`}
+            onClick={() => setOrderBy('views')}
+          >
+            Popular
+          </button>
+          <button
+            type="button"
+            className={`jav-sort-btn${orderBy === 'date' ? ' is-active' : ''}`}
+            onClick={() => setOrderBy('date')}
+          >
+            Latest
+          </button>
+          <button
+            type="button"
+            className={`jav-sort-btn${orderBy === 'title' ? ' is-active' : ''}`}
+            onClick={() => setOrderBy('title')}
+          >
+            Title
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      {loading ? (
+        <div className="jav-loading">
+          <LoaderCircle className="spin-icon" size={32} />
+          <p>Loading JAV catalog...</p>
+        </div>
+      ) : error ? (
+        <div className="jav-empty">
+          <AlertCircle size={40} />
+          <p>{error}</p>
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="jav-empty">
+          <Search size={40} />
+          <p>No JAV videos found matching your criteria.</p>
+        </div>
+      ) : (
+        <>
+          <div className="jav-meta-header">
+            <h2 className="lord-rail-title">
+              {searchQuery.trim()
+                ? `Results for "${searchQuery.trim()}"`
+                : selectedCategory === 'All'
+                  ? 'All JAV Catalog'
+                  : `${selectedCategory} JAV`}
+              {totalPosts > 0 && <span className="jav-meta-count">({totalPosts.toLocaleString()} titles)</span>}
+            </h2>
+          </div>
+
+          <div className="jav-grid">
+            {posts.map((post) => {
+              const movie = javToMovieHelper(post)
+              return (
+                <div key={post.id} className="jav-card" onClick={() => onPlay(movie)}>
+                  <div className="jav-thumb-container">
+                    <img
+                      src={post.thumbnail}
+                      alt={post.title}
+                      loading="lazy"
+                      onError={(event) => {
+                        const target = event.target as HTMLImageElement
+                        target.onerror = null
+                        target.src =
+                          'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
+                      }}
+                    />
+                    {post.code && <span className="jav-code-badge">{post.code}</span>}
+                    {post.is_hd && <span className="jav-hd-badge">HD</span>}
+                    {post.duration && post.duration !== '00:00:00' && (
+                      <span className="jav-duration-badge">{post.duration}</span>
+                    )}
+
+                    <div className="jav-play-overlay">
+                      <button
+                        type="button"
+                        className="jav-play-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onPlay(movie)
+                        }}
+                        title="Play Video"
+                      >
+                        <Play fill="#fff" size={24} />
+                      </button>
+
+                      {onOpenDetail && (
+                        <button
+                          type="button"
+                          className="jav-info-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onOpenDetail(movie)
+                          }}
+                          title="More Info"
+                        >
+                          <Info size={20} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="jav-card-body">
+                    <h3 className="jav-card-title" title={post.title}>
+                      {cleanHtmlEntities(post.title)}
+                    </h3>
+
+                    <div className="jav-card-footer">
+                      {post.studio && <span className="jav-studio">{cleanHtmlEntities(post.studio)}</span>}
+                      {post.views > 0 && <span className="jav-views">👁 {post.views.toLocaleString()}</span>}
+                    </div>
+
+                    {post.categories && post.categories.length > 0 && (
+                      <div className="jav-tags">
+                        {post.categories.slice(0, 3).map((cat) => (
+                          <span key={cat} className="jav-tag">
+                            {cat}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="jav-pagination">
+              <button
+                type="button"
+                className="jav-page-btn"
+                onClick={handlePrevPage}
+                disabled={page <= 1}
+              >
+                <ChevronLeft size={18} />
+                <span>Prev</span>
+              </button>
+
+              <span className="jav-page-info">
+                Page <strong>{page}</strong> of <strong>{totalPages.toLocaleString()}</strong>
+              </span>
+
+              <button
+                type="button"
+                className="jav-page-btn"
+                onClick={handleNextPage}
+                disabled={page >= totalPages}
+              >
+                <span>Next</span>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

@@ -16,6 +16,8 @@ export type StreamProvider =
   | 'megaplay'
   | 'megabuzz'
   | 'oceanplay'
+  | 'apijav'
+  | 'phubplay'
 
 export type StreamProviderOption = {
   id: StreamProvider
@@ -147,6 +149,18 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'OceanPlay',
     logo: 'OP',
     description: 'Hentai Ocean · Stream',
+  },
+  {
+    id: 'apijav',
+    name: 'apiJAV',
+    logo: 'JAV',
+    description: 'apiJAV Server · Stream',
+  },
+  {
+    id: 'phubplay',
+    name: 'PHub Stream',
+    logo: 'PH',
+    description: 'PHub Server · Stream',
   },
 ]
 
@@ -573,6 +587,10 @@ export function buildStreamUrl(
     if (!rawUrl) {
       const slug = movie.hentaiSlug || movie.id.replace(/^hentaiocean-/, '')
       rawUrl = `https://hentaiocean.com/embed/${slug}?la=1`
+    }
+
+    if (movie.isJav || rawUrl.includes('apijav.com')) {
+      return rawUrl
     }
 
     const laValue = movie.streamLanguage === 'dub' ? '2' : '1'

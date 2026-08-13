@@ -109,6 +109,7 @@ export type Movie = {
   badges?: string[]
   isFull?: boolean
   isHentaiOcean?: boolean
+  isJav?: boolean
   hentaiSlug?: string
   embedUrl?: string
   hentaiEpisodes?: Array<{
