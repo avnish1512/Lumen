@@ -40,6 +40,9 @@ import {
   Volume2,
   VolumeX,
   X,
+  ThumbsUp,
+  ThumbsDown,
+  MessageSquare,
   Eye,
   EyeOff,
   Pencil,
@@ -6546,6 +6549,9 @@ function WatchScreen({
 
     return (
       <div className="youtube-related-sidebar">
+        <div className="youtube-related-header">
+          <h3 className="youtube-related-header-title">Related</h3>
+        </div>
         <div className="youtube-related-list">
           {relatedList.map((item) => (
             <button
@@ -6768,20 +6774,205 @@ function WatchScreen({
     window.open(streamUrl, '_blank', 'noopener,noreferrer')
   }
 
+  const [commentsList, setCommentsList] = useState<
+    Array<{
+      id: string
+      author: string
+      avatarBg: string
+      timeAgo: string
+      text: string
+      likes: number
+      dislikes: number
+      userLiked?: boolean
+      userDisliked?: boolean
+    }>
+  >([
+    {
+      id: 'c1',
+      author: 'ErenYeager_01',
+      avatarBg: '#e50914',
+      timeAgo: '45 minutes ago',
+      text: 'This episode gave me absolute chills! The animation in the battle sequence is insane 🔥',
+      likes: 42,
+      dislikes: 1,
+    },
+    {
+      id: 'c2',
+      author: 'AnimeKage',
+      avatarBg: '#2563eb',
+      timeAgo: '2 hours ago',
+      text: 'The soundtrack timing when the climax hit was 10/10. Easily one of the best releases this season.',
+      likes: 19,
+      dislikes: 0,
+    },
+    {
+      id: 'c3',
+      author: 'Mikasa_Ackerman',
+      avatarBg: '#059669',
+      timeAgo: '5 hours ago',
+      text: 'Can we talk about the character development? Absolutely peak cinema right here.',
+      likes: 87,
+      dislikes: 2,
+    },
+    {
+      id: 'c4',
+      author: 'OtakuLover99',
+      avatarBg: '#7c3aed',
+      timeAgo: '1 day ago',
+      text: 'Re-watching this episode for the 3rd time and it still holds up. Masterpiece!',
+      likes: 12,
+      dislikes: 0,
+    },
+  ])
+
+  const [newCommentText, setNewCommentText] = useState('')
+
+  const handleAddComment = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newCommentText.trim()) return
+    const newComment = {
+      id: `c_${Date.now()}`,
+      author: currentUserEmail ? currentUserEmail.split('@')[0] : 'You',
+      avatarBg: '#3b82f6',
+      timeAgo: 'Just now',
+      text: newCommentText.trim(),
+      likes: 0,
+      dislikes: 0,
+    }
+    setCommentsList([newComment, ...commentsList])
+    setNewCommentText('')
+  }
+
+  const renderCommentsSection = () => (
+    <div className="youtube-comments-container">
+      <div className="comments-header-row">
+        <h3 className="comments-count-title">{commentsList.length + 138} Comments</h3>
+        <button type="button" className="comments-sort-btn">
+          <MessageSquare size={16} />
+          <span>Sort by</span>
+        </button>
+      </div>
+
+      <form className="comments-input-area" onSubmit={handleAddComment}>
+        <div className="comment-user-avatar me-avatar">
+          {currentUserEmail ? currentUserEmail.charAt(0).toUpperCase() : 'U'}
+        </div>
+        <div className="comment-input-wrapper">
+          <textarea
+            className="comment-textarea"
+            placeholder="Add a comment..."
+            rows={2}
+            value={newCommentText}
+            onChange={(e) => setNewCommentText(e.target.value)}
+          />
+          <div className="comment-input-actions">
+            <button
+              type="button"
+              className="comment-cancel-btn"
+              onClick={() => setNewCommentText('')}
+              disabled={!newCommentText}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="comment-submit-btn"
+              disabled={!newCommentText.trim()}
+            >
+              Comment
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <div className="comments-list">
+        {commentsList.map((c) => (
+          <div key={c.id} className="comment-item">
+            <div className="comment-user-avatar" style={{ background: c.avatarBg }}>
+              {c.author.charAt(0).toUpperCase()}
+            </div>
+            <div className="comment-content">
+              <div className="comment-meta-row">
+                <span className="comment-author">@{c.author}</span>
+                <span className="comment-time">{c.timeAgo}</span>
+              </div>
+              <p className="comment-body-text">{c.text}</p>
+              <div className="comment-actions-row">
+                <button
+                  type="button"
+                  className={`comment-like-btn${c.userLiked ? ' active' : ''}`}
+                  onClick={() => {
+                    setCommentsList((prev) =>
+                      prev.map((item) =>
+                        item.id === c.id
+                          ? {
+                              ...item,
+                              userLiked: !item.userLiked,
+                              likes: item.userLiked ? item.likes - 1 : item.likes + 1,
+                              ...(item.userDisliked
+                                ? { userDisliked: false, dislikes: item.dislikes - 1 }
+                                : {}),
+                            }
+                          : item,
+                      ),
+                    )
+                  }}
+                >
+                  <ThumbsUp size={14} />
+                  <span>{c.likes}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`comment-dislike-btn${c.userDisliked ? ' active' : ''}`}
+                  onClick={() => {
+                    setCommentsList((prev) =>
+                      prev.map((item) =>
+                        item.id === c.id
+                          ? {
+                              ...item,
+                              userDisliked: !item.userDisliked,
+                              dislikes: item.userDisliked ? item.dislikes - 1 : item.dislikes + 1,
+                              ...(item.userLiked
+                                ? { userLiked: false, likes: item.likes - 1 }
+                                : {}),
+                            }
+                          : item,
+                      ),
+                    )
+                  }}
+                >
+                  <ThumbsDown size={14} />
+                </button>
+
+                <button type="button" className="comment-reply-btn">
+                  Reply
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
   const renderEpisodePanel = (_isAnimeLayout = true) => {
     if (!isSeries) return null
     return (
       <aside className="watch-episode-panel anime-episode-panel" aria-label="Episodes">
         <div className="anime-ep-header-row">
-          <SeasonDropdown
-            seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
-            value={season}
-            onChange={(newSeason) => {
-              setSeason(newSeason)
-              setEpisode(1)
-            }}
-            labels={seasonLabels}
-          />
+          <div className="anime-ep-header-left">
+            <h3 className="anime-ep-header-title">Related</h3>
+            <SeasonDropdown
+              seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
+              value={season}
+              onChange={(newSeason) => {
+                setSeason(newSeason)
+                setEpisode(1)
+              }}
+              labels={seasonLabels}
+            />
+          </div>
           <div className="anime-ep-search-wrapper">
             <Search size={14} className="anime-ep-search-icon" />
             <input
@@ -7211,6 +7402,8 @@ function WatchScreen({
             </p>
             <Metadata movie={movie} />
           </div>
+
+          {renderCommentsSection()}
         </div>
 
         {/* RIGHT COLUMN: Sidebar */}
