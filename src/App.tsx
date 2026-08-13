@@ -6434,6 +6434,7 @@ function WatchScreen({
   const isPartyHost = activeParty ? currentUserEmail === activeParty.host_email : false
   const isPartyGuest = activeParty ? currentUserEmail !== activeParty.host_email : false
   const [isBigScreen, setIsBigScreen] = useState(false)
+  const [isTitleExpanded, setIsTitleExpanded] = useState(false)
   const remoteViewportRef = useRef<HTMLDivElement | null>(null)
 
   const isJavVideo = Boolean(
@@ -7453,7 +7454,26 @@ function WatchScreen({
           </div>
 
           <div className="anime-details-block">
-            <h1 className="anime-watch-title">{movie.title}</h1>
+            <div className="anime-watch-title-wrap">
+              <h1
+                className={`anime-watch-title${(movie.title.length > 50 || isJavVideo) && !isTitleExpanded ? ' is-clamped' : ' is-expanded'}`}
+                onClick={(movie.title.length > 50 || isJavVideo) ? () => setIsTitleExpanded((v) => !v) : undefined}
+                style={(movie.title.length > 50 || isJavVideo) ? { cursor: 'pointer' } : undefined}
+                title={(movie.title.length > 50 || isJavVideo) ? (isTitleExpanded ? 'Click to collapse' : 'Click to expand') : undefined}
+              >
+                {movie.title}
+              </h1>
+              {(movie.title.length > 50 || isJavVideo) && (
+                <button
+                  type="button"
+                  className="title-expand-btn"
+                  onClick={() => setIsTitleExpanded((v) => !v)}
+                  aria-expanded={isTitleExpanded}
+                >
+                  {isTitleExpanded ? 'Show Less ▲' : 'Show Full Title ▼'}
+                </button>
+              )}
+            </div>
             <p className="anime-watch-genre">{movie.genres[0] ?? movie.label ?? 'Video'}</p>
             <p className="watch-synopsis">
               {movie.year && <strong>{movie.year}: </strong>}
@@ -10196,6 +10216,7 @@ type ContinueWatchingRailProps = MovieRailProps & {
   onRemoveContinue: (movie: Movie) => void
   onRemoveWatchlist: (movie: Movie) => void
   isJavSection?: boolean
+  isPhubSection?: boolean
 }
 
 type ContinueMenuState = {
@@ -10213,6 +10234,7 @@ function ContinueWatchingRail({
   onRemoveContinue,
   onRemoveWatchlist,
   isJavSection = false,
+  isPhubSection = false,
 }: ContinueWatchingRailProps) {
   const rowRef = useRef<HTMLDivElement | null>(null)
   const [menuState, setMenuState] = useState<ContinueMenuState | null>(null)
@@ -10225,8 +10247,20 @@ function ContinueWatchingRail({
           m.label === 'JAV' ||
           m.hentaiSlug?.startsWith('jav-'),
       )
-    return isJavSection ? movies.filter(isJav) : movies.filter((m) => !isJav(m))
-  }, [movies, isJavSection])
+    const isPhub = (m: Movie) =>
+      Boolean(
+        m.id.startsWith('phub-') ||
+          m.label === 'PHub' ||
+          m.hentaiSlug?.startsWith('phub-'),
+      )
+    if (isJavSection) {
+      return movies.filter(isJav)
+    }
+    if (isPhubSection) {
+      return movies.filter(isPhub)
+    }
+    return movies.filter((m) => !isJav(m) && !isPhub(m))
+  }, [movies, isJavSection, isPhubSection])
 
   useEffect(() => {
     if (!menuState) {
@@ -11973,7 +12007,15 @@ function LordScreen({
           onRemoveWatchlist={onRemoveWatchlist}
         />
       ) : activeLordTab === 'phub' ? (
-        <LordPhubSection searchQuery={query} onOpenDetail={onOpenDetail} onPlay={onPlay} />
+        <LordPhubSection
+          searchQuery={query}
+          continueMovies={continueMovies}
+          onOpenDetail={onOpenDetail}
+          onPlay={onPlay}
+          onMarkWatched={onMarkWatched}
+          onRemoveContinue={onRemoveContinue}
+          onRemoveWatchlist={onRemoveWatchlist}
+        />
       ) : loading ? (
         <div className="lord-empty">
           <LoaderCircle className="spin-icon" />
@@ -12491,7 +12533,23 @@ function hanimeToMovieHelper(video: HanimeVideo): Movie {
   }
 }
 
-function LordPhubSection({ searchQuery = '', onPlay }: { searchQuery?: string; onOpenDetail?: (movie: Movie) => void; onPlay: (movie: Movie) => void }) {
+function LordPhubSection({
+  searchQuery = '',
+  continueMovies = [],
+  onOpenDetail,
+  onPlay,
+  onMarkWatched,
+  onRemoveContinue,
+  onRemoveWatchlist,
+}: {
+  searchQuery?: string
+  continueMovies?: Movie[]
+  onOpenDetail?: (movie: Movie) => void
+  onPlay: (movie: Movie) => void
+  onMarkWatched?: (movie: Movie) => void
+  onRemoveContinue?: (movie: Movie) => void
+  onRemoveWatchlist?: (movie: Movie) => void
+}) {
   const [videos, setVideos] = useState<HanimeVideo[]>(INITIAL_HANIME_VIDEOS)
   const [loading, setLoading] = useState(false)
 
@@ -12563,6 +12621,9 @@ function LordPhubSection({ searchQuery = '', onPlay }: { searchQuery?: string; o
     }).filter((r) => r.items.length > 0)
   }, [videos])
 
+  const heroVideo = videos.length > 0 ? videos[0] : null
+  const heroMovie = heroVideo ? hanimeToMovie(heroVideo) : null
+
   return (
     <div className="hanime-container">
       {loading ? (
@@ -12623,15 +12684,67 @@ function LordPhubSection({ searchQuery = '', onPlay }: { searchQuery?: string; o
           <p>No videos found.</p>
         </div>
       ) : (
-        <div className="lord-rails phub-rails">
-          {railsData.map((rail) => (
-            <LordPhubRailRow
-              key={rail.title}
-              title={rail.title}
-              videos={rail.items}
-              onVideoClick={(video) => onPlay(hanimeToMovie(video))}
-            />
-          ))}
+        <>
+          {heroMovie && (
+            <div
+              className="lord-hero"
+              style={{
+                backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 55%, #000 100%), linear-gradient(90deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 60%), url(${heroMovie.hero || heroMovie.still || heroMovie.poster})`,
+                marginBottom: 28,
+              }}
+            >
+              <div className="lord-hero-content">
+                <span className="lord-hero-badge">
+                  <Play size={14} fill="currentColor" /> PHub 4K
+                </span>
+                <h1 className="lord-hero-title">{heroMovie.title}</h1>
+                <p className="lord-hero-meta">
+                  {heroMovie.genres[0] || 'PHub'} · {heroMovie.runtime || '4K Ultra HD'}
+                </p>
+                <p className="lord-hero-synopsis">{heroMovie.synopsis}</p>
+                <div className="lord-hero-actions">
+                  <button className="lord-hero-play" type="button" onClick={() => onPlay(heroMovie)}>
+                    <Play fill="currentColor" strokeWidth={0} size={20} />
+                    <span>Play</span>
+                  </button>
+                  {onOpenDetail && (
+                    <button
+                      className="lord-hero-info"
+                      type="button"
+                      onClick={() => onOpenDetail(heroMovie)}
+                    >
+                      <Info size={20} />
+                      <span>More Info</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
+            <div style={{ marginBottom: 24 }}>
+              <ContinueWatchingRail
+                title="Continue Watching"
+                movies={continueMovies}
+                onOpenDetail={onPlay}
+                onMarkWatched={onMarkWatched}
+                onRemoveContinue={onRemoveContinue}
+                onRemoveWatchlist={onRemoveWatchlist}
+                isPhubSection={true}
+              />
+            </div>
+          )}
+
+          <div className="lord-rails phub-rails">
+            {railsData.map((rail) => (
+              <LordPhubRailRow
+                key={rail.title}
+                title={rail.title}
+                videos={rail.items}
+                onVideoClick={(video) => onPlay(hanimeToMovie(video))}
+              />
+            ))}
           <div className="lord-full-grid-section" style={{ marginTop: 36 }}>
             <h2 className="lord-rail-title" style={{ marginBottom: 18 }}>
               All Videos ({videos.length})
@@ -12662,6 +12775,7 @@ function LordPhubSection({ searchQuery = '', onPlay }: { searchQuery?: string; o
             </div>
           </div>
         </div>
+        </>
       )}
     </div>
   )
@@ -12913,18 +13027,50 @@ function LordJavSection({
     }
   }
 
+  const heroPost = posts.length > 0 ? posts[0] : null
+  const heroMovie = heroPost ? javToMovieHelper(heroPost) : null
+
   return (
     <div className="jav-container">
+      {!searchQuery.trim() && heroMovie && (
+        <div
+          className="lord-hero"
+          style={{
+            backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 55%, #000 100%), linear-gradient(90deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 60%), url(${heroMovie.hero || heroMovie.still || heroMovie.poster})`,
+            marginBottom: 28,
+          }}
+        >
+          <div className="lord-hero-content">
+            <span className="lord-hero-badge">
+              <Play size={14} fill="currentColor" /> JAV {heroPost?.is_hd ? 'HD' : 'Exclusive'}
+            </span>
+            <h1 className="lord-hero-title">{heroMovie.title}</h1>
+            <p className="lord-hero-meta">
+              {heroPost?.code ? `${heroPost.code} · ` : ''}{heroPost?.studio || 'JAV'} · {heroPost?.duration || 'Full Video'}
+            </p>
+            <p className="lord-hero-synopsis">{heroMovie.synopsis}</p>
+            <div className="lord-hero-actions">
+              <button className="lord-hero-play" type="button" onClick={() => onPlay(heroMovie)}>
+                <Play fill="currentColor" strokeWidth={0} size={20} />
+                <span>Play</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
-        <ContinueWatchingRail
-          title="Continue Watching JAV"
-          movies={continueMovies}
-          onOpenDetail={onPlay}
-          onMarkWatched={onMarkWatched}
-          onRemoveContinue={onRemoveContinue}
-          onRemoveWatchlist={onRemoveWatchlist}
-          isJavSection={true}
-        />
+        <div style={{ marginBottom: 24 }}>
+          <ContinueWatchingRail
+            title="Continue Watching JAV"
+            movies={continueMovies}
+            onOpenDetail={onPlay}
+            onMarkWatched={onMarkWatched}
+            onRemoveContinue={onRemoveContinue}
+            onRemoveWatchlist={onRemoveWatchlist}
+            isJavSection={true}
+          />
+        </div>
       )}
       {/* Category Pills & Order Controls */}
       <div className="jav-controls">
