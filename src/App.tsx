@@ -7143,24 +7143,40 @@ function WatchScreen({
 
               <button
                 type="button"
-                className="watch-mylist-btn"
+                className="watch-mylist-btn watch-icon-only-btn"
                 onClick={onSave}
                 title={isSaved ? 'Saved to My List' : 'Add to My List'}
+                aria-label={isSaved ? 'Saved to My List' : 'Add to My List'}
               >
                 {isSaved ? <Check /> : <Plus />}
-                <span>{isSaved ? 'Saved' : 'My List'}</span>
               </button>
 
               <button
                 type="button"
-                className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
+                className={`watch-mylist-btn watch-like-btn watch-icon-only-btn${isLiked ? ' is-liked' : ''}`}
                 onClick={onToggleLike}
                 aria-pressed={isLiked}
                 title={isLiked ? 'Liked' : 'Like'}
+                aria-label={isLiked ? 'Liked' : 'Like'}
               >
                 <Heart fill={isLiked ? 'currentColor' : 'none'} />
-                <span>{isLiked ? 'Liked' : 'Like'}</span>
               </button>
+
+              {!isPartyGuest && (
+                <label className="stream-sandbox-toggle inline-sandbox-toggle" title={streamSandboxEnabled ? 'Sandbox Active: Blocks popups' : 'Sandbox Off'}>
+                  <span>
+                    <strong>Sandbox</strong>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={streamSandboxEnabled}
+                    onChange={(event) => onStreamSandboxChange(event.target.checked)}
+                  />
+                  <span aria-hidden="true" className="toggle-track">
+                    <span />
+                  </span>
+                </label>
+              )}
 
               {activeParty && isPartyHost && (
                 <button
@@ -7200,25 +7216,6 @@ function WatchScreen({
         {/* RIGHT COLUMN: Sidebar */}
         <div className="anime-watch-right-col">
           {hasEpisodes ? renderEpisodePanel(true) : renderYouTubeRelatedSidebar()}
-
-          {!isPartyGuest && (
-            <label className="stream-sandbox-toggle">
-              <span>
-                <strong>Sandbox</strong>
-                <small>
-                  {streamSandboxEnabled ? 'Blocks popups and redirects' : 'Allows full player behavior'}
-                </small>
-              </span>
-              <input
-                type="checkbox"
-                checked={streamSandboxEnabled}
-                onChange={(event) => onStreamSandboxChange(event.target.checked)}
-              />
-              <span aria-hidden="true" className="toggle-track">
-                <span />
-              </span>
-            </label>
-          )}
         </div>
       </div>
     </section>
