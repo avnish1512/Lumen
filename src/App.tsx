@@ -269,11 +269,44 @@ const homeCacheKey = 'omdb.apple-tv-style.home-cache-v3'
 const currentUserKey = 'omdb.apple-tv-style.current-user'
 const profilesListKey = 'omdb.apple-tv-style.profiles-list'
 const selectedMovieKey = 'omdb.apple-tv-style.selected-movie'
+const activeScreenKey = 'omdb.apple-tv-style.active-screen'
 
 function readSelectedMovie(): Movie | null {
   try {
     const saved = window.sessionStorage.getItem(selectedMovieKey)
     return saved ? (JSON.parse(saved) as Movie) : null
+  } catch {
+    return null
+  }
+}
+
+function readActiveScreen(): Screen | null {
+  try {
+    const hash = window.location.hash.replace(/^#/, '')
+    const validScreens: Screen[] = [
+      'home',
+      'movies',
+      'tv',
+      'anime',
+      'detail',
+      'watch',
+      'search',
+      'library',
+      'login',
+      'profiles',
+      'drama',
+      'livetv',
+      'lord',
+      'manga',
+    ]
+    if (hash && validScreens.includes(hash as Screen)) {
+      return hash as Screen
+    }
+    const saved = window.sessionStorage.getItem(activeScreenKey)
+    if (saved && validScreens.includes(saved as Screen)) {
+      return saved as Screen
+    }
+    return null
   } catch {
     return null
   }
@@ -1582,7 +1615,16 @@ function App() {
     if (!savedUser) {
       return 'login'
     }
-    return 'profiles'
+    const restored = readActiveScreen()
+    if (restored && restored !== 'login' && restored !== 'profiles') {
+      if (restored === 'detail' || restored === 'watch') {
+        const movie = readSelectedMovie()
+        if (movie) return restored
+        return 'home'
+      }
+      return restored
+    }
+    return 'home'
   })
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(readCurrentUser)
   const [loginBackScreen, setLoginBackScreen] = useState<Screen>('home')
@@ -2067,6 +2109,13 @@ function App() {
 
   const setScreen = (nextScreen: Screen) => {
     setScreenState(nextScreen)
+    try {
+      if (nextScreen !== 'login' && nextScreen !== 'profiles') {
+        window.sessionStorage.setItem(activeScreenKey, nextScreen)
+      } else {
+        window.sessionStorage.removeItem(activeScreenKey)
+      }
+    } catch {}
     window.history.replaceState(
       null,
       '',
@@ -2090,11 +2139,15 @@ function App() {
 
   const switchToProfile = (profileName: string) => {
     const matchedProfile = profiles.find((p) => p.name === profileName)
-    setCurrentUser({
+    const user = {
       name: profileName,
       email: currentUser?.email ?? 'guest@apple-tv.com',
       avatarColor: matchedProfile?.avatarColor,
-    })
+    }
+    setCurrentUser(user)
+    try {
+      window.localStorage.setItem(currentUserKey, JSON.stringify(user))
+    } catch {}
   }
 
   const openManageProfiles = () => {
@@ -2128,7 +2181,12 @@ function App() {
 
   const signOut = () => {
     setCurrentUser(null)
-    try { window.sessionStorage.removeItem('lumen.splash-done') } catch { /* ignore */ }
+    try {
+      window.sessionStorage.removeItem('lumen.splash-done')
+      window.sessionStorage.removeItem(activeScreenKey)
+      window.sessionStorage.removeItem(selectedMovieKey)
+      window.localStorage.removeItem(currentUserKey)
+    } catch { /* ignore */ }
     setScreen('login')
   }
 
@@ -2445,6 +2503,19 @@ function App() {
       streamSandboxEnabled ? 'on' : 'off',
     )
   }, [streamSandboxEnabled])
+
+  // On initial mount / refresh: if opening directly into detail or watch screen, hydrate movie details and stream
+  useEffect(() => {
+    const movie = readSelectedMovie()
+    if (movie) {
+      if (screen === 'detail') {
+        void hydrateMovie(movie)
+      } else if (screen === 'watch') {
+        void hydrateMovie(movie).then(markContinueWatching)
+        void hydrateStreamingMovie(movie)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     let frameId = 0
@@ -3895,7 +3966,14 @@ function App() {
               avatarColor: matchedProfile?.avatarColor,
             }
             setCurrentUser(finalUser)
-            setScreen(loginBackScreen)
+            try {
+              window.localStorage.setItem(currentUserKey, JSON.stringify(finalUser))
+            } catch {}
+            const targetScreen =
+              loginBackScreen && loginBackScreen !== 'profiles' && loginBackScreen !== 'login'
+                ? loginBackScreen
+                : 'home'
+            setScreen(targetScreen)
             setTempUser(null)
           }}
           onAddProfile={handleAddProfile}
@@ -11827,20 +11905,29 @@ function LordScreen({
     setInternalTab(tab)
     onTabChange?.(tab)
   }
-  const [query, setQuery] = useState('')
+  const [tabQueries, setTabQueries] = useState({
+    collection: '',
+    phub: '',
+    jav: '',
+  })
   const [searchFocused, setSearchFocused] = useState(false)
 
+  const currentQuery = tabQueries[activeLordTab]
+  const setQuery = (val: string) => {
+    setTabQueries((prev) => ({ ...prev, [activeLordTab]: val }))
+  }
+
   const matches = useMemo(() => {
-    const trimmed = query.trim().toLowerCase()
+    const trimmed = tabQueries.collection.trim().toLowerCase()
     if (!trimmed) {
       return []
     }
     return rotatedMovies
       .filter((movie) => movie.title.toLowerCase().includes(trimmed))
       .slice(0, 8)
-  }, [query, rotatedMovies])
+  }, [tabQueries.collection, rotatedMovies])
 
-  const showDropdown = searchFocused && query.trim().length > 0
+  const showDropdown = searchFocused && tabQueries.collection.trim().length > 0
 
   const pickMatch = (movie: Movie) => {
     setQuery('')
@@ -11942,13 +12029,13 @@ function LordScreen({
                       ? 'Search JAV codes, titles…'
                       : 'Titles, genres…'
                 }
-                value={query}
+                value={currentQuery}
                 onChange={(event) => setQuery(event.target.value)}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
                 aria-label="Search titles"
               />
-              {query && (
+              {currentQuery && (
                 <button
                   type="button"
                   className="lord-search-clear"
@@ -11999,7 +12086,7 @@ function LordScreen({
 
       {activeLordTab === 'jav' ? (
         <LordJavSection
-          searchQuery={query}
+          searchQuery={tabQueries.jav}
           continueMovies={continueMovies}
           onPlay={onPlay}
           onMarkWatched={onMarkWatched}
@@ -12008,7 +12095,7 @@ function LordScreen({
         />
       ) : activeLordTab === 'phub' ? (
         <LordPhubSection
-          searchQuery={query}
+          searchQuery={tabQueries.phub}
           continueMovies={continueMovies}
           onOpenDetail={onOpenDetail}
           onPlay={onPlay}
@@ -12028,12 +12115,21 @@ function LordScreen({
         </div>
       ) : (
         <>
-          <div
-            className="lord-hero"
-            style={{
-              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 55%, #000 100%), linear-gradient(90deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 60%), url(${hero.hero || hero.still || hero.poster})`,
-            }}
-          >
+          <div className="lord-hero">
+            <div className="lord-hero-backdrop-wrap">
+              <img
+                className="lord-hero-bg"
+                src={hero.hero || hero.still || hero.poster}
+                alt={hero.title}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement
+                  if (hero.poster && target.src !== hero.poster) {
+                    target.src = hero.poster
+                  }
+                }}
+              />
+              <div className="lord-hero-gradient" />
+            </div>
             <div className="lord-hero-content">
               <span className="lord-hero-badge">
                 <Crown size={14} /> Lord
@@ -12552,6 +12648,8 @@ function LordPhubSection({
 }) {
   const [videos, setVideos] = useState<HanimeVideo[]>(INITIAL_HANIME_VIDEOS)
   const [loading, setLoading] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState('All')
+  const [orderBy, setOrderBy] = useState<'views' | 'duration'>('views')
 
   const [page] = useState(1)
   const hanimeToMovie = (video: HanimeVideo): Movie => hanimeToMovieHelper(video)
@@ -12593,33 +12691,18 @@ function LordPhubSection({
     )
   }, [videos, searchQuery])
 
-  const railsData = useMemo(() => {
-    if (videos.length === 0) return []
-
-    const localRotate = (arr: HanimeVideo[], shift: number) => {
-      if (arr.length === 0) return []
-      const day = new Date().getDate()
-      const start = (day + shift) % arr.length
-      return [...arr.slice(start), ...arr.slice(0, start)]
+  const filteredVideos = useMemo(() => {
+    let list = videos
+    if (selectedCategory !== 'All') {
+      const catLower = selectedCategory.toLowerCase()
+      list = videos.filter(
+        (v) =>
+          v.category.toLowerCase().includes(catLower) ||
+          v.title.toLowerCase().includes(catLower),
+      )
     }
-
-    return PHUB_CATEGORIES.map((cat, idx) => {
-      let items: HanimeVideo[]
-      if (cat === 'All') {
-        items = localRotate(videos, 1)
-      } else {
-        const catLower = cat.toLowerCase()
-        const matched = videos.filter(
-          (v) =>
-            v.category.toLowerCase().includes(catLower) ||
-            v.title.toLowerCase().includes(catLower),
-        )
-        items = matched.length > 0 ? localRotate(matched, idx * 3) : localRotate(videos, idx * 5)
-      }
-
-      return { title: cat, items }
-    }).filter((r) => r.items.length > 0)
-  }, [videos])
+    return list
+  }, [videos, selectedCategory])
 
   const heroVideo = videos.length > 0 ? videos[0] : null
   const heroMovie = heroVideo ? hanimeToMovie(heroVideo) : null
@@ -12678,21 +12761,29 @@ function LordPhubSection({
             </div>
           </div>
         )
-      ) : railsData.length === 0 ? (
+      ) : filteredVideos.length === 0 ? (
         <div className="phub-empty">
           <Search size={42} />
-          <p>No videos found.</p>
+          <p>No videos found in this category.</p>
         </div>
       ) : (
         <>
           {heroMovie && (
-            <div
-              className="lord-hero"
-              style={{
-                backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 55%, #000 100%), linear-gradient(90deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 60%), url(${heroMovie.hero || heroMovie.still || heroMovie.poster})`,
-                marginBottom: 28,
-              }}
-            >
+            <div className="lord-hero" style={{ marginBottom: 28 }}>
+              <div className="lord-hero-backdrop-wrap">
+                <img
+                  className="lord-hero-bg"
+                  src={heroMovie.hero || heroMovie.still || heroMovie.poster}
+                  alt={heroMovie.title}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement
+                    if (heroMovie.poster && target.src !== heroMovie.poster) {
+                      target.src = heroMovie.poster
+                    }
+                  }}
+                />
+                <div className="lord-hero-gradient" />
+              </div>
               <div className="lord-hero-content">
                 <span className="lord-hero-badge">
                   <Play size={14} fill="currentColor" /> PHub 4K
@@ -12736,131 +12827,83 @@ function LordPhubSection({
             </div>
           )}
 
-          <div className="lord-rails phub-rails">
-            {railsData.map((rail) => (
-              <LordPhubRailRow
-                key={rail.title}
-                title={rail.title}
-                videos={rail.items}
-                onVideoClick={(video) => onPlay(hanimeToMovie(video))}
-              />
-            ))}
-          <div className="lord-full-grid-section" style={{ marginTop: 36 }}>
-            <h2 className="lord-rail-title" style={{ marginBottom: 18 }}>
-              All Videos ({videos.length})
-            </h2>
-            <div className="hanime-grid">
-              {videos.map((video, idx) => (
-                <div
-                  key={`all-${video.id}-${idx}`}
-                  className="hanime-card"
-                  onClick={() => onPlay(hanimeToMovie(video))}
+          {/* Category Pills & Controls Bar like JAV */}
+          <div className="jav-controls">
+            <div className="jav-pills" role="tablist" aria-label="PHub categories">
+              {PHUB_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  className={`jav-pill${selectedCategory === cat ? ' is-active' : ''}`}
+                  onClick={() => setSelectedCategory(cat)}
                 >
-                  <div className="hanime-poster-area">
-                    <img
-                      src={video.thumb}
-                      referrerPolicy="no-referrer"
-                      alt={video.title}
-                      loading="lazy"
-                    />
-                    <span className="hanime-badge-4k">4K</span>
-                    <span className="hanime-badge-duration">{video.duration}</span>
-                  </div>
-                  <div className="hanime-card-body">
-                    <h3 className="hanime-card-title">{video.title}</h3>
-                    <span className="hanime-card-tag">{video.category}</span>
-                  </div>
-                </div>
+                  {cat}
+                </button>
               ))}
             </div>
+
+            <div className="jav-sort-group">
+              <span className="jav-sort-label">Sort:</span>
+              <button
+                type="button"
+                className={`jav-sort-btn${orderBy === 'views' ? ' is-active' : ''}`}
+                onClick={() => setOrderBy('views')}
+              >
+                Popular
+              </button>
+              <button
+                type="button"
+                className={`jav-sort-btn${orderBy === 'duration' ? ' is-active' : ''}`}
+                onClick={() => setOrderBy('duration')}
+              >
+                Top 4K
+              </button>
+            </div>
           </div>
-        </div>
-        </>
-      )}
-    </div>
-  )
-}
 
-function LordPhubRailRow({
-  title,
-  videos,
-  onVideoClick,
-}: {
-  title: string
-  videos: HanimeVideo[]
-  onVideoClick: (video: HanimeVideo) => void
-}) {
-  const rowRef = useRef<HTMLDivElement | null>(null)
+          <div className="jav-meta-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <h2 className="lord-rail-title" style={{ margin: 0 }}>
+              {selectedCategory === 'All' ? 'All Videos' : selectedCategory}
+              <span className="jav-meta-count">({filteredVideos.length} videos)</span>
+            </h2>
+          </div>
 
-  const scrollRow = (direction: 1 | -1) => {
-    const row = rowRef.current
-    if (row) {
-      row.scrollBy({
-        left: direction * (row.clientWidth * 0.75),
-        behavior: 'smooth',
-      })
-    }
-  }
-
-  if (!videos || videos.length === 0) return null
-
-  return (
-    <div className="lord-rail">
-      <h2 className="lord-rail-title">{title}</h2>
-      <div className="lord-rail-viewport">
-        <button
-          className="rail-arrow rail-arrow-prev lord-rail-arrow"
-          type="button"
-          aria-label={`Scroll ${title} left`}
-          onClick={() => scrollRow(-1)}
-        >
-          <ChevronLeft />
-        </button>
-
-        <div ref={rowRef} className="lord-rail-row">
-          {videos.map((video, idx) => (
-            <div
-              key={`${video.id}-${idx}`}
-              className="hanime-card"
-              onClick={() => onVideoClick(video)}
-            >
-              <div className="hanime-poster-area">
-                <img
-                  src={video.thumb}
-                  referrerPolicy="no-referrer"
-                  alt={video.title}
-                  loading="lazy"
-                  onError={(event) => {
-                    const target = event.target as HTMLImageElement
-                    target.onerror = null
-                    target.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
-                  }}
-                />
-                <span className="hanime-badge-4k">4K</span>
-                <span className="hanime-badge-duration">{video.duration}</span>
-                <div className="hanime-play-overlay">
-                  <div className="hanime-play-btn">
-                    <Play fill="#fff" size={22} />
+          <div className="hanime-grid">
+            {filteredVideos.map((video, idx) => (
+              <div
+                key={`phub-${video.id}-${idx}`}
+                className="hanime-card"
+                onClick={() => onPlay(hanimeToMovie(video))}
+              >
+                <div className="hanime-poster-area">
+                  <img
+                    src={video.thumb}
+                    referrerPolicy="no-referrer"
+                    alt={video.title}
+                    loading="lazy"
+                    onError={(event) => {
+                      const target = event.target as HTMLImageElement
+                      target.onerror = null
+                      target.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
+                    }}
+                  />
+                  <span className="hanime-badge-4k">4K</span>
+                  <span className="hanime-badge-duration">{video.duration}</span>
+                  <div className="hanime-play-overlay">
+                    <div className="hanime-play-btn">
+                      <Play fill="#fff" size={22} />
+                    </div>
                   </div>
                 </div>
+                <div className="hanime-card-body">
+                  <h3 className="hanime-card-title">{video.title}</h3>
+                  <span className="hanime-card-tag">{video.category}</span>
+                </div>
               </div>
-              <div className="hanime-card-body">
-                <h3 className="hanime-card-title">{video.title}</h3>
-                <span className="hanime-card-tag">{video.category}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <button
-          className="rail-arrow rail-arrow-next lord-rail-arrow"
-          type="button"
-          aria-label={`Scroll ${title} right`}
-          onClick={() => scrollRow(1)}
-        >
-          <ChevronRight />
-        </button>
-      </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -13033,13 +13076,21 @@ function LordJavSection({
   return (
     <div className="jav-container">
       {!searchQuery.trim() && heroMovie && (
-        <div
-          className="lord-hero"
-          style={{
-            backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.55) 55%, #000 100%), linear-gradient(90deg, rgba(0,0,0,.75) 0%, rgba(0,0,0,0) 60%), url(${heroMovie.hero || heroMovie.still || heroMovie.poster})`,
-            marginBottom: 28,
-          }}
-        >
+        <div className="lord-hero" style={{ marginBottom: 28 }}>
+          <div className="lord-hero-backdrop-wrap">
+            <img
+              className="lord-hero-bg"
+              src={heroMovie.hero || heroMovie.still || heroMovie.poster}
+              alt={heroMovie.title}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement
+                if (heroMovie.poster && target.src !== heroMovie.poster) {
+                  target.src = heroMovie.poster
+                }
+              }}
+            />
+            <div className="lord-hero-gradient" />
+          </div>
           <div className="lord-hero-content">
             <span className="lord-hero-badge">
               <Play size={14} fill="currentColor" /> JAV {heroPost?.is_hd ? 'HD' : 'Exclusive'}
