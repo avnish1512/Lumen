@@ -860,6 +860,39 @@ function episodeTitle(_season: number, episode: number) {
   return `Episode ${episode}`
 }
 
+function formatAnimeEpisodeTitle(number: number, rawTitle?: string): string {
+  if (!rawTitle) return `Episode ${number}`
+  const trimmed = rawTitle.trim()
+  if (!trimmed) return `Episode ${number}`
+
+  // If rawTitle already starts with "Episode X" or "Episode 0X" or "Ep X" or "Ep. X"
+  const epRegex = new RegExp(`^ep(isode)?\\.?\\s*0*${number}\\b`, 'i')
+  if (epRegex.test(trimmed)) {
+    return trimmed
+  }
+
+  // If rawTitle starts with number like "1 - Falling" or "01 - Falling" or "1: Falling"
+  const numRegex = new RegExp(`^0*${number}\\s*[:\\-.]\\s*`, 'i')
+  if (numRegex.test(trimmed)) {
+    const cleaned = trimmed.replace(numRegex, '').trim()
+    return cleaned ? `Episode ${number} - ${cleaned}` : `Episode ${number}`
+  }
+
+  return `Episode ${number} - ${trimmed}`
+}
+
+function formatDurationPill(rawRuntime?: string): string {
+  if (!rawRuntime) return '24:00'
+  const match = rawRuntime.match(/(\d+)/)
+  if (match) {
+    const mins = parseInt(match[1], 10)
+    if (!isNaN(mins) && mins > 0) {
+      return `${mins}:00`
+    }
+  }
+  return '24:00'
+}
+
 function episodeSynopsis(movie: Movie, season: number, episode: number) {
   const cleanSynopsis = movie.synopsis.replace(/\s+/g, ' ').trim()
 
@@ -6608,10 +6641,11 @@ function WatchScreen({
 
             if (isAnimeLayout) {
               const epTitle = epData?.title || ''
-              const displayTitle = epTitle ? `Episode ${number} - ${epTitle}` : `Episode ${number}`
+              const formattedTitle = formatAnimeEpisodeTitle(number, epTitle)
               const langText = language === 'dub' ? 'English Dub' : 'English Sub'
               const thumbUrl = epData?.thumbnail || movie.still || movie.poster
-              const runtimeStr = episodeRuntime(movie, season, number) || '24m'
+              const rawRuntime = episodeRuntime(movie, season, number)
+              const durationPillText = formatDurationPill(rawRuntime)
               const providerName = currentProvider?.name || 'MegaPlay'
 
               return (
@@ -6625,7 +6659,7 @@ function WatchScreen({
                     {thumbUrl ? (
                       <img
                         src={thumbUrl}
-                        alt={displayTitle}
+                        alt={formattedTitle}
                         className="anime-yt-thumb-img"
                         loading="lazy"
                         onError={(e) => {
@@ -6642,34 +6676,27 @@ function WatchScreen({
                         <span>EP {number}</span>
                       </div>
                     )}
-                    <span className="anime-yt-thumb-duration">{runtimeStr}</span>
-                    {isActive && <div className="anime-yt-thumb-active-overlay" />}
+                    <span className="anime-yt-thumb-duration">{durationPillText}</span>
                   </div>
 
                   <div className="anime-yt-info">
-                    <div className="anime-yt-title" title={displayTitle}>
-                      {displayTitle}
+                    <div className="anime-yt-title" title={formattedTitle}>
+                      {formattedTitle}
                     </div>
 
                     <div className="anime-yt-channel">
                       <span>{providerName}</span>
-                      <svg className="anime-yt-verified-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                      <svg className="anime-yt-verified-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                       </svg>
                     </div>
 
                     <div className="anime-yt-meta">
-                      <span>Episode {number}</span>
+                      <span className="anime-yt-play-icon">▷</span>
+                      <span>{durationPillText}</span>
                       <span className="anime-yt-dot">•</span>
                       <span>{langText}</span>
                     </div>
-
-                    {isActive ? (
-                      <div className="anime-yt-badge active">
-                        <span className="anime-yt-badge-dot" />
-                        <span>NOW PLAYING</span>
-                      </div>
-                    ) : null}
                   </div>
                 </button>
               )
