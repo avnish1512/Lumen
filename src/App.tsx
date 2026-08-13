@@ -1,7 +1,6 @@
 import {
   type CSSProperties,
   type FormEvent,
-  type MouseEvent,
   type PointerEvent,
   type RefObject,
   useCallback,
@@ -6535,14 +6534,47 @@ function WatchScreen({
   }, [isJavVideo, movie.id, movie.genres])
 
   const relatedList = useMemo(() => {
+    const isAdultMovie = (m: Movie) =>
+      Boolean(
+        m.isJav ||
+          m.isHentaiOcean ||
+          m.id.startsWith('jav-') ||
+          m.id.startsWith('phub-') ||
+          m.label === 'JAV' ||
+          m.label === 'PHub' ||
+          m.genres.some((g) => g.toLowerCase() === 'hentai'),
+      )
+
     if (isPhubVideo) {
-      return similarPhubVideos.map(hanimeToMovieHelper)
+      let pool = similarPhubVideos.map(hanimeToMovieHelper)
+      if (pool.length < 15) {
+        const fallbackItems = INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper).filter(
+          (m) => m.id !== movie.id && !pool.some((p) => String(p.id) === String(m.id)),
+        )
+        pool = [...pool, ...fallbackItems]
+      }
+      return pool.slice(0, 18)
     }
+
     if (isJavVideo && javRelated.length > 0) {
-      return javRelated
+      return javRelated.slice(0, 18)
     }
-    return (relatedMovies || []).filter((m) => m.id !== movie.id).slice(0, 12)
-  }, [isPhubVideo, similarPhubVideos, isJavVideo, javRelated, movie.id, relatedMovies])
+
+    // Normal Apple UI / Netflix UI movie, TV show, or Anime:
+    // Only return matching relatedMovies (strictly non-adult, genre-relevant content)
+    const cleanRelated = (relatedMovies || []).filter(
+      (m) => m.id !== movie.id && !isAdultMovie(m),
+    )
+
+    const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+    const sorted = [...cleanRelated].sort((a, b) => {
+      const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+      const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+      return bMatches - aMatches
+    })
+
+    return sorted.slice(0, 18)
+  }, [isPhubVideo, similarPhubVideos, isJavVideo, javRelated, movie.id, movie.genres, relatedMovies])
 
   const renderYouTubeRelatedSidebar = () => {
     if (relatedList.length === 0) return null
@@ -7435,7 +7467,14 @@ function WatchScreen({
 
         {/* RIGHT COLUMN: Sidebar */}
         <div className="anime-watch-right-col">
-          {hasEpisodes ? renderEpisodePanel(true) : renderYouTubeRelatedSidebar()}
+          {hasEpisodes ? (
+            <>
+              {renderEpisodePanel(true)}
+              {renderYouTubeRelatedSidebar()}
+            </>
+          ) : (
+            renderYouTubeRelatedSidebar()
+          )}
         </div>
       </div>
     </section>
@@ -10156,6 +10195,7 @@ type ContinueWatchingRailProps = MovieRailProps & {
   onMarkWatched: (movie: Movie) => void
   onRemoveContinue: (movie: Movie) => void
   onRemoveWatchlist: (movie: Movie) => void
+  isJavSection?: boolean
 }
 
 type ContinueMenuState = {
@@ -10172,9 +10212,21 @@ function ContinueWatchingRail({
   onMarkWatched,
   onRemoveContinue,
   onRemoveWatchlist,
+  isJavSection = false,
 }: ContinueWatchingRailProps) {
   const rowRef = useRef<HTMLDivElement | null>(null)
   const [menuState, setMenuState] = useState<ContinueMenuState | null>(null)
+
+  const displayMovies = useMemo(() => {
+    const isJav = (m: Movie) =>
+      Boolean(
+        m.isJav ||
+          m.id.startsWith('jav-') ||
+          m.label === 'JAV' ||
+          m.hentaiSlug?.startsWith('jav-'),
+      )
+    return isJavSection ? movies.filter(isJav) : movies.filter((m) => !isJav(m))
+  }, [movies, isJavSection])
 
   useEffect(() => {
     if (!menuState) {
@@ -10198,7 +10250,7 @@ function ContinueWatchingRail({
     }
   }, [menuState])
 
-  if (movies.length === 0) {
+  if (displayMovies.length === 0) {
     return null
   }
 
@@ -10218,20 +10270,14 @@ function ContinueWatchingRail({
 
   const closeMenu = () => setMenuState(null)
 
-  const openMenu = (event: MouseEvent<HTMLButtonElement>, movie: Movie) => {
-    event.preventDefault()
+  const openMenu = (event: React.MouseEvent<HTMLButtonElement>, movie: Movie) => {
     event.stopPropagation()
-
     const rect = event.currentTarget.getBoundingClientRect()
-    const width = Math.min(270, window.innerWidth - 90)
-    const actionCount = isTvShow(movie) ? 8 : 6
-    const estimatedHeight = 18 + actionCount * 45
-    const left = Math.min(
-      Math.max(24, rect.right - width + 16),
-      window.innerWidth - width - 24,
-    )
+    const width = 220
+    const left = Math.max(16, Math.min(rect.right - width, window.innerWidth - width - 16))
+    const estimatedHeight = 240
     const top = Math.min(
-      Math.max(92, rect.bottom - 16),
+      rect.bottom + 8,
       Math.max(92, window.innerHeight - estimatedHeight - 96),
     )
 
@@ -10244,7 +10290,7 @@ function ContinueWatchingRail({
   }
 
   const runMenuAction = (action: () => void | Promise<void>) => {
-    closeMenu()
+    setMenuState(null)
     void action()
   }
 
@@ -10315,7 +10361,7 @@ function ContinueWatchingRail({
         </button>
 
         <div ref={rowRef} className="continue-row">
-          {movies.map((movie) => (
+          {displayMovies.map((movie) => (
             <article className="continue-card-shell" key={movie.id}>
               <button
                 className="continue-card"
@@ -11918,7 +11964,14 @@ function LordScreen({
       </header>
 
       {activeLordTab === 'jav' ? (
-        <LordJavSection searchQuery={query} onOpenDetail={onOpenDetail} onPlay={onPlay} />
+        <LordJavSection
+          searchQuery={query}
+          continueMovies={continueMovies}
+          onPlay={onPlay}
+          onMarkWatched={onMarkWatched}
+          onRemoveContinue={onRemoveContinue}
+          onRemoveWatchlist={onRemoveWatchlist}
+        />
       ) : activeLordTab === 'phub' ? (
         <LordPhubSection searchQuery={query} onOpenDetail={onOpenDetail} onPlay={onPlay} />
       ) : loading ? (
@@ -12775,12 +12828,18 @@ const JAV_CATEGORIES = [
 
 function LordJavSection({
   searchQuery = '',
-  onOpenDetail,
+  continueMovies = [],
   onPlay,
+  onMarkWatched,
+  onRemoveContinue,
+  onRemoveWatchlist,
 }: {
   searchQuery?: string
-  onOpenDetail?: (movie: Movie) => void
+  continueMovies?: Movie[]
   onPlay: (movie: Movie) => void
+  onMarkWatched?: (movie: Movie) => void
+  onRemoveContinue?: (movie: Movie) => void
+  onRemoveWatchlist?: (movie: Movie) => void
 }) {
   const [posts, setPosts] = useState<JavPost[]>([])
   const [loading, setLoading] = useState(true)
@@ -12856,6 +12915,17 @@ function LordJavSection({
 
   return (
     <div className="jav-container">
+      {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
+        <ContinueWatchingRail
+          title="Continue Watching JAV"
+          movies={continueMovies}
+          onOpenDetail={onPlay}
+          onMarkWatched={onMarkWatched}
+          onRemoveContinue={onRemoveContinue}
+          onRemoveWatchlist={onRemoveWatchlist}
+          isJavSection={true}
+        />
+      )}
       {/* Category Pills & Order Controls */}
       <div className="jav-controls">
         <div className="jav-pills" role="tablist" aria-label="JAV categories">
@@ -12961,20 +13031,6 @@ function LordJavSection({
                       >
                         <Play fill="#fff" size={24} />
                       </button>
-
-                      {onOpenDetail && (
-                        <button
-                          type="button"
-                          className="jav-info-btn"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onOpenDetail(movie)
-                          }}
-                          title="More Info"
-                        >
-                          <Info size={20} />
-                        </button>
-                      )}
                     </div>
                   </div>
 

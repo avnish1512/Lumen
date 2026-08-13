@@ -14574,11 +14574,12 @@ body:has(.login-screen) {
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
   box-sizing: border-box;
-  flex: 1;
-  min-height: 850px;
-  height: 100%;
-  max-height: clamp(850px, 92vh, 1200px);
+  flex: none;
+  min-height: 0;
+  height: auto;
+  max-height: 480px;
   overflow: hidden;
+  margin-bottom: 24px;
 }
 
 .anime-ep-header-row {
