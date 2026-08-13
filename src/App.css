@@ -14349,12 +14349,12 @@ body:has(.login-screen) {
 
 .watch-episode-item {
   width: 100%;
-  padding: 14px 18px;
+  padding: 6px 10px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
@@ -14456,6 +14456,7 @@ body:has(.login-screen) {
 }
 
 .anime-server-subdub-row .watch-lang-toggle {
+  margin-left: auto;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
@@ -14603,26 +14604,27 @@ body:has(.login-screen) {
   max-height: none;
   overflow-y: auto;
   padding-right: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  position: relative !important;
 }
 
 .anime-episode-panel .watch-episode-item {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 54px;
-  padding: 14px 18px;
-  font-size: 16px;
-  border-radius: 12px;
+  min-height: 42px;
+  padding: 6px 10px;
+  font-size: 15px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .anime-episode-panel .watch-episode-item.has-thumb {
-  padding: 8px 12px;
-  min-height: 68px;
+  padding: 4px 8px;
+  min-height: 48px;
 }
 
 .anime-ep-thumb {
@@ -14672,18 +14674,19 @@ body:has(.login-screen) {
 
 /* Anime Episode Card — YouTube Sidebar Reference Layout */
 .anime-episode-panel .watch-episode-item.anime-yt-ep-card {
-  position: relative;
-  width: 100%;
-  min-height: 124px;
-  padding: 6px 8px;
+  position: relative !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  padding: 4px 6px !important;
   border-radius: 12px;
   border: 1px solid transparent !important;
   background: transparent !important;
   color: #fff;
-  display: flex;
-  flex-direction: row;
+  display: flex !important;
+  flex-direction: row !important;
   align-items: center !important;
-  gap: 14px;
+  flex-shrink: 0 !important;
+  gap: 14px !important;
   text-align: left;
   overflow: visible;
   box-sizing: border-box;
@@ -18664,53 +18667,58 @@ body:has(.login-screen) {
 
 .inline-sandbox-toggle {
   margin-left: auto !important;
-  padding: 2px 8px !important;
-  height: 26px !important;
-  border-radius: 13px !important;
+  padding: 6px 12px !important;
+  height: 32px !important;
+  width: auto !important;
+  max-width: max-content !important;
+  border-radius: 16px !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  gap: 8px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   flex-shrink: 0 !important;
 }
 
 .inline-sandbox-toggle span strong {
-  font-size: 10px !important;
+  font-size: 12px !important;
   font-weight: 700 !important;
   letter-spacing: 0.2px !important;
-  color: #94a3b8 !important;
+  color: #e2e8f0 !important;
 }
 
 .inline-sandbox-toggle .toggle-track {
-  width: 24px !important;
-  height: 14px !important;
-  border-radius: 7px !important;
+  width: 28px !important;
+  height: 16px !important;
+  border-radius: 8px !important;
   padding: 1px !important;
 }
 
 .inline-sandbox-toggle .toggle-track span {
-  width: 12px !important;
-  height: 12px !important;
+  width: 14px !important;
+  height: 14px !important;
 }
 
 .inline-sandbox-toggle input:checked + .toggle-track span {
-  transform: translateX(10px) !important;
+  transform: translateX(12px) !important;
 }
 
 /* Episode Container Cards matching Screenshot */
 .anime-yt-ep-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 14px !important;
   background: transparent;
   border: 1px solid transparent;
-  padding: 6px 8px;
+  padding: 4px 6px !important;
   border-radius: 10px;
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease, border-color 0.15s ease;
-  width: 100%;
+  width: 100% !important;
+  flex-shrink: 0 !important;
 }
 
 .anime-yt-ep-card:hover {
@@ -18724,14 +18732,14 @@ body:has(.login-screen) {
 }
 
 .anime-yt-thumb-container {
-  position: relative;
-  width: 140px !important;
-  min-width: 140px !important;
+  position: relative !important;
+  width: 220px !important;
+  min-width: 220px !important;
   aspect-ratio: 16 / 9 !important;
-  border-radius: 8px !important;
+  border-radius: 12px !important;
   overflow: hidden;
   background: #090d16;
-  flex-shrink: 0;
+  flex-shrink: 0 !important;
 }
 
 .anime-yt-thumb-img {

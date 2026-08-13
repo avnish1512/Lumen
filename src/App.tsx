@@ -7127,6 +7127,17 @@ function WatchScreen({
               </div>
             )}
 
+            {(isAnimeMovie || isHentai) && (
+              <div className="watch-lang-toggle" role="group" aria-label="Audio language">
+                <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
+                  SUB
+                </button>
+                <button type="button" className={language === 'dub' ? 'active' : ''} onClick={() => setLanguage('dub')}>
+                  DUB
+                </button>
+              </div>
+            )}
+
             <div className="anime-watch-actions">
               {!isPartyGuest && (
                 <button
@@ -7189,17 +7200,6 @@ function WatchScreen({
                 </button>
               )}
             </div>
-
-            {(isAnimeMovie || isHentai) && (
-              <div className="watch-lang-toggle" role="group" aria-label="Audio language">
-                <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
-                  SUB
-                </button>
-                <button type="button" className={language === 'dub' ? 'active' : ''} onClick={() => setLanguage('dub')}>
-                  DUB
-                </button>
-              </div>
-            )}
           </div>
 
           <div className="anime-details-block">
