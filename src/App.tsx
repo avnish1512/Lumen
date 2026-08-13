@@ -6536,6 +6536,23 @@ function WatchScreen({
     }
   }, [movie.tmdbId, watchIsTvId])
 
+  const [watchTmdbEpisodes, setWatchTmdbEpisodes] = useState<SeasonEpisode[]>([])
+
+  useEffect(() => {
+    let active = true
+    setWatchTmdbEpisodes([])
+    if (watchIsTvId && movie.tmdbId) {
+      void fetchSeasonEpisodes(movie.tmdbId, season).then((episodes) => {
+        if (active) {
+          setWatchTmdbEpisodes(episodes)
+        }
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [movie.tmdbId, watchIsTvId, season])
+
   const activeWatchSeason =
     watchSeasons.find((entry) => entry.season === season) ?? watchSeasons[0]
   const episodeNumbers = activeWatchSeason
@@ -6620,10 +6637,10 @@ function WatchScreen({
     window.open(streamUrl, '_blank', 'noopener,noreferrer')
   }
 
-  const renderEpisodePanel = (isAnimeLayout = false) => {
+  const renderEpisodePanel = (_isAnimeLayout = true) => {
     if (!isSeries) return null
     return (
-      <aside className={`watch-episode-panel${isAnimeLayout ? ' anime-episode-panel' : ''}`} aria-label="Episodes">
+      <aside className="watch-episode-panel anime-episode-panel" aria-label="Episodes">
         <div className="anime-ep-header-row">
           <SeasonDropdown
             seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
@@ -6634,94 +6651,93 @@ function WatchScreen({
             }}
             labels={seasonLabels}
           />
-          {isAnimeLayout && (
-            <div className="anime-ep-search-wrapper">
-              <Search size={14} className="anime-ep-search-icon" />
-              <input
-                type="text"
-                placeholder="Search ep..."
-                className="anime-ep-search-input"
-                value={epSearchQuery}
-                onChange={(e) => setEpSearchQuery(e.target.value)}
-              />
-            </div>
-          )}
+          <div className="anime-ep-search-wrapper">
+            <Search size={14} className="anime-ep-search-icon" />
+            <input
+              type="text"
+              placeholder="Search ep..."
+              className="anime-ep-search-input"
+              value={epSearchQuery}
+              onChange={(e) => setEpSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="watch-episode-list">
           {filteredEpisodeNumbers.map((number) => {
-            const epData = movie.animeEpisodes?.[number - 1]
+            const animeEp = movie.animeEpisodes?.[number - 1]
+            const tmdbEp = watchTmdbEpisodes.find((item) => item.number === number)
             const isActive = number === episode
 
-            if (isAnimeLayout) {
-              const epTitle = epData?.title || ''
-              const formattedTitle = formatAnimeEpisodeTitle(number, epTitle)
-              const thumbUrl = epData?.thumbnail || movie.still || movie.poster
-              const epDurationStr = getAnimeEpisodeDuration(movie, number, (epData as any)?.duration)
-              const providerName = currentProvider?.name || 'MegaPlay'
+            const rawEpTitle = movie.isAnime
+              ? (animeEp?.title || '')
+              : (tmdbEp?.name || animeEp?.title || '')
+            const formattedTitle = formatAnimeEpisodeTitle(number, rawEpTitle)
 
-              return (
-                <button
-                  key={number}
-                  type="button"
-                  className={`watch-episode-item anime-yt-ep-card${isActive ? ' active' : ''}`}
-                  onClick={() => setEpisode(number)}
-                >
-                  <div className="anime-yt-thumb-container">
-                    {thumbUrl ? (
-                      <img
-                        src={thumbUrl}
-                        alt={formattedTitle}
-                        className="anime-yt-thumb-img"
-                        loading="lazy"
-                        onError={(e) => {
-                          const target = e.currentTarget
-                          if (movie.still && target.src !== movie.still) {
-                            target.src = movie.still
-                          } else if (movie.poster && target.src !== movie.poster) {
-                            target.src = movie.poster
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div className="anime-yt-thumb-fallback">
-                        <span>EP {number}</span>
-                      </div>
-                    )}
-                    <span className="anime-yt-thumb-duration">{epDurationStr}</span>
-                  </div>
+            const thumbUrl = movie.isAnime
+              ? (animeEp?.thumbnail || movie.still || movie.poster)
+              : (tmdbEp?.still || animeEp?.thumbnail || movie.still || movie.poster)
 
-                  <div className="anime-yt-info">
-                    <div className="anime-yt-title" title={formattedTitle}>
-                      {formattedTitle}
-                    </div>
-
-                    <div className="anime-yt-channel">
-                      <span>{providerName}</span>
-                      <svg className="anime-yt-verified-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                      </svg>
-                    </div>
-
-                    <div className="anime-yt-meta">
-                      <span className="anime-yt-play-icon">▷</span>
-                      <span>{epDurationStr}</span>
-                      <span className="anime-yt-dot">•</span>
-                      <span>English Sub</span>
-                    </div>
-                  </div>
-                </button>
-              )
-            }
+            const epDurationStr = getAnimeEpisodeDuration(
+              movie,
+              number,
+              movie.isAnime
+                ? (animeEp as any)?.duration
+                : (tmdbEp?.runtime ? `${tmdbEp.runtime}m` : undefined)
+            )
+            const providerName = currentProvider?.name || 'MegaPlay'
+            const audioText = movie.isAnime ? 'English Sub' : 'English'
 
             return (
               <button
                 key={number}
                 type="button"
-                className={`watch-episode-item${isActive ? ' active' : ''}`}
+                className={`watch-episode-item anime-yt-ep-card${isActive ? ' active' : ''}`}
                 onClick={() => setEpisode(number)}
               >
-                Episode {number}
+                <div className="anime-yt-thumb-container">
+                  {thumbUrl ? (
+                    <img
+                      src={thumbUrl}
+                      alt={formattedTitle}
+                      className="anime-yt-thumb-img"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.currentTarget
+                        if (movie.still && target.src !== movie.still) {
+                          target.src = movie.still
+                        } else if (movie.poster && target.src !== movie.poster) {
+                          target.src = movie.poster
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="anime-yt-thumb-fallback">
+                      <span>EP {number}</span>
+                    </div>
+                  )}
+                  <span className="anime-yt-thumb-duration">{epDurationStr}</span>
+                </div>
+
+                <div className="anime-yt-info">
+                  <div className="anime-yt-title" title={formattedTitle}>
+                    {formattedTitle}
+                  </div>
+
+                  <div className="anime-yt-channel">
+                    <span>{providerName}</span>
+                    <svg className="anime-yt-verified-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                  </div>
+
+                  <div className="anime-yt-meta">
+                    <span className="anime-yt-play-icon">▷</span>
+                    <span>{epDurationStr}</span>
+                    <span className="anime-yt-dot">•</span>
+                    <span>{audioText}</span>
+                  </div>
+                </div>
               </button>
             )
           })}
