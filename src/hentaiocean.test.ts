@@ -314,6 +314,7 @@ describe('Hentai Ocean integration', () => {
   it('builds stream URL for apiJAV titles with embed_url cleanly', () => {
     const javMovie: Movie = {
       id: 'jav-123298',
+      rank: 1,
       isJav: true,
       isHentaiOcean: true,
       embedUrl: 'https://server.apijav.com/?mvapm_embed=123298',

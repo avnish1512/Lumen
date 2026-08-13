@@ -7079,7 +7079,7 @@ function WatchScreen({
       {renderPlayerSection()}
 
       <div className="watch-topbar">
-        {!isPhubVideo && !isPartyGuest && (
+        {!isPartyGuest && (
           <button
             className="watch-play"
             type="button"
@@ -7116,11 +7116,11 @@ function WatchScreen({
         )}
 
         <div className="watch-title-block">
-          <h2 className={`watch-title-main${isPhubVideo ? ' phub-title-main' : ''}`}>{movie.title}</h2>
+          <h2 className="watch-title-main">{movie.title}</h2>
           <p className="watch-title-genre">{movie.genres[0] ?? 'Movie'}</p>
         </div>
 
-        {(isAnimeMovie || isHentai) && !isPhubVideo ? (
+        {(isAnimeMovie || isHentai) ? (
           <div className="watch-lang-toggle" role="group" aria-label="Audio language">
             <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
               SUB
@@ -7137,7 +7137,7 @@ function WatchScreen({
       <div className={`watch-lower${!isAnimeMovie && isSeries ? ' has-episodes' : ''}`}>
         <div className="watch-lower-left">
           <p className="watch-synopsis">
-            {!isPhubVideo && <strong>{movie.year}: </strong>}
+            {movie.year && <strong>{movie.year}: </strong>}
             {movie.synopsis}
           </p>
 
@@ -7150,34 +7150,30 @@ function WatchScreen({
               />
             </div>
           )}
-          {!isPhubVideo && <Metadata movie={movie} />}
+          <Metadata movie={movie} />
 
-          {!isPhubVideo && (
-            <button
-              type="button"
-              className="watch-mylist-btn"
-              onClick={onSave}
-              title={isSaved ? 'Saved to My List' : 'Add to My List'}
-            >
-              {isSaved ? <Check /> : <Plus />}
-              <span>{isSaved ? 'Saved' : 'My List'}</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="watch-mylist-btn"
+            onClick={onSave}
+            title={isSaved ? 'Saved to My List' : 'Add to My List'}
+          >
+            {isSaved ? <Check /> : <Plus />}
+            <span>{isSaved ? 'Saved' : 'My List'}</span>
+          </button>
 
-          {!isPhubVideo && (
-            <button
-              type="button"
-              className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
-              onClick={onToggleLike}
-              aria-pressed={isLiked}
-              title={isLiked ? 'Liked' : 'Like'}
-            >
-              <Heart fill={isLiked ? 'currentColor' : 'none'} />
-              <span>{isLiked ? 'Liked' : 'Like'}</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
+            onClick={onToggleLike}
+            aria-pressed={isLiked}
+            title={isLiked ? 'Liked' : 'Like'}
+          >
+            <Heart fill={isLiked ? 'currentColor' : 'none'} />
+            <span>{isLiked ? 'Liked' : 'Like'}</span>
+          </button>
 
-          {!isPhubVideo && !isPartyGuest && (
+          {!isPartyGuest && (
             <label className="stream-sandbox-toggle">
               <span>
                 <strong>Sandbox</strong>
@@ -7196,7 +7192,7 @@ function WatchScreen({
             </label>
           )}
 
-          {!isPhubVideo && !isJavVideo && !isPartyGuest && (
+          {!isPartyGuest && (
             <div className="server-selector" role="radiogroup" aria-label="Streaming server">
               {(() => {
                 const filteredOptions = isJavVideo
@@ -12492,6 +12488,7 @@ export type JavPost = {
   is_hd: boolean
   player_api: string
   embed_url: string
+  embedUrl?: string
   iframe_html: string
 }
 
