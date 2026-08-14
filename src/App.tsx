@@ -3875,6 +3875,7 @@ function App() {
           onStopScreenShare={stopScreenShare}
           screenShareError={screenShareError}
           currentUserEmail={currentUser?.email}
+          currentUser={currentUser}
         />
       )}
 
@@ -6481,6 +6482,7 @@ type WatchScreenProps = {
   onStopScreenShare?: () => void
   screenShareError?: string
   currentUserEmail?: string
+  currentUser?: UserInfo | null
 }
 
 function WatchScreen({
@@ -6508,6 +6510,7 @@ function WatchScreen({
   onStopScreenShare,
   screenShareError,
   currentUserEmail,
+  currentUser,
 }: WatchScreenProps) {
   const isPartyHost = activeParty ? currentUserEmail === activeParty.host_email : false
   const isPartyGuest = activeParty ? currentUserEmail !== activeParty.host_email : false
@@ -6894,120 +6897,142 @@ function WatchScreen({
     window.open(streamUrl, '_blank', 'noopener,noreferrer')
   }
 
-  const [commentsList, setCommentsList] = useState<
-    Array<{
-      id: string
-      author: string
-      avatarBg: string
-      timeAgo: string
-      text: string
-      likes: number
-      dislikes: number
-      userLiked?: boolean
-      userDisliked?: boolean
-    }>
-  >([
-    {
-      id: 'c1',
-      author: 'ErenYeager_01',
-      avatarBg: '#e50914',
-      timeAgo: '45 minutes ago',
-      text: 'This episode gave me absolute chills! The animation in the battle sequence is insane 🔥',
-      likes: 42,
-      dislikes: 1,
-    },
-    {
-      id: 'c2',
-      author: 'AnimeKage',
-      avatarBg: '#2563eb',
-      timeAgo: '2 hours ago',
-      text: 'The soundtrack timing when the climax hit was 10/10. Easily one of the best releases this season.',
-      likes: 19,
-      dislikes: 0,
-    },
-    {
-      id: 'c3',
-      author: 'Mikasa_Ackerman',
-      avatarBg: '#059669',
-      timeAgo: '5 hours ago',
-      text: 'Can we talk about the character development? Absolutely peak cinema right here.',
-      likes: 87,
-      dislikes: 2,
-    },
-    {
-      id: 'c4',
-      author: 'OtakuLover99',
-      avatarBg: '#7c3aed',
-      timeAgo: '1 day ago',
-      text: 'Re-watching this episode for the 3rd time and it still holds up. Masterpiece!',
-      likes: 12,
-      dislikes: 0,
-    },
-    {
-      id: 'c5',
-      author: 'Levi_Captain',
-      avatarBg: '#d97706',
-      timeAgo: '1 day ago',
-      text: 'The direction and sound design in this scene is absolute perfection.',
-      likes: 34,
-      dislikes: 0,
-    },
-    {
-      id: 'c6',
-      author: 'ShadowNinja',
-      avatarBg: '#4f46e5',
-      timeAgo: '2 days ago',
-      text: 'Anyone else noticed the subtle foreshadowing at 14:20? Mind blown 🤯',
-      likes: 56,
-      dislikes: 1,
-    },
-    {
-      id: 'c7',
-      author: 'KyotoVibes',
-      avatarBg: '#0891b2',
-      timeAgo: '3 days ago',
-      text: 'Super excited for next week’s episode! Big props to the studio team.',
-      likes: 21,
-      dislikes: 0,
-    },
-  ])
+  type WatchComment = {
+    id: string
+    author: string
+    avatarBg: string
+    timestamp: number
+    text: string
+    likes: number
+    dislikes: number
+    userLiked?: boolean
+    userDisliked?: boolean
+  }
+
+  const movieCommentsStorageKey = (id: string | number) => `omdb.apple-tv-style.comments.${id}`
+
+  const readMovieComments = (id: string | number): WatchComment[] => {
+    try {
+      const raw = window.localStorage.getItem(movieCommentsStorageKey(id))
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  const saveMovieComments = (id: string | number, list: WatchComment[]) => {
+    try {
+      window.localStorage.setItem(movieCommentsStorageKey(id), JSON.stringify(list))
+    } catch {}
+  }
+
+  const formatCommentTime = (timestamp?: number): string => {
+    if (!timestamp) return 'Just now'
+    const diff = Date.now() - timestamp
+    const secs = Math.floor(diff / 1000)
+    if (secs < 60) return 'Just now'
+    const mins = Math.floor(secs / 60)
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    const days = Math.floor(hrs / 24)
+    if (days < 30) return `${days}d ago`
+    const mos = Math.floor(days / 30)
+    if (mos < 12) return `${mos}mo ago`
+    return `${Math.floor(days / 365)}y ago`
+  }
+
+  const [commentsList, setCommentsList] = useState<WatchComment[]>(() =>
+    readMovieComments(movie.id),
+  )
+
+  useEffect(() => {
+    setCommentsList(readMovieComments(movie.id))
+  }, [movie.id])
 
   const [newCommentText, setNewCommentText] = useState('')
+
+  const activeProfileName =
+    currentUser?.name || (currentUserEmail ? currentUserEmail.split('@')[0] : 'User')
+  const activeProfileBg = currentUser?.avatarColor || '#e50914'
+  const activeProfileInitial = activeProfileName.charAt(0).toUpperCase() || 'U'
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newCommentText.trim()) return
-    const newComment = {
-      id: `c_${Date.now()}`,
-      author: currentUserEmail ? currentUserEmail.split('@')[0] : 'You',
-      avatarBg: '#3b82f6',
-      timeAgo: 'Just now',
+    const newComment: WatchComment = {
+      id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      author: activeProfileName,
+      avatarBg: activeProfileBg,
+      timestamp: Date.now(),
       text: newCommentText.trim(),
       likes: 0,
       dislikes: 0,
     }
-    setCommentsList([newComment, ...commentsList])
+    const updated = [newComment, ...commentsList]
+    setCommentsList(updated)
+    saveMovieComments(movie.id, updated)
     setNewCommentText('')
+  }
+
+  const toggleLikeComment = (commentId: string) => {
+    setCommentsList((prev) => {
+      const updated = prev.map((item) => {
+        if (item.id !== commentId) return item
+        const nextLiked = !item.userLiked
+        return {
+          ...item,
+          userLiked: nextLiked,
+          likes: nextLiked ? item.likes + 1 : Math.max(0, item.likes - 1),
+          ...(item.userDisliked ? { userDisliked: false, dislikes: Math.max(0, item.dislikes - 1) } : {}),
+        }
+      })
+      saveMovieComments(movie.id, updated)
+      return updated
+    })
+  }
+
+  const toggleDislikeComment = (commentId: string) => {
+    setCommentsList((prev) => {
+      const updated = prev.map((item) => {
+        if (item.id !== commentId) return item
+        const nextDisliked = !item.userDisliked
+        return {
+          ...item,
+          userDisliked: nextDisliked,
+          dislikes: nextDisliked ? item.dislikes + 1 : Math.max(0, item.dislikes - 1),
+          ...(item.userLiked ? { userLiked: false, likes: Math.max(0, item.likes - 1) } : {}),
+        }
+      })
+      saveMovieComments(movie.id, updated)
+      return updated
+    })
   }
 
   const renderCommentsSection = () => (
     <div className="youtube-comments-container">
       <div className="comments-header-row">
-        <h3 className="comments-count-title">{commentsList.length + 138} Comments</h3>
-        <button type="button" className="comments-sort-btn">
-          <MessageSquare size={16} />
-          <span>Sort by</span>
-        </button>
+        <h3 className="comments-count-title">
+          {commentsList.length} {commentsList.length === 1 ? 'Comment' : 'Comments'}
+        </h3>
+        {commentsList.length > 1 && (
+          <button type="button" className="comments-sort-btn">
+            <MessageSquare size={16} />
+            <span>Sort by</span>
+          </button>
+        )}
       </div>
 
       <form className="comments-input-area" onSubmit={handleAddComment}>
-        <div className="comment-user-avatar me-avatar">
-          {currentUserEmail ? currentUserEmail.charAt(0).toUpperCase() : 'U'}
+        <div className="comment-user-avatar me-avatar" style={{ background: activeProfileBg }}>
+          {activeProfileInitial}
         </div>
         <div className="comment-input-wrapper">
           <textarea
             className="comment-textarea"
-            placeholder="Add a comment..."
+            placeholder={`Add a comment as ${activeProfileName}...`}
             rows={2}
             value={newCommentText}
             onChange={(e) => setNewCommentText(e.target.value)}
@@ -7032,84 +7057,62 @@ function WatchScreen({
         </div>
       </form>
 
-      <div className="comments-list">
-        {commentsList.map((c) => (
-          <div key={c.id} className="comment-item">
-            <div className="comment-user-avatar" style={{ background: c.avatarBg }}>
-              {c.author.charAt(0).toUpperCase()}
-            </div>
-            <div className="comment-content">
-              <div className="comment-meta-row">
-                <span className="comment-author">@{c.author}</span>
-                <span className="comment-time">{c.timeAgo}</span>
+      {commentsList.length === 0 ? (
+        <div className="comments-empty-state">
+          <MessageSquare size={26} style={{ opacity: 0.4 }} />
+          <p>No comments yet. Be the first to start the conversation!</p>
+        </div>
+      ) : (
+        <div className="comments-list">
+          {commentsList.map((c) => (
+            <div key={c.id} className="comment-item">
+              <div className="comment-user-avatar" style={{ background: c.avatarBg || '#e50914' }}>
+                {(c.author || 'U').charAt(0).toUpperCase()}
               </div>
-              <p className="comment-body-text">{c.text}</p>
-              <div className="comment-actions-row">
-                <button
-                  type="button"
-                  className={`comment-like-btn${c.userLiked ? ' active' : ''}`}
-                  onClick={() => {
-                    setCommentsList((prev) =>
-                      prev.map((item) =>
-                        item.id === c.id
-                          ? {
-                              ...item,
-                              userLiked: !item.userLiked,
-                              likes: item.userLiked ? item.likes - 1 : item.likes + 1,
-                              ...(item.userDisliked
-                                ? { userDisliked: false, dislikes: item.dislikes - 1 }
-                                : {}),
-                            }
-                          : item,
-                      ),
-                    )
-                  }}
-                >
-                  <ThumbsUp size={14} />
-                  <span>{c.likes}</span>
-                </button>
+              <div className="comment-content">
+                <div className="comment-meta-row">
+                  <span className="comment-author">@{c.author}</span>
+                  <span className="comment-time">{formatCommentTime(c.timestamp)}</span>
+                </div>
+                <p className="comment-body-text">{c.text}</p>
+                <div className="comment-actions-row">
+                  <button
+                    type="button"
+                    className={`comment-like-btn${c.userLiked ? ' active' : ''}`}
+                    onClick={() => toggleLikeComment(c.id)}
+                  >
+                    <ThumbsUp size={14} />
+                    <span>{c.likes}</span>
+                  </button>
 
-                <button
-                  type="button"
-                  className={`comment-dislike-btn${c.userDisliked ? ' active' : ''}`}
-                  onClick={() => {
-                    setCommentsList((prev) =>
-                      prev.map((item) =>
-                        item.id === c.id
-                          ? {
-                              ...item,
-                              userDisliked: !item.userDisliked,
-                              dislikes: item.userDisliked ? item.dislikes - 1 : item.dislikes + 1,
-                              ...(item.userLiked
-                                ? { userLiked: false, likes: item.likes - 1 }
-                                : {}),
-                            }
-                          : item,
-                      ),
-                    )
-                  }}
-                >
-                  <ThumbsDown size={14} />
-                </button>
+                  <button
+                    type="button"
+                    className={`comment-dislike-btn${c.userDisliked ? ' active' : ''}`}
+                    onClick={() => toggleDislikeComment(c.id)}
+                  >
+                    <ThumbsDown size={14} />
+                    {c.dislikes > 0 && <span>{c.dislikes}</span>}
+                  </button>
 
-                <button type="button" className="comment-reply-btn">
-                  Reply
-                </button>
+                  <button type="button" className="comment-reply-btn">
+                    Reply
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 
-  const renderEpisodePanel = (_isAnimeLayout = true) => {
+  const renderEpisodePanel = (isAnimeLayout = true) => {
     if (!isSeries) return null
     return (
       <aside className="watch-episode-panel anime-episode-panel" aria-label="Episodes">
         <div className="anime-ep-header-row">
           <div className="anime-ep-header-left">
-            <h3 className="anime-ep-header-title">Related</h3>
+            {isAnimeLayout && <h3 className="anime-ep-header-title">Related</h3>}
             <SeasonDropdown
               seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
               value={season}
@@ -7568,7 +7571,8 @@ function WatchScreen({
             )}
           </div>
 
-          {hasEpisodes ? renderEpisodePanel(false) : renderYouTubeRelatedSidebar()}
+          {hasEpisodes && renderEpisodePanel(false)}
+          {renderCommentsSection()}
         </div>
       </section>
     )

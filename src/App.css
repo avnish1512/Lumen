@@ -19435,6 +19435,26 @@ body:has(.login-screen) {
   color: #fff;
 }
 
+.comments-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 16px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14.5px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  margin-top: 8px;
+}
+
+.comments-empty-state p {
+  margin: 0;
+}
+
 /* Global Content-Tightly-Fitted Container Reset for Info, Hentai, JAV & PHub screens */
 .detail-screen,
 .detail-page-body,
