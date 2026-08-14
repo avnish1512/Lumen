@@ -14625,7 +14625,7 @@ body:has(.login-screen) {
   flex: none;
   min-height: 0;
   height: auto;
-  max-height: 480px;
+  max-height: clamp(720px, 85vh, 920px);
   overflow: hidden;
   margin-bottom: 24px;
 }
@@ -19433,6 +19433,26 @@ body:has(.login-screen) {
 .comment-reply-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
+}
+
+.comment-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 0;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 999px;
+  transition: all 0.15s ease;
+}
+
+.comment-delete-btn:hover {
+  background: rgba(229, 9, 20, 0.15);
+  color: #ff4d4d;
 }
 
 .comments-empty-state {

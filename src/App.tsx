@@ -7011,6 +7011,14 @@ function WatchScreen({
     })
   }
 
+  const handleDeleteComment = (commentId: string) => {
+    setCommentsList((prev) => {
+      const updated = prev.filter((item) => item.id !== commentId)
+      saveMovieComments(movie.id, updated)
+      return updated
+    })
+  }
+
   const renderCommentsSection = () => (
     <div className="youtube-comments-container">
       <div className="comments-header-row">
@@ -7097,6 +7105,17 @@ function WatchScreen({
                   <button type="button" className="comment-reply-btn">
                     Reply
                   </button>
+
+                  <button
+                    type="button"
+                    className="comment-delete-btn"
+                    onClick={() => handleDeleteComment(c.id)}
+                    title="Delete comment"
+                    aria-label="Delete comment"
+                  >
+                    <Trash2 size={13} />
+                    <span>Delete</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -7106,13 +7125,12 @@ function WatchScreen({
     </div>
   )
 
-  const renderEpisodePanel = (isAnimeLayout = true) => {
+  const renderEpisodePanel = (_isAnimeLayout = true) => {
     if (!isSeries) return null
     return (
       <aside className="watch-episode-panel anime-episode-panel" aria-label="Episodes">
         <div className="anime-ep-header-row">
           <div className="anime-ep-header-left">
-            {isAnimeLayout && <h3 className="anime-ep-header-title">Related</h3>}
             <SeasonDropdown
               seasons={(watchSeasons.length ? watchSeasons : [{ season: 1, episodeCount: 0 }]).map((entry) => entry.season)}
               value={season}
