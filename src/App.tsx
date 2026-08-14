@@ -6513,7 +6513,16 @@ function WatchScreen({
   const isPartyGuest = activeParty ? currentUserEmail !== activeParty.host_email : false
   const [isBigScreen, setIsBigScreen] = useState(false)
   const [isTitleExpanded, setIsTitleExpanded] = useState(false)
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 900,
+  )
   const remoteViewportRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 900)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const isJavVideo = Boolean(
     movie.id.startsWith('jav-') ||
@@ -7401,6 +7410,169 @@ function WatchScreen({
       )}
     </section>
   )
+
+  if (isMobile) {
+    return (
+      <section className="screen watch-screen">
+        <DetailTopBar onBack={onBack} dark />
+
+        {renderPlayerSection()}
+
+        <div className="watch-topbar">
+          {!isPartyGuest && (
+            <button
+              className="watch-play"
+              type="button"
+              disabled={!streamUrl || streamLoading}
+              onClick={openCurrentStream}
+              title={streamUrl ? `Open ${currentProvider.name}` : 'Waiting for stream id'}
+              aria-label={
+                streamUrl
+                  ? `Open ${currentProvider.name} stream for ${movie.title}`
+                  : `Waiting for stream id for ${movie.title}`
+              }
+            >
+              <Play fill="currentColor" strokeWidth={0} />
+              <span>Watch</span>
+            </button>
+          )}
+
+          {activeParty && isPartyHost && (
+            <button
+              type="button"
+              className={`watch-screenshare-trigger-btn${isScreenSharing ? ' sharing' : ''}`}
+              onClick={isScreenSharing ? onStopScreenShare : onStartScreenShare}
+              title={isScreenSharing ? 'Stop Screen Sharing' : 'Start Live Video Screen Share'}
+            >
+              <Tv size={16} />
+              <span>{isScreenSharing ? 'Stop Share' : 'Screen Share'}</span>
+            </button>
+          )}
+
+          {activeParty && isPartyGuest && (
+            <span className="watch-screenshare-badge guest-watch-only">
+              🔴 Watching {activeParty.host_email}&apos;s Screen
+            </span>
+          )}
+
+          <div className="watch-title-block">
+            <h2 className="watch-title-main">{movie.title}</h2>
+            <p className="watch-title-genre">{movie.genres[0] ?? movie.label ?? 'Movie'}</p>
+          </div>
+
+          {isAnimeMovie || isHentai ? (
+            <div className="watch-lang-toggle" role="group" aria-label="Audio language">
+              <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
+                SUB
+              </button>
+              <button type="button" className={language === 'dub' ? 'active' : ''} onClick={() => setLanguage('dub')}>
+                DUB
+              </button>
+            </div>
+          ) : (
+            <span className="watch-topbar-spacer" aria-hidden="true" />
+          )}
+        </div>
+
+        <div className={`watch-lower${hasEpisodes ? ' has-episodes' : ''}`}>
+          <div className="watch-lower-left">
+            <p className="watch-synopsis">
+              {movie.year && <strong>{movie.year}: </strong>}
+              {movie.synopsis}
+            </p>
+
+            <Metadata movie={movie} />
+
+            <button
+              type="button"
+              className="watch-mylist-btn"
+              onClick={onSave}
+              title={isSaved ? 'Saved to My List' : 'Add to My List'}
+            >
+              {isSaved ? <Check /> : <Plus />}
+              <span>{isSaved ? 'Saved' : 'My List'}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
+              onClick={onToggleLike}
+              aria-pressed={isLiked}
+              title={isLiked ? 'Liked' : 'Like'}
+            >
+              <Heart fill={isLiked ? 'currentColor' : 'none'} />
+              <span>{isLiked ? 'Liked' : 'Like'}</span>
+            </button>
+
+            {!isPartyGuest && (
+              <label className="stream-sandbox-toggle">
+                <span>
+                  <strong>Sandbox</strong>
+                  <small>
+                    {streamSandboxEnabled ? 'Blocks popups and redirects' : 'Allows full player behavior'}
+                  </small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={streamSandboxEnabled}
+                  onChange={(event) => onStreamSandboxChange(event.target.checked)}
+                />
+                <span aria-hidden="true" className="toggle-track">
+                  <span />
+                </span>
+              </label>
+            )}
+
+            {!isPartyGuest && (
+              <div className="server-selector" role="radiogroup" aria-label="Streaming server">
+                {(() => {
+                  const filteredOptions = isJavVideo
+                    ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
+                    : isPhubVideo
+                      ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+                      : isHentai
+                        ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                        : streamProviderOptions.filter((provider) => {
+                            if (
+                              provider.id === 'oceanplay' ||
+                              provider.id === 'apijav' ||
+                              provider.id === 'phubplay'
+                            )
+                              return false
+                            const isAnimeProvider = animeProviderIds.includes(provider.id)
+                            return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
+                          })
+
+                  return filteredOptions.map((provider) => {
+                    const isActive = provider.id === activeProviderId
+                    return (
+                      <button
+                        key={provider.id}
+                        className={`server-option${isActive ? ' active' : ''}`}
+                        type="button"
+                        role="radio"
+                        aria-checked={isActive}
+                        onClick={() => onStreamProviderChange(provider.id)}
+                      >
+                        <span className="provider-logo">{provider.logo}</span>
+                        <span className="server-copy">
+                          <strong>{provider.name}</strong>
+                          <small>{provider.description}</small>
+                        </span>
+                        {isActive ? <Check /> : <ChevronRight />}
+                      </button>
+                    )
+                  })
+                })()}
+              </div>
+            )}
+          </div>
+
+          {hasEpisodes ? renderEpisodePanel(false) : renderYouTubeRelatedSidebar()}
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="screen watch-screen anime-watch-screen">
