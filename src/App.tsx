@@ -3622,7 +3622,7 @@ function App() {
       className={`app-shell ${designMode}-theme ${navScrolled ? 'nav-scrolled' : ''}`}
       style={appShellStyle}
     >
-      {showSplash && screen !== 'profiles' && screen !== 'login' && (
+      {showSplash && (
         <SplashScreen
           onFinish={() => {
             try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
@@ -3631,56 +3631,52 @@ function App() {
         />
       )}
       <PullToRefresh containerRef={appShellRef} />
-      {screen === 'home' && (
-        featuredMovie ? (
-          <HomeScreen
-            screen={screen}
-            featuredMovie={designMode === 'netflix' ? (animeHeroMovie ?? featuredMovie) : featuredMovie}
-            movies={designMode === 'netflix' ? anime : movies}
-            tvShows={designMode === 'netflix' ? anime : tvShows}
-            movieCollection={designMode === 'netflix'
-              ? (animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection)
-              : movieCollection}
-            tvShowCollection={designMode === 'netflix'
-              ? (animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection)
-              : tvShowCollection}
-            tmdbHomeRails={designMode === 'netflix' ? {
-              featuredMovies: anime.slice(0, 6),
-              featuredTvShows: (animeExtras.tvCollection.top.length ? animeExtras.tvCollection.top : anime).slice(0, 6),
-              movieCollection: animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection,
-              newReleases: animeExtras.newReleases.length ? animeExtras.newReleases : (animeCollection.top || []),
-              trendingNow: animeExtras.trending.length ? animeExtras.trending : (animeCollection.adventure || []),
-              tvShowCollection: animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection,
-            } : tmdbHomeRails}
-            continueMovies={designMode === 'netflix' ? continueWatchingAnime : continueWatchingLumen}
-            savedMovies={savedMovies}
-            likedMovies={likedList}
-            onOpenDetail={openDetail}
-            onPlay={openWatch}
-            onSave={toggleSaved}
-            onSearch={() => setScreen('search')}
-            onSelectHero={setHomeHeroMovie}
-            invites={incomingInvites}
-            onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
-            onDismissInvite={dismissInvite}
-            onMarkWatched={markWatchedMovie}
-            onRemoveContinue={removeContinueMovie}
-            onRemoveWatchlist={removeWatchlistMovie}
-            currentUser={currentUser}
-            onProfile={openProfileOrLogin}
-            onSelectProfile={switchToProfile}
-            onManageProfiles={openManageProfiles}
-            onTransferProfile={openLord}
-            onAccount={openProfileOrLogin}
-            onHelp={openHelpCenter}
-            onSignOut={signOut}
-            onSetLordPin={() => setShowSetLordPin(true)}
-            profiles={profiles}
-            designMode={designMode}
-          />
-        ) : (
-          <LoadingScreen />
-        )
+      {screen === 'home' && featuredMovie && (
+        <HomeScreen
+          screen={screen}
+          featuredMovie={designMode === 'netflix' ? (animeHeroMovie ?? featuredMovie) : featuredMovie}
+          movies={designMode === 'netflix' ? anime : movies}
+          tvShows={designMode === 'netflix' ? anime : tvShows}
+          movieCollection={designMode === 'netflix'
+            ? (animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection)
+            : movieCollection}
+          tvShowCollection={designMode === 'netflix'
+            ? (animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection)
+            : tvShowCollection}
+          tmdbHomeRails={designMode === 'netflix' ? {
+            featuredMovies: anime.slice(0, 6),
+            featuredTvShows: (animeExtras.tvCollection.top.length ? animeExtras.tvCollection.top : anime).slice(0, 6),
+            movieCollection: animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection,
+            newReleases: animeExtras.newReleases.length ? animeExtras.newReleases : (animeCollection.top || []),
+            trendingNow: animeExtras.trending.length ? animeExtras.trending : (animeCollection.adventure || []),
+            tvShowCollection: animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection,
+          } : tmdbHomeRails}
+          continueMovies={designMode === 'netflix' ? continueWatchingAnime : continueWatchingLumen}
+          savedMovies={savedMovies}
+          likedMovies={likedList}
+          onOpenDetail={openDetail}
+          onPlay={openWatch}
+          onSave={toggleSaved}
+          onSearch={() => setScreen('search')}
+          onSelectHero={setHomeHeroMovie}
+          invites={incomingInvites}
+          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+          onDismissInvite={dismissInvite}
+          onMarkWatched={markWatchedMovie}
+          onRemoveContinue={removeContinueMovie}
+          onRemoveWatchlist={removeWatchlistMovie}
+          currentUser={currentUser}
+          onProfile={openProfileOrLogin}
+          onSelectProfile={switchToProfile}
+          onManageProfiles={openManageProfiles}
+          onTransferProfile={openLord}
+          onAccount={openProfileOrLogin}
+          onHelp={openHelpCenter}
+          onSignOut={signOut}
+          onSetLordPin={() => setShowSetLordPin(true)}
+          profiles={profiles}
+          designMode={designMode}
+        />
       )}
 
       {screen === 'drama' && (featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime)) && (
@@ -3940,7 +3936,8 @@ function App() {
           currentUser={currentUser}
           onLogin={(user) => {
             setTempUser(user)
-            try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
+            try { window.sessionStorage.removeItem('lumen.splash-done') } catch { /* ignore */ }
+            setShowSplash(true)
             setScreen('profiles')
           }}
           onLogout={() => {
@@ -9391,8 +9388,7 @@ function ProfilesScreen({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const rawList = isMobile && mobileBackdrops.length > 0 ? mobileBackdrops : backdrops
-  const activeList = rawList.length > 0 ? rawList : ['/login-bg.jpeg']
+  const activeList = isMobile && mobileBackdrops.length > 0 ? mobileBackdrops : backdrops
 
   // Rotating TV/movie key-art behind the profile chooser (changes every 5s).
   const [backdropIndex, setBackdropIndex] = useState(0)
@@ -10140,8 +10136,6 @@ function ProfilesScreen({
 
       <div className="profiles-container">
         <div className="profiles-sheet-container">
-          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : "Who's Watching?"}</h1>
-
           <div className="profiles-grid">
             {profiles.map((profile) => (
               <button 
@@ -10208,6 +10202,8 @@ function ProfilesScreen({
               <span className="profile-name">{isManaging ? 'Done' : 'Edit'}</span>
             </button>
           </div>
+
+          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : 'Choose your profile'}</h1>
         </div>
       </div>
     </section>
