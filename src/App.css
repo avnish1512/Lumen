@@ -9084,6 +9084,7 @@ body:has(.login-screen) {
   inset: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   background-color: #111115;
   /* Slate Black */
   color: #fff;
@@ -13048,7 +13049,7 @@ body:has(.login-screen) {
   border-top-left-radius: 24px;
   border-top-right-radius: 24px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 0 20px 16px;
+  padding: 0 20px calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   align-items: center;

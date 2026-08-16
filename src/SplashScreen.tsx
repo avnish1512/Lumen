@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './SplashScreen.css'
 
 interface SplashScreenProps {
@@ -9,8 +9,28 @@ interface SplashScreenProps {
 export function SplashScreen({ onFinish, durationMs = 2800 }: SplashScreenProps) {
   const [fadingOut, setFadingOut] = useState(false)
   const [hidden, setHidden] = useState(false)
+  const [videoReady, setVideoReady] = useState(false)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  const handleComplete = () => {
+    setFadingOut(true)
+    setTimeout(() => {
+      setHidden(true)
+      if (onFinish) onFinish()
+    }, 400)
+  }
 
   useEffect(() => {
+    // Try to programmatically play video in case autoplay is paused
+    if (videoRef.current) {
+      videoRef.current.play().then(() => {
+        setVideoReady(true)
+      }).catch(() => {
+        // Autoplay blocked by mobile browser - show animated fallback
+        setVideoReady(false)
+      })
+    }
+
     const timer = setTimeout(() => {
       setFadingOut(true)
       const hideTimer = setTimeout(() => {
@@ -18,7 +38,7 @@ export function SplashScreen({ onFinish, durationMs = 2800 }: SplashScreenProps)
         if (onFinish) {
           onFinish()
         }
-      }, 600)
+      }, 500)
       return () => clearTimeout(hideTimer)
     }, durationMs)
 
@@ -32,22 +52,25 @@ export function SplashScreen({ onFinish, durationMs = 2800 }: SplashScreenProps)
   return (
     <div
       className={`lumen-splash-overlay${fadingOut ? ' lumen-splash-fadeout' : ''}`}
-      onClick={() => {
-        setFadingOut(true)
-        setTimeout(() => {
-          setHidden(true)
-          if (onFinish) onFinish()
-        }, 300)
-      }}
+      onClick={handleComplete}
     >
+      <div className="lumen-splash-fallback">
+        <img src="/lumen-logo.png" alt="Lumen" className="lumen-splash-fallback-logo" />
+        <div className="lumen-splash-glow" />
+      </div>
+
       <video
-        className="lumen-splash-video"
+        ref={videoRef}
+        className={`lumen-splash-video${videoReady ? ' ready' : ''}`}
         src="/loading.mp4"
         autoPlay
         loop
         muted
         playsInline
-        onError={() => setHidden(true)}
+        preload="auto"
+        onPlaying={() => setVideoReady(true)}
+        onLoadedData={() => setVideoReady(true)}
+        onError={() => setVideoReady(false)}
       />
     </div>
   )
