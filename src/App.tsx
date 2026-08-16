@@ -333,15 +333,30 @@ function profilesKeyFor(user: UserInfo | null) {
 }
 
 function readProfilesFor(user: UserInfo | null): UserProfile[] {
-  const fallback: UserProfile[] = [{ name: 'Children', avatarColor: 'kids' }]
+  const defaultUserName = user?.name ? user.name.trim() : ''
+  const defaultUserColor = user?.avatarColor || 'red'
+  const fallback: UserProfile[] = [
+    ...(defaultUserName ? [{ name: defaultUserName, avatarColor: defaultUserColor }] : []),
+    { name: 'Children', avatarColor: 'kids' },
+  ]
   try {
     const key = profilesKeyFor(user)
-    // Each account keeps its own list. A brand-new account starts empty (only
-    // the default Kids profile) rather than inheriting another account's
-    // profiles that happen to live in this device's storage.
+    // Each account keeps its own list. A brand-new account starts with the
+    // account owner's profile and the default Kids profile.
     const saved = window.localStorage.getItem(key)
+    if (!saved) return fallback
 
-    return saved ? (JSON.parse(saved) as UserProfile[]) : fallback
+    const parsed = JSON.parse(saved)
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const sanitized = parsed
+        .filter((p) => p && typeof p === 'object' && typeof p.name === 'string' && p.name.trim().length > 0)
+        .map((p) => ({
+          name: p.name.trim(),
+          avatarColor: typeof p.avatarColor === 'string' && p.avatarColor.trim() ? p.avatarColor : 'red',
+        }))
+      return sanitized.length > 0 ? sanitized : fallback
+    }
+    return fallback
   } catch {
     return fallback
   }
@@ -377,7 +392,8 @@ function readHomeCache(): HomeCache | null {
   }
 }
 
-function getInitials(name: string) {
+function getInitials(name: string | null | undefined) {
+  if (!name || typeof name !== 'string') return '👤'
   const words = name.trim().split(/\s+/).filter(Boolean)
   if (words.length === 0) return '👤'
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
@@ -1599,14 +1615,15 @@ function PullToRefresh({ containerRef }: { containerRef: RefObject<HTMLElement |
 
 function App() {
   const appShellRef = useRef<HTMLElement | null>(null)
-  // Show splash only on cold start (new session) or after login.
-  // sessionStorage persists across page refresh but clears when the
-  // app/tab is closed, matching Netflix's behaviour.
+  // Show splash only on cold start for an already signed-in session.
+  // Never show intro video during login or on profile select screen.
   const [showSplash, setShowSplash] = useState(() => {
     try {
+      const savedUser = readCurrentUser()
+      if (!savedUser) return false
       return !window.sessionStorage.getItem('lumen.splash-done')
     } catch {
-      return true
+      return false
     }
   })
 
@@ -2138,11 +2155,12 @@ function App() {
   }
 
   const switchToProfile = (profileName: string) => {
-    const matchedProfile = profiles.find((p) => p.name === profileName)
-    const user = {
+    const list = Array.isArray(profiles) ? profiles : []
+    const matchedProfile = list.find((p) => p && p.name && p.name.toLowerCase() === profileName.toLowerCase())
+    const user: UserInfo = {
       name: profileName,
-      email: currentUser?.email ?? 'guest@apple-tv.com',
-      avatarColor: matchedProfile?.avatarColor,
+      email: currentUser?.email || 'guest@apple-tv.com',
+      avatarColor: matchedProfile?.avatarColor || 'red',
     }
     setCurrentUser(user)
     try {
@@ -2182,7 +2200,6 @@ function App() {
   const signOut = () => {
     setCurrentUser(null)
     try {
-      window.sessionStorage.removeItem('lumen.splash-done')
       window.sessionStorage.removeItem(activeScreenKey)
       window.sessionStorage.removeItem(selectedMovieKey)
       window.localStorage.removeItem(currentUserKey)
@@ -2400,19 +2417,39 @@ function App() {
 
   useEffect(() => {
     if (currentUser) {
-      window.localStorage.setItem(currentUserKey, JSON.stringify(currentUser))
+      try {
+        window.localStorage.setItem(currentUserKey, JSON.stringify(currentUser))
+      } catch {
+        // ignore
+      }
 
       // Switch watch list and history for the active profile
-      const savedStr = window.localStorage.getItem(`${savedMoviesKey}.${currentUser.name}`)
-      setSavedMovies(savedStr ? JSON.parse(savedStr) : {})
+      try {
+        const savedStr = window.localStorage.getItem(`${savedMoviesKey}.${currentUser.name}`)
+        setSavedMovies(savedStr ? JSON.parse(savedStr) : {})
+      } catch {
+        setSavedMovies({})
+      }
 
-      const likedStr = window.localStorage.getItem(`${likedMoviesKey}.${currentUser.name}`)
-      setLikedMovies(likedStr ? JSON.parse(likedStr) : {})
+      try {
+        const likedStr = window.localStorage.getItem(`${likedMoviesKey}.${currentUser.name}`)
+        setLikedMovies(likedStr ? JSON.parse(likedStr) : {})
+      } catch {
+        setLikedMovies({})
+      }
 
-      const historyStr = window.localStorage.getItem(`${watchHistoryKey}.${currentUser.name}`)
-      setWatchHistory(historyStr ? JSON.parse(historyStr) : {})
+      try {
+        const historyStr = window.localStorage.getItem(`${watchHistoryKey}.${currentUser.name}`)
+        setWatchHistory(historyStr ? JSON.parse(historyStr) : {})
+      } catch {
+        setWatchHistory({})
+      }
     } else {
-      window.localStorage.removeItem(currentUserKey)
+      try {
+        window.localStorage.removeItem(currentUserKey)
+      } catch {
+        // ignore
+      }
       setSavedMovies({})
       setLikedMovies({})
       setWatchHistory({})
@@ -3622,7 +3659,7 @@ function App() {
       className={`app-shell ${designMode}-theme ${navScrolled ? 'nav-scrolled' : ''}`}
       style={appShellStyle}
     >
-      {showSplash && (
+      {showSplash && screen !== 'login' && screen !== 'profiles' && (
         <SplashScreen
           onFinish={() => {
             try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
@@ -3631,52 +3668,56 @@ function App() {
         />
       )}
       <PullToRefresh containerRef={appShellRef} />
-      {screen === 'home' && featuredMovie && (
-        <HomeScreen
-          screen={screen}
-          featuredMovie={designMode === 'netflix' ? (animeHeroMovie ?? featuredMovie) : featuredMovie}
-          movies={designMode === 'netflix' ? anime : movies}
-          tvShows={designMode === 'netflix' ? anime : tvShows}
-          movieCollection={designMode === 'netflix'
-            ? (animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection)
-            : movieCollection}
-          tvShowCollection={designMode === 'netflix'
-            ? (animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection)
-            : tvShowCollection}
-          tmdbHomeRails={designMode === 'netflix' ? {
-            featuredMovies: anime.slice(0, 6),
-            featuredTvShows: (animeExtras.tvCollection.top.length ? animeExtras.tvCollection.top : anime).slice(0, 6),
-            movieCollection: animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection,
-            newReleases: animeExtras.newReleases.length ? animeExtras.newReleases : (animeCollection.top || []),
-            trendingNow: animeExtras.trending.length ? animeExtras.trending : (animeCollection.adventure || []),
-            tvShowCollection: animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection,
-          } : tmdbHomeRails}
-          continueMovies={designMode === 'netflix' ? continueWatchingAnime : continueWatchingLumen}
-          savedMovies={savedMovies}
-          likedMovies={likedList}
-          onOpenDetail={openDetail}
-          onPlay={openWatch}
-          onSave={toggleSaved}
-          onSearch={() => setScreen('search')}
-          onSelectHero={setHomeHeroMovie}
-          invites={incomingInvites}
-          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
-          onDismissInvite={dismissInvite}
-          onMarkWatched={markWatchedMovie}
-          onRemoveContinue={removeContinueMovie}
-          onRemoveWatchlist={removeWatchlistMovie}
-          currentUser={currentUser}
-          onProfile={openProfileOrLogin}
-          onSelectProfile={switchToProfile}
-          onManageProfiles={openManageProfiles}
-          onTransferProfile={openLord}
-          onAccount={openProfileOrLogin}
-          onHelp={openHelpCenter}
-          onSignOut={signOut}
-          onSetLordPin={() => setShowSetLordPin(true)}
-          profiles={profiles}
-          designMode={designMode}
-        />
+      {screen === 'home' && (
+        featuredMovie ? (
+          <HomeScreen
+            screen={screen}
+            featuredMovie={designMode === 'netflix' ? (animeHeroMovie ?? featuredMovie) : featuredMovie}
+            movies={designMode === 'netflix' ? anime : movies}
+            tvShows={designMode === 'netflix' ? anime : tvShows}
+            movieCollection={designMode === 'netflix'
+              ? (animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection)
+              : movieCollection}
+            tvShowCollection={designMode === 'netflix'
+              ? (animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection)
+              : tvShowCollection}
+            tmdbHomeRails={designMode === 'netflix' ? {
+              featuredMovies: anime.slice(0, 6),
+              featuredTvShows: (animeExtras.tvCollection.top.length ? animeExtras.tvCollection.top : anime).slice(0, 6),
+              movieCollection: animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection,
+              newReleases: animeExtras.newReleases.length ? animeExtras.newReleases : (animeCollection.top || []),
+              trendingNow: animeExtras.trending.length ? animeExtras.trending : (animeCollection.adventure || []),
+              tvShowCollection: animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection,
+            } : tmdbHomeRails}
+            continueMovies={designMode === 'netflix' ? continueWatchingAnime : continueWatchingLumen}
+            savedMovies={savedMovies}
+            likedMovies={likedList}
+            onOpenDetail={openDetail}
+            onPlay={openWatch}
+            onSave={toggleSaved}
+            onSearch={() => setScreen('search')}
+            onSelectHero={setHomeHeroMovie}
+            invites={incomingInvites}
+            onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+            onDismissInvite={dismissInvite}
+            onMarkWatched={markWatchedMovie}
+            onRemoveContinue={removeContinueMovie}
+            onRemoveWatchlist={removeWatchlistMovie}
+            currentUser={currentUser}
+            onProfile={openProfileOrLogin}
+            onSelectProfile={switchToProfile}
+            onManageProfiles={openManageProfiles}
+            onTransferProfile={openLord}
+            onAccount={openProfileOrLogin}
+            onHelp={openHelpCenter}
+            onSignOut={signOut}
+            onSetLordPin={() => setShowSetLordPin(true)}
+            profiles={profiles}
+            designMode={designMode}
+          />
+        ) : (
+          <LoadingScreen />
+        )
       )}
 
       {screen === 'drama' && (featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime)) && (
@@ -3935,9 +3976,21 @@ function App() {
         <LoginScreen
           currentUser={currentUser}
           onLogin={(user) => {
-            setTempUser(user)
-            try { window.sessionStorage.removeItem('lumen.splash-done') } catch { /* ignore */ }
-            setShowSplash(true)
+            const sanitizedUser: UserInfo = {
+              name: user?.name?.trim() || (user?.email ? user.email.split('@')[0] : 'User'),
+              email: user?.email?.trim().toLowerCase() || '',
+              avatarColor: user?.avatarColor || 'red',
+            }
+            setTempUser(sanitizedUser)
+            const initialProfiles = readProfilesFor(sanitizedUser)
+            setProfiles(initialProfiles)
+            try {
+              window.localStorage.setItem(profilesKeyFor(sanitizedUser), JSON.stringify(initialProfiles))
+            } catch {
+              // ignore
+            }
+            try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
+            setShowSplash(false)
             setScreen('profiles')
           }}
           onLogout={() => {
@@ -3960,11 +4013,12 @@ function App() {
         <ProfilesScreen
           profiles={profiles}
           onSelectProfile={(profileName) => {
-            const matchedProfile = profiles.find((p) => p.name === profileName)
-            const finalUser = {
+            const list = Array.isArray(profiles) ? profiles : []
+            const matchedProfile = list.find((p) => p && p.name && p.name.toLowerCase() === profileName.toLowerCase())
+            const finalUser: UserInfo = {
               name: profileName,
-              email: tempUser?.email ?? currentUser?.email ?? 'guest@apple-tv.com',
-              avatarColor: matchedProfile?.avatarColor,
+              email: tempUser?.email || currentUser?.email || 'guest@apple-tv.com',
+              avatarColor: matchedProfile?.avatarColor || 'red',
             }
             setCurrentUser(finalUser)
             try {
@@ -9286,7 +9340,10 @@ function LoginScreen({
   )
 }
 
-function getAvatarSrc(avatarKey: string): string {
+function getAvatarSrc(avatarKey: string | null | undefined): string {
+  if (!avatarKey || typeof avatarKey !== 'string') {
+    return avatarAssets['classic_red.png'] ?? '/src/assets/classic_red.png'
+  }
   // Map avatar keys to their actual asset paths in the glob map
   let assetPath = ''
   if (avatarKey.startsWith('elite/')) {
@@ -9305,9 +9362,10 @@ function getAvatarSrc(avatarKey: string): string {
   return avatarAssets[assetPath] ?? `/src/assets/${assetPath}`
 }
 
-export function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserProfile[]) {
+export function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserProfile[] | null | undefined) {
   if (!currentUser) return '👤'
-  const matched = profiles.find((p) => p.name.toLowerCase() === currentUser.name.toLowerCase())
+  const list = Array.isArray(profiles) ? profiles : []
+  const matched = list.find((p) => p && p.name && currentUser.name && p.name.toLowerCase() === currentUser.name.toLowerCase())
   const avatarColor = currentUser.avatarColor ?? matched?.avatarColor
   
   if (!avatarColor) {
@@ -9352,7 +9410,7 @@ export function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: 
     >
       <img 
         src={getAvatarSrc(avatarColor)} 
-        alt={currentUser.name} 
+        alt={currentUser.name || 'User'} 
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       />
     </div>
@@ -9388,7 +9446,8 @@ function ProfilesScreen({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const activeList = isMobile && mobileBackdrops.length > 0 ? mobileBackdrops : backdrops
+  const rawList = isMobile && mobileBackdrops.length > 0 ? mobileBackdrops : backdrops
+  const activeList = Array.isArray(rawList) && rawList.length > 0 ? rawList : []
 
   // Rotating TV/movie key-art behind the profile chooser (changes every 5s).
   const [backdropIndex, setBackdropIndex] = useState(0)
@@ -9403,7 +9462,10 @@ function ProfilesScreen({
     return () => window.clearInterval(timer)
   }, [activeList.length])
 
-  const activeBackdrop = activeList[backdropIndex] ?? activeList[0]
+  const activeBackdrop = activeList[backdropIndex] ?? activeList[0] ?? null
+  const safeProfiles = Array.isArray(profiles) && profiles.length > 0
+    ? profiles
+    : [{ name: 'Children', avatarColor: 'kids' }]
   const [isAdding, setIsAdding] = useState(false)
   const [isChoosingIcon, setIsChoosingIcon] = useState(false)
   const [newName, setNewName] = useState('')
@@ -10136,8 +10198,9 @@ function ProfilesScreen({
 
       <div className="profiles-container">
         <div className="profiles-sheet-container">
+          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : "Who's watching?"}</h1>
           <div className="profiles-grid">
-            {profiles.map((profile) => (
+            {safeProfiles.map((profile) => (
               <button 
                 key={profile.name}
                 className="profile-item" 
@@ -10166,11 +10229,18 @@ function ProfilesScreen({
                       <span className="kids-text">kids</span>
                     </div>
                   ) : (
-                    <div className="profile-avatar" style={{ overflow: 'hidden', width: '100%', height: '100%' }}>
+                    <div 
+                      className={`profile-avatar avatar-${profile.avatarColor || 'red'}`} 
+                      style={{ overflow: 'hidden', width: '100%', height: '100%', position: 'relative' }}
+                    >
+                      <span className="avatar-fallback-initials">{getInitials(profile.name)}</span>
                       <img 
                         src={getAvatarSrc(profile.avatarColor)} 
-                        alt={profile.name} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        alt={profile.name || 'Profile'} 
+                        style={{ position: 'relative', zIndex: 2, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        onError={(e) => {
+                          ;(e.currentTarget as HTMLElement).style.display = 'none'
+                        }}
                       />
                     </div>
                   )}
@@ -10202,8 +10272,6 @@ function ProfilesScreen({
               <span className="profile-name">{isManaging ? 'Done' : 'Edit'}</span>
             </button>
           </div>
-
-          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : 'Choose your profile'}</h1>
         </div>
       </div>
     </section>
@@ -13524,8 +13592,9 @@ export function ProfileMenu({
     }
   }, [open])
 
-  const otherProfiles = profiles.filter(
-    (profile) => profile.name.toLowerCase() !== (currentUser?.name ?? '').toLowerCase(),
+  const profileList = Array.isArray(profiles) ? profiles : []
+  const otherProfiles = profileList.filter(
+    (profile) => profile && profile.name && profile.name.toLowerCase() !== (currentUser?.name ?? '').toLowerCase(),
   )
   const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
 
