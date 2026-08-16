@@ -12980,24 +12980,32 @@ body:has(.login-screen) {
 }
 
 /* ==========================================================================
-   Profile chooser — rotating TV/movie key-art behind the profiles (every 5s),
-   fading into the dark chooser area (Apple TV "Choose your profile" style).
+   Profile chooser — Centered Who's Watching / Choose Profile Screen
    ========================================================================== */
-/* Drop the generic .screen bottom padding so the profiles can sit at the
-   very bottom (like the reference) instead of floating in the middle. */
 .profiles-screen.profiles-screen-hero {
-  padding-bottom: 0 !important;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background-color: #0c0d12;
+  color: #fff;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 !important;
+  -webkit-overflow-scrolling: touch;
 }
 
 .profiles-screen-hero .profiles-backdrop {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: fixed;
+  inset: 0;
   z-index: 0;
   overflow: hidden;
-  background: #111115;
+  background: #0c0d12;
+  pointer-events: none;
 }
 
 .profiles-screen-hero .profiles-backdrop img {
@@ -13006,8 +13014,10 @@ body:has(.login-screen) {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center top;
+  object-position: center;
   opacity: 0;
+  filter: blur(12px) brightness(0.4);
+  transform: scale(1.08);
   transition: opacity 1.2s ease;
 }
 
@@ -13015,188 +13025,155 @@ body:has(.login-screen) {
   opacity: 1;
 }
 
-/* Cinematic blend: gentle top vignette for depth, clear middle, smooth fade into sheet */
 .profiles-screen-hero .profiles-backdrop-fade {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(130% 90% at 50% 32%,
-      rgba(17, 17, 21, 0) 52%,
-      rgba(17, 17, 21, 0.45) 100%),
-    linear-gradient(180deg,
-      rgba(17, 17, 21, 0.4) 0%,
-      rgba(17, 17, 21, 0) 20%,
-      rgba(17, 17, 21, 0) 45%,
-      rgba(17, 17, 21, 0.4) 65%,
-      rgba(17, 17, 21, 0.8) 85%,
-      #141414 100%);
+    radial-gradient(ellipse at center, rgba(12, 13, 18, 0.45) 0%, rgba(12, 13, 18, 0.85) 100%),
+    linear-gradient(180deg, rgba(12, 13, 18, 0.4) 0%, rgba(12, 13, 18, 0.85) 100%);
 }
 
-/* Bottom curved sheet container matching reference image */
+.profiles-screen-hero .profiles-header {
+  padding: calc(12px + env(safe-area-inset-top, 16px)) 20px 0;
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .profiles-screen-hero .profiles-container {
-  justify-content: flex-end !important;
-  align-items: stretch !important;
-  padding: 0 !important;
+  flex: 1;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 20px 20px calc(24px + env(safe-area-inset-bottom, 16px)) !important;
+  position: relative;
+  z-index: 5;
   width: 100% !important;
-  z-index: 2 !important;
+  min-height: min-content;
+  box-sizing: border-box;
 }
 
 .profiles-sheet-container {
   width: 100%;
-  background: rgba(18, 18, 20, 0.94);
+  max-width: 720px;
+  background: rgba(18, 19, 26, 0.76);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
-  border-top-left-radius: 24px;
-  border-top-right-radius: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 0 20px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: clamp(24px, 5vw, 44px) clamp(18px, 4vw, 36px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.8);
-  overflow: visible !important;
-  margin-top: 36px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  margin: auto 0;
+  box-sizing: border-box;
 }
 
-/* Heading ("Choose your profile") centered underneath avatars inside dark sheet */
 .profiles-screen-hero .profiles-title {
-  margin-top: 12px;
-  margin-bottom: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.82);
+  font-size: clamp(22px, 5vw, 32px) !important;
+  font-weight: 700 !important;
+  margin-top: 0 !important;
+  margin-bottom: clamp(24px, 4vh, 36px) !important;
+  color: #ffffff !important;
+  letter-spacing: -0.02em;
   text-align: center;
-  letter-spacing: -0.01em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
 }
 
-/* Flex row for ALL profile items (Profiles, Add, Edit) overlapping sheet top edge */
 .profiles-screen-hero .profiles-grid {
   display: flex !important;
   flex-wrap: wrap !important;
   justify-content: center !important;
   align-items: flex-start !important;
-  gap: 16px 20px !important;
+  gap: clamp(16px, 3.5vw, 28px) !important;
   width: 100% !important;
-  max-width: 560px !important;
-  margin: -38px auto 0 !important;
+  max-width: 600px !important;
+  margin: 0 auto !important;
   position: relative;
   z-index: 5;
 }
 
 .profiles-screen-hero .profile-item {
-  width: 76px !important;
+  width: clamp(84px, 20vw, 110px) !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
-  gap: 6px !important;
+  gap: 10px !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  cursor: pointer !important;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.profiles-screen-hero .profile-item:hover,
+.profiles-screen-hero .profile-item:focus-visible {
+  transform: translateY(-4px) scale(1.05);
+}
+
+.profiles-screen-hero .profile-item:active {
+  transform: scale(0.96);
 }
 
 .profiles-screen-hero .profile-avatar {
-  width: 76px !important;
-  height: 76px !important;
+  width: 100% !important;
+  height: auto !important;
   aspect-ratio: 1 !important;
   border-radius: 20px !important;
-  border: none !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+  border: 2px solid transparent !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+  overflow: hidden !important;
+  position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Solid rounded dark card for Add and Edit buttons */
+.profiles-screen-hero .profile-item:hover .profile-avatar,
+.profiles-screen-hero .profile-item:focus-visible .profile-avatar {
+  border-color: rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8) !important;
+}
+
 .profiles-screen-hero .avatar-add {
-  border: none !important;
-  background-color: rgba(255, 255, 255, 0.14) !important;
+  border: 2px dashed rgba(255, 255, 255, 0.3) !important;
+  background-color: rgba(255, 255, 255, 0.09) !important;
   color: #ffffff !important;
   border-radius: 20px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .profiles-screen-hero .avatar-add:hover {
-  background-color: rgba(255, 255, 255, 0.24) !important;
-  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
 }
 
 .profiles-screen-hero .avatar-add.avatar-edit-active {
-  background-color: rgba(229, 9, 20, 0.35) !important;
+  background-color: rgba(229, 9, 20, 0.3) !important;
+  border-color: #ff453a !important;
   color: #ff453a !important;
 }
 
 .profiles-screen-hero .profile-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
-  margin-top: 1px;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+  margin-top: 2px !important;
   text-align: center;
-}
-
-/* Desktop profile chooser overlay matching reference image */
-@media (min-width: 900px) {
-  .profiles-screen-hero .profiles-backdrop {
-    height: 100% !important;
-  }
-
-  .profiles-screen-hero .profiles-backdrop-fade {
-    background:
-      radial-gradient(130% 90% at 50% 50%,
-        rgba(0, 0, 0, 0.1) 0%,
-        rgba(0, 0, 0, 0.5) 100%),
-      linear-gradient(180deg,
-        rgba(0, 0, 0, 0.3) 0%,
-        rgba(0, 0, 0, 0.05) 40%,
-        rgba(0, 0, 0, 0.65) 100%) !important;
-  }
-
-  .profiles-screen-hero .profiles-container {
-    justify-content: flex-end !important;
-    align-items: center !important;
-    padding-bottom: 34px !important;
-  }
-
-  .profiles-sheet-container {
-    width: auto !important;
-    min-width: 560px !important;
-    max-width: 780px !important;
-    background: rgba(18, 18, 20, 0.94) !important;
-    backdrop-filter: blur(28px) !important;
-    -webkit-backdrop-filter: blur(28px) !important;
-    border-radius: 28px !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    padding: 0 42px 22px !important;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85) !important;
-    margin-top: 54px !important;
-  }
-
-  .profiles-screen-hero .profiles-grid {
-    margin-top: -54px !important;
-    gap: 20px 32px !important;
-  }
-
-  .profiles-screen-hero .profile-item {
-    width: 108px !important;
-    gap: 8px !important;
-  }
-
-  .profiles-screen-hero .profile-avatar {
-    width: 108px !important;
-    height: 108px !important;
-    border-radius: 26px !important;
-  }
-
-  .profiles-screen-hero .profiles-title {
-    margin-top: 18px !important;
-    margin-bottom: 4px !important;
-    font-size: 15px !important;
-  }
-
-  .profiles-screen-hero .profile-name {
-    font-size: 15px !important;
-  }
-}
-
-/* No back button on the profile chooser (it's the entry screen). */
-.profiles-screen-hero .profiles-header {
-  display: none !important;
+  text-transform: capitalize;
+  letter-spacing: -0.01em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ==========================================================================

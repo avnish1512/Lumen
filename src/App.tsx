@@ -3622,7 +3622,7 @@ function App() {
       className={`app-shell ${designMode}-theme ${navScrolled ? 'nav-scrolled' : ''}`}
       style={appShellStyle}
     >
-      {showSplash && (
+      {showSplash && screen !== 'profiles' && screen !== 'login' && (
         <SplashScreen
           onFinish={() => {
             try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
@@ -10140,6 +10140,8 @@ function ProfilesScreen({
 
       <div className="profiles-container">
         <div className="profiles-sheet-container">
+          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : "Who's Watching?"}</h1>
+
           <div className="profiles-grid">
             {profiles.map((profile) => (
               <button 
@@ -10206,8 +10208,6 @@ function ProfilesScreen({
               <span className="profile-name">{isManaging ? 'Done' : 'Edit'}</span>
             </button>
           </div>
-
-          <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : 'Choose your profile'}</h1>
         </div>
       </div>
     </section>
