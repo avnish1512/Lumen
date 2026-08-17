@@ -436,6 +436,7 @@ const searchCategories = [
 
 function isStreamProvider(value: string | null): value is StreamProvider {
   return (
+    value === 'nhdapi' ||
     value === 'rivestream' ||
     value === 'vidsync' ||
     value === 'multiembed-vip' ||
@@ -6627,7 +6628,7 @@ function WatchScreen({
       movie.genres.includes('Animation') ||
       designMode === 'netflix')
 
-  const animeProviderIds: StreamProvider[] = ['megaplay', 'megabuzz']
+  const animeProviderIds: StreamProvider[] = ['nhdapi', 'megaplay', 'megabuzz']
 
   const activeProviderId = isJavVideo
     ? 'apijav'
@@ -6636,12 +6637,12 @@ function WatchScreen({
       : isHentai
         ? 'oceanplay'
         : isAnimeMovie
-          ? animeProviderIds.includes(streamProvider)
+          ? (streamProvider === 'nhdapi' || animeProviderIds.includes(streamProvider) || streamProvider === 'vidking')
             ? streamProvider
-            : 'megaplay'
-          : animeProviderIds.includes(streamProvider)
-            ? 'vidking'
-            : streamProvider
+            : 'nhdapi'
+          : (streamProvider === 'nhdapi' || !animeProviderIds.includes(streamProvider) || streamProvider === 'vidking')
+            ? streamProvider
+            : 'nhdapi'
 
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
   const hasEpisodes = Boolean(
@@ -7614,6 +7615,7 @@ function WatchScreen({
                               provider.id === 'phubplay'
                             )
                               return false
+                            if (provider.id === 'nhdapi') return true
                             const isAnimeProvider = animeProviderIds.includes(provider.id)
                             return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
                           })
@@ -7676,6 +7678,7 @@ function WatchScreen({
                               provider.id === 'phubplay'
                             )
                               return false
+                            if (provider.id === 'nhdapi') return true
                             const isAnimeProvider = animeProviderIds.includes(provider.id)
                             return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
                           })
@@ -8567,12 +8570,12 @@ function LoginScreen({
               <span className="account-badge">Member since 2025</span>
               <h2 className="account-plan">{planName}</h2>
               <p className="account-plan-sub">Next payment: 4 August 2026</p>
-              <p className="account-plan-email">
+              <div className="account-plan-email">
                 <span className="account-email-avatar">
                   {renderProfileAvatarMini(currentUser, profiles)}
                 </span>
                 {currentUser.email}
-              </p>
+              </div>
 
               <button
                 className="account-row account-card-row"
@@ -8647,12 +8650,12 @@ function LoginScreen({
             {accountTab === 'security' && (
               <div className="account-links">
                 <div className="account-card">
-                  <p className="account-plan-email">
+                  <div className="account-plan-email">
                     <span className="account-email-avatar">
                       {renderProfileAvatarMini(currentUser, profiles)}
                     </span>
                     {currentUser.email}
-                  </p>
+                  </div>
                   <p className="account-plan-sub">Password: ••••••••</p>
                 </div>
                 {isMainAccount(currentUser.email) && (

@@ -9,6 +9,7 @@ export type TmdbMatch = {
 }
 
 export type StreamProvider =
+  | 'nhdapi'
   | 'rivestream'
   | 'vidsync'
   | 'multiembed-vip'
@@ -108,6 +109,12 @@ const emptyMediaCollection: MediaCollection = {
 export const defaultStreamProvider: StreamProvider = 'rivestream'
 
 export const streamProviderOptions: StreamProviderOption[] = [
+  {
+    id: 'nhdapi',
+    name: 'NHD Stream',
+    logo: 'NHD',
+    description: 'Ad-Free · Movies, TV & Anime',
+  },
   {
     id: 'vidking',
     name: 'Vidking',
@@ -430,6 +437,44 @@ function buildSuperEmbedPlayerUrl(movie: Movie, preferredServer = '0') {
   return `/se_player.php?${params}`
 }
 
+export const NHD_API_KEY =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_NHD_API_KEY) ||
+  '0199408580445829daf06ffd9a18837d0ea05f3f1ba3e04b'
+
+function buildNhdUrl(movie: Movie): string {
+  const keyParam = NHD_API_KEY ? `?key=${encodeURIComponent(NHD_API_KEY)}` : ''
+
+  // 1. Anime with AniList ID
+  if (movie.anilistId) {
+    const episode = movie.streamEpisode ?? 1
+    return `https://nhdapi.com/anime/${encodeURIComponent(movie.anilistId)}/${episode}${keyParam}`
+  }
+
+  // 2. TV Show (TMDB / IMDb)
+  const isTv =
+    movie.tmdbType === 'tv' ||
+    movie.type === 'series' ||
+    Boolean(movie.streamSeason && movie.streamSeason > 0)
+  const mediaId = movie.tmdbId
+    ? String(movie.tmdbId)
+    : movie.id && movie.id.startsWith('tt')
+      ? movie.id
+      : ''
+
+  if (isTv && mediaId) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://nhdapi.com/tv/${encodeURIComponent(mediaId)}/${season}/${episode}${keyParam}`
+  }
+
+  // 3. Movie (TMDB / IMDb)
+  if (mediaId) {
+    return `https://nhdapi.com/movie/${encodeURIComponent(mediaId)}${keyParam}`
+  }
+
+  return ''
+}
+
 export type SeasonEpisode = {
   number: number
   name: string
@@ -615,6 +660,10 @@ export function buildStreamUrl(
     return provider === 'megabuzz'
       ? `https://megaplay.buzz/stream/ani/${movie.anilistId}/${ep}/${language}`
       : `https://vidnest.fun/anime/${movie.anilistId}/${ep}/${language}`
+  }
+
+  if (provider === 'nhdapi') {
+    return buildNhdUrl(movie)
   }
 
   if (!movie.tmdbId) {
