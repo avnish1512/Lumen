@@ -437,12 +437,51 @@ function buildSuperEmbedPlayerUrl(movie: Movie, preferredServer = '0') {
   return `/se_player.php?${params}`
 }
 
-export const NHD_API_KEY =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_NHD_API_KEY) ||
-  '0199408580445829daf06ffd9a18837d0ea05f3f1ba3e04b'
+export const DEFAULT_NHD_API_KEYS: string[] = [
+  '0199408580445829daf06ffd9a18837d0ea05f3f1ba3e04b',
+  '5aff87af6a0fb36e538cf65695f9e044f1130a7cf1234401',
+  'b3ee52b1b9fc1fa964fd93a1ce448323bc79dd79b57aecf3',
+  '82430d4ced4d3231dceff831d8a84dcb370f2ccdd2deecf0',
+  'b4e96a06d05f6913e34da245f56ae80943b76fb902219797',
+  '06f9331a602e176c56a3adc7b634d93954bed52798627895',
+  '52a1db710752fa558f4d7b3bd97d54ca618247079f3ea6f1',
+  'e43ef3e1a91882ff6060185c5255949f7bca24d4b12f81bd',
+  '44999a0868d7b24a08c156bcef9760d48acb000edec16d65',
+  '23355ed9a4fd13f8bfca53f87846fa1b3b1b457f595ee2ca',
+  '6441039ee184801c162d113d965f1a6f90b247613365d36a',
+  'b0f2397f0dde59f58ee5b9a25ecea1da7fb7c0ec8929677d',
+  '04f927103a8a7730a5a0ca2d1450a750769fd613e5f4f9b6',
+]
+
+let nhdKeyIndex = 0
+
+export function getNhdApiKey(): string {
+  const envKeysRaw =
+    (typeof import.meta !== 'undefined' &&
+      (import.meta.env?.VITE_NHD_API_KEYS ||
+        import.meta.env?.VITE_NHD_API_KEY ||
+        import.meta.env?.NHD_API_KEYS ||
+        import.meta.env?.NHD_API_KEY)) ||
+    ''
+
+  const envKeys = envKeysRaw
+    ? envKeysRaw
+        .split(',')
+        .map((k: string) => k.trim())
+        .filter(Boolean)
+    : []
+
+  const pool = envKeys.length > 0 ? envKeys : DEFAULT_NHD_API_KEYS
+  const key = pool[nhdKeyIndex % pool.length]
+  nhdKeyIndex = (nhdKeyIndex + 1) % pool.length
+  return key
+}
+
+export const NHD_API_KEY = DEFAULT_NHD_API_KEYS[0]
 
 function buildNhdUrl(movie: Movie): string {
-  const keyParam = NHD_API_KEY ? `?key=${encodeURIComponent(NHD_API_KEY)}` : ''
+  const apiKey = getNhdApiKey()
+  const keyParam = apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''
 
   // 1. Anime with AniList ID
   if (movie.anilistId) {
