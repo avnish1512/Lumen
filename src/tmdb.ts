@@ -9,7 +9,9 @@ export type TmdbMatch = {
 }
 
 export type StreamProvider =
+  | 'filmu'
   | 'nhdapi'
+  | 'yenime'
   | 'rivestream'
   | 'vidsync'
   | 'multiembed-vip'
@@ -110,10 +112,22 @@ export const defaultStreamProvider: StreamProvider = 'rivestream'
 
 export const streamProviderOptions: StreamProviderOption[] = [
   {
+    id: 'filmu',
+    name: 'Filmu',
+    logo: 'FM',
+    description: 'Movies, TV & Anime',
+  },
+  {
     id: 'nhdapi',
     name: 'NHD Stream',
     logo: 'NHD',
     description: 'Ad-Free · Movies, TV & Anime',
+  },
+  {
+    id: 'yenime',
+    name: 'Yenime',
+    logo: 'YN',
+    description: 'Anime · MAL ID',
   },
   {
     id: 'vidking',
@@ -514,6 +528,46 @@ function buildNhdUrl(movie: Movie): string {
   return ''
 }
 
+function buildYenimeUrl(movie: Movie): string {
+  const malId = movie.malId || (movie.anilistId ? movie.anilistId : '')
+  if (!malId) return ''
+  const episode = movie.streamEpisode ?? 1
+  return `https://api.yenime.net/anime/${encodeURIComponent(malId)}/${episode}?autoplay=true&color=e50914`
+}
+
+function buildFilmuUrl(movie: Movie): string {
+  // 1. Anime with AniList ID
+  if (movie.anilistId) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://embed.filmu.in/anime/${encodeURIComponent(movie.anilistId)}/${season}/${episode}`
+  }
+
+  // 2. TV Show (TMDB / IMDb)
+  const isTv =
+    movie.tmdbType === 'tv' ||
+    movie.type === 'series' ||
+    Boolean(movie.streamSeason && movie.streamSeason > 0)
+  const mediaId = movie.tmdbId
+    ? String(movie.tmdbId)
+    : movie.id && movie.id.startsWith('tt')
+      ? movie.id
+      : ''
+
+  if (isTv && mediaId) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://embed.filmu.in/tv/${encodeURIComponent(mediaId)}/${season}/${episode}`
+  }
+
+  // 3. Movie (TMDB / IMDb)
+  if (mediaId) {
+    return `https://embed.filmu.in/movie/${encodeURIComponent(mediaId)}`
+  }
+
+  return ''
+}
+
 export type SeasonEpisode = {
   number: number
   name: string
@@ -701,8 +755,16 @@ export function buildStreamUrl(
       : `https://vidnest.fun/anime/${movie.anilistId}/${ep}/${language}`
   }
 
+  if (provider === 'filmu') {
+    return buildFilmuUrl(movie)
+  }
+
   if (provider === 'nhdapi') {
     return buildNhdUrl(movie)
+  }
+
+  if (provider === 'yenime') {
+    return buildYenimeUrl(movie)
   }
 
   if (!movie.tmdbId) {

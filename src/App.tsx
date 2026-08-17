@@ -436,7 +436,9 @@ const searchCategories = [
 
 function isStreamProvider(value: string | null): value is StreamProvider {
   return (
+    value === 'filmu' ||
     value === 'nhdapi' ||
+    value === 'yenime' ||
     value === 'rivestream' ||
     value === 'vidsync' ||
     value === 'multiembed-vip' ||
@@ -6628,7 +6630,7 @@ function WatchScreen({
       movie.genres.includes('Animation') ||
       designMode === 'netflix')
 
-  const animeProviderIds: StreamProvider[] = ['nhdapi', 'megaplay', 'megabuzz']
+  const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'megaplay', 'megabuzz']
 
   const activeProviderId = isJavVideo
     ? 'apijav'
@@ -6637,12 +6639,12 @@ function WatchScreen({
       : isHentai
         ? 'oceanplay'
         : isAnimeMovie
-          ? (streamProvider === 'nhdapi' || animeProviderIds.includes(streamProvider) || streamProvider === 'vidking')
+          ? animeProviderIds.includes(streamProvider)
             ? streamProvider
-            : 'nhdapi'
-          : (streamProvider === 'nhdapi' || !animeProviderIds.includes(streamProvider) || streamProvider === 'vidking')
+            : 'filmu'
+          : (!animeProviderIds.includes(streamProvider) || streamProvider === 'filmu' || streamProvider === 'nhdapi')
             ? streamProvider
-            : 'nhdapi'
+            : 'filmu'
 
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
   const hasEpisodes = Boolean(
@@ -7615,9 +7617,8 @@ function WatchScreen({
                               provider.id === 'phubplay'
                             )
                               return false
-                            if (provider.id === 'nhdapi') return true
                             const isAnimeProvider = animeProviderIds.includes(provider.id)
-                            return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
+                            return isAnimeMovie ? isAnimeProvider : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
                           })
 
                   return filteredOptions.map((provider) => {
@@ -7678,9 +7679,8 @@ function WatchScreen({
                               provider.id === 'phubplay'
                             )
                               return false
-                            if (provider.id === 'nhdapi') return true
                             const isAnimeProvider = animeProviderIds.includes(provider.id)
-                            return isAnimeMovie ? isAnimeProvider : provider.id === 'vidking' || !isAnimeProvider
+                            return isAnimeMovie ? isAnimeProvider : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
                           })
 
                   return filteredOptions.map((provider) => {
