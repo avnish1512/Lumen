@@ -467,9 +467,7 @@ export const DEFAULT_NHD_API_KEYS: string[] = [
   '04f927103a8a7730a5a0ca2d1450a750769fd613e5f4f9b6',
 ]
 
-let nhdKeyIndex = 0
-
-export function getNhdApiKey(): string {
+export function getNhdApiKey(seed?: string | number): string {
   const envKeysRaw =
     (typeof import.meta !== 'undefined' &&
       (import.meta.env?.VITE_NHD_API_KEYS ||
@@ -486,15 +484,25 @@ export function getNhdApiKey(): string {
     : []
 
   const pool = envKeys.length > 0 ? envKeys : DEFAULT_NHD_API_KEYS
-  const key = pool[nhdKeyIndex % pool.length]
-  nhdKeyIndex = (nhdKeyIndex + 1) % pool.length
-  return key
+  if (pool.length === 0) return ''
+
+  if (seed !== undefined && seed !== null && seed !== '') {
+    const str = String(seed)
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash * 31 + str.charCodeAt(i)) >>> 0
+    }
+    return pool[hash % pool.length]
+  }
+
+  return pool[0]
 }
 
 export const NHD_API_KEY = DEFAULT_NHD_API_KEYS[0]
 
 function buildNhdUrl(movie: Movie): string {
-  const apiKey = getNhdApiKey()
+  const seed = movie.anilistId || movie.tmdbId || movie.id || movie.title || 'default'
+  const apiKey = getNhdApiKey(seed)
   const keyParam = apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''
 
   // 1. Anime with AniList ID

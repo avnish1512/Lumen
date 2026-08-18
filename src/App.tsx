@@ -6827,15 +6827,22 @@ function WatchScreen({
     ? (watchAnimeSeasons.find((s) => s.season === season) || watchAnimeSeasons[season - 1])
     : undefined
 
-  const streamMovie: Movie = {
-    ...movie,
-    anilistId: activeWatchAnimeSeason?.anilistId ?? movie.anilistId,
-    streamEpisode: episode,
-    streamSeason: season,
-    streamLanguage: language,
-  }
+  const streamMovie: Movie = useMemo(
+    () => ({
+      ...movie,
+      anilistId: activeWatchAnimeSeason?.anilistId ?? movie.anilistId,
+      streamEpisode: episode,
+      streamSeason: season,
+      streamLanguage: language,
+    }),
+    [movie, activeWatchAnimeSeason?.anilistId, episode, season, language],
+  )
 
-  const streamUrl = buildStreamUrl(streamMovie, activeProviderId)
+  const streamUrl = useMemo(
+    () => buildStreamUrl(streamMovie, activeProviderId),
+    [streamMovie, activeProviderId],
+  )
+
   const currentProvider =
     streamProviderOptions.find((provider) => provider.id === activeProviderId) ??
     streamProviderOptions[0]
