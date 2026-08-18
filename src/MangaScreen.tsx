@@ -11,7 +11,7 @@ import {
   type MangaChapter,
   type MangaSummary,
 } from './manga'
-import { ProfileMenu, renderProfileAvatarMini, type UserInfo, type UserProfile } from './App'
+import { ProfileMenu, ProfileAvatarMini, type UserInfo, type UserProfile } from './App'
 
 type MangaScreenProps = {
   onBack: () => void
@@ -165,7 +165,7 @@ export function MangaScreen({
         title="Profile"
         onClick={onProfile}
       >
-        {renderProfileAvatarMini(currentUser, profiles)}
+        <ProfileAvatarMini currentUser={currentUser} profiles={profiles} />
       </button>
     )
   }

@@ -150,6 +150,7 @@ import { topPosterUrl, hasTopPoster, proxiedAnimeImage } from './posters'
 import { fetchTrailerYoutubeId } from './kinocheck'
 import { WatchRecommenderEntry } from './watch-recommender/WatchRecommender'
 import { SplashScreen } from './SplashScreen'
+import { ErrorBoundary } from './ErrorBoundary'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -365,7 +366,16 @@ function readProfilesFor(user: UserInfo | null): UserProfile[] {
 function readCurrentUser(): UserInfo | null {
   try {
     const saved = window.localStorage.getItem(currentUserKey)
-    return saved ? (JSON.parse(saved) as UserInfo) : null
+    if (!saved) return null
+    const parsed = JSON.parse(saved)
+    if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+      return {
+        name: parsed.name.trim() || 'User',
+        email: typeof parsed.email === 'string' ? parsed.email.trim() : '',
+        avatarColor: typeof parsed.avatarColor === 'string' && parsed.avatarColor.trim() ? parsed.avatarColor : 'red',
+      }
+    }
+    return null
   } catch {
     return null
   }
@@ -1622,9 +1632,17 @@ function App() {
   // Never show intro video during login or on profile select screen.
   const [showSplash, setShowSplash] = useState(() => {
     try {
+      // The full-screen video splash can remain black in iOS WKWebView while
+      // the app is loading. Mobile goes straight to the usable screen.
+      if (window.matchMedia?.('(max-width: 899px)').matches) return false
       const savedUser = readCurrentUser()
       if (!savedUser) return false
-      return !window.sessionStorage.getItem('lumen.splash-done')
+      const restoredScreen = readActiveScreen()
+      return (
+        restoredScreen !== 'login' &&
+        restoredScreen !== 'profiles' &&
+        !window.sessionStorage.getItem('lumen.splash-done')
+      )
     } catch {
       return false
     }
@@ -1636,7 +1654,7 @@ function App() {
       return 'login'
     }
     const restored = readActiveScreen()
-    if (restored && restored !== 'login' && restored !== 'profiles') {
+    if (restored) {
       if (restored === 'detail' || restored === 'watch') {
         const movie = readSelectedMovie()
         if (movie) return restored
@@ -1655,6 +1673,11 @@ function App() {
   const [designMode, setDesignMode] = useState<'apple' | 'netflix'>(() => {
     return (window.localStorage.getItem('omdb.apple-tv-style.designMode') as 'apple' | 'netflix') || 'apple'
   })
+
+  const finishSplash = useCallback(() => {
+    try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
+    setShowSplash(false)
+  }, [])
 
   const toggleDesignMode = () => {
     const nextMode = designMode === 'apple' ? 'netflix' : 'apple'
@@ -3663,43 +3686,88 @@ function App() {
       style={appShellStyle}
     >
       {showSplash && screen !== 'login' && screen !== 'profiles' && (
-        <SplashScreen
-          onFinish={() => {
-            try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
-            setShowSplash(false)
-          }}
-        />
+        <SplashScreen onFinish={finishSplash} />
       )}
       <PullToRefresh containerRef={appShellRef} />
       {screen === 'home' && (
-        featuredMovie ? (
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          {featuredMovie ? (
+            <HomeScreen
+              screen={screen}
+              featuredMovie={designMode === 'netflix' ? (animeHeroMovie ?? featuredMovie) : featuredMovie}
+              movies={designMode === 'netflix' ? anime : movies}
+              tvShows={designMode === 'netflix' ? anime : tvShows}
+              movieCollection={designMode === 'netflix'
+                ? (animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection)
+                : movieCollection}
+              tvShowCollection={designMode === 'netflix'
+                ? (animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection)
+                : tvShowCollection}
+              tmdbHomeRails={designMode === 'netflix' ? {
+                featuredMovies: anime.slice(0, 6),
+                featuredTvShows: (animeExtras.tvCollection.top.length ? animeExtras.tvCollection.top : anime).slice(0, 6),
+                movieCollection: animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection,
+                newReleases: animeExtras.newReleases.length ? animeExtras.newReleases : (animeCollection.top || []),
+                trendingNow: animeExtras.trending.length ? animeExtras.trending : (animeCollection.adventure || []),
+                tvShowCollection: animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection,
+              } : tmdbHomeRails}
+              continueMovies={designMode === 'netflix' ? continueWatchingAnime : continueWatchingLumen}
+              savedMovies={savedMovies}
+              likedMovies={likedList}
+              onOpenDetail={openDetail}
+              onPlay={openWatch}
+              onSave={toggleSaved}
+              onSearch={() => setScreen('search')}
+              onSelectHero={setHomeHeroMovie}
+              invites={incomingInvites}
+              onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+              onDismissInvite={dismissInvite}
+              onMarkWatched={markWatchedMovie}
+              onRemoveContinue={removeContinueMovie}
+              onRemoveWatchlist={removeWatchlistMovie}
+              currentUser={currentUser}
+              onProfile={openProfileOrLogin}
+              onSelectProfile={switchToProfile}
+              onManageProfiles={openManageProfiles}
+              onTransferProfile={openLord}
+              onAccount={openProfileOrLogin}
+              onHelp={openHelpCenter}
+              onSignOut={signOut}
+              onSetLordPin={() => setShowSetLordPin(true)}
+              profiles={profiles}
+              designMode={designMode}
+            />
+          ) : (
+            <LoadingScreen />
+          )}
+        </ErrorBoundary>
+      )}
+
+      {screen === 'drama' && (featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime)) && (
+        <ErrorBoundary onReset={() => setScreen('home')}>
           <HomeScreen
             screen={screen}
-            featuredMovie={designMode === 'netflix' ? (animeHeroMovie ?? featuredMovie) : featuredMovie}
-            movies={designMode === 'netflix' ? anime : movies}
-            tvShows={designMode === 'netflix' ? anime : tvShows}
-            movieCollection={designMode === 'netflix'
-              ? (animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection)
-              : movieCollection}
-            tvShowCollection={designMode === 'netflix'
-              ? (animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection)
-              : tvShowCollection}
-            tmdbHomeRails={designMode === 'netflix' ? {
-              featuredMovies: anime.slice(0, 6),
-              featuredTvShows: (animeExtras.tvCollection.top.length ? animeExtras.tvCollection.top : anime).slice(0, 6),
-              movieCollection: animeExtras.movieCollection.top.length ? animeExtras.movieCollection : animeCollection,
-              newReleases: animeExtras.newReleases.length ? animeExtras.newReleases : (animeCollection.top || []),
-              trendingNow: animeExtras.trending.length ? animeExtras.trending : (animeCollection.adventure || []),
-              tvShowCollection: animeExtras.tvCollection.top.length ? animeExtras.tvCollection : animeCollection,
-            } : tmdbHomeRails}
-            continueMovies={designMode === 'netflix' ? continueWatchingAnime : continueWatchingLumen}
+            featuredMovie={(featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime))!}
+            movies={dramaList}
+            tvShows={dramaList}
+            movieCollection={dramaMovieCollection}
+            tvShowCollection={dramaTvCollection}
+            tmdbHomeRails={{
+              featuredMovies: (dramaRails.kDrama.length ? dramaRails.kDrama : dramaList).slice(0, 6),
+              featuredTvShows: (dramaRails.cDrama.length ? dramaRails.cDrama : dramaList).slice(0, 6),
+              movieCollection: dramaMovieCollection,
+              newReleases: dramaRails.newReleases.length ? dramaRails.newReleases : (dramaCollection.top || []),
+              trendingNow: dramaRails.romCom.length ? dramaRails.romCom : (dramaCollection.adventure || []),
+              tvShowCollection: dramaTvCollection,
+            }}
+            continueMovies={continueWatchingDrama}
             savedMovies={savedMovies}
             likedMovies={likedList}
             onOpenDetail={openDetail}
             onPlay={openWatch}
             onSave={toggleSaved}
             onSearch={() => setScreen('search')}
-            onSelectHero={setHomeHeroMovie}
+            onSelectHero={setDramaHeroMovie}
             invites={incomingInvites}
             onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
             onDismissInvite={dismissInvite}
@@ -3718,357 +3786,327 @@ function App() {
             profiles={profiles}
             designMode={designMode}
           />
-        ) : (
-          <LoadingScreen />
-        )
-      )}
-
-      {screen === 'drama' && (featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime)) && (
-        <HomeScreen
-          screen={screen}
-          featuredMovie={(featuredDramaMovie ?? dramaList[0] ?? movies.find((m) => !m.isAnime))!}
-          movies={dramaList}
-          tvShows={dramaList}
-          movieCollection={dramaMovieCollection}
-          tvShowCollection={dramaTvCollection}
-          tmdbHomeRails={{
-            featuredMovies: (dramaRails.kDrama.length ? dramaRails.kDrama : dramaList).slice(0, 6),
-            featuredTvShows: (dramaRails.cDrama.length ? dramaRails.cDrama : dramaList).slice(0, 6),
-            movieCollection: dramaMovieCollection,
-            newReleases: dramaRails.newReleases.length ? dramaRails.newReleases : (dramaCollection.top || []),
-            trendingNow: dramaRails.romCom.length ? dramaRails.romCom : (dramaCollection.adventure || []),
-            tvShowCollection: dramaTvCollection,
-          }}
-          continueMovies={continueWatchingDrama}
-          savedMovies={savedMovies}
-          likedMovies={likedList}
-          onOpenDetail={openDetail}
-          onPlay={openWatch}
-          onSave={toggleSaved}
-          onSearch={() => setScreen('search')}
-          onSelectHero={setDramaHeroMovie}
-          invites={incomingInvites}
-          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
-          onDismissInvite={dismissInvite}
-          onMarkWatched={markWatchedMovie}
-          onRemoveContinue={removeContinueMovie}
-          onRemoveWatchlist={removeWatchlistMovie}
-          currentUser={currentUser}
-          onProfile={openProfileOrLogin}
-          onSelectProfile={switchToProfile}
-          onManageProfiles={openManageProfiles}
-          onTransferProfile={openLord}
-          onAccount={openProfileOrLogin}
-          onHelp={openHelpCenter}
-          onSignOut={signOut}
-          onSetLordPin={() => setShowSetLordPin(true)}
-          profiles={profiles}
-          designMode={designMode}
-        />
+        </ErrorBoundary>
       )}
 
       {screen === 'livetv' && (
-        <LiveTvScreen
-          onSearch={() => setScreen('search')}
-          currentUser={currentUser}
-          onProfile={openProfileOrLogin}
-          profiles={profiles}
-          onSelectProfile={switchToProfile}
-          onManageProfiles={openManageProfiles}
-          onTransferProfile={openLord}
-          onAccount={openProfileOrLogin}
-          onHelp={openHelpCenter}
-          onSignOut={signOut}
-          onSetLordPin={() => setShowSetLordPin(true)}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <LiveTvScreen
+            onSearch={() => setScreen('search')}
+            currentUser={currentUser}
+            onProfile={openProfileOrLogin}
+            profiles={profiles}
+            onSelectProfile={switchToProfile}
+            onManageProfiles={openManageProfiles}
+            onTransferProfile={openLord}
+            onAccount={openProfileOrLogin}
+            onHelp={openHelpCenter}
+            onSignOut={signOut}
+            onSetLordPin={() => setShowSetLordPin(true)}
+          />
+        </ErrorBoundary>
       )}
 
       {screen === 'manga' && (
-        <MangaScreen
-          onBack={() => setScreen('home')}
-          currentUser={currentUser}
-          onProfile={openProfileOrLogin}
-          profiles={profiles}
-          onSelectProfile={switchToProfile}
-          onManageProfiles={openManageProfiles}
-          onTransferProfile={openLord}
-          onAccount={openProfileOrLogin}
-          onHelp={openHelpCenter}
-          onSignOut={signOut}
-          onSetLordPin={() => setShowSetLordPin(true)}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <MangaScreen
+            onBack={() => setScreen('home')}
+            currentUser={currentUser}
+            onProfile={openProfileOrLogin}
+            profiles={profiles}
+            onSelectProfile={switchToProfile}
+            onManageProfiles={openManageProfiles}
+            onTransferProfile={openLord}
+            onAccount={openProfileOrLogin}
+            onHelp={openHelpCenter}
+            onSignOut={signOut}
+            onSetLordPin={() => setShowSetLordPin(true)}
+          />
+        </ErrorBoundary>
       )}
 
       {(screen === 'movies' || screen === 'tv' || screen === 'anime') && (
-        <BrowseScreen
-          key={screen}
-          mode={screen}
-          movies={designMode === 'netflix' ? anime : (screen === 'anime' ? anime : screen === 'tv' ? tvShows : movies)}
-          collection={designMode === 'netflix' ? animeCollection : (screen === 'anime' ? animeCollection : screen === 'tv' ? tvShowCollection : movieCollection)}
-          featuredMovie={designMode === 'netflix' ? (anime[0] || featuredMovie) : (screen === 'anime' ? anime[0] : screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0])}
-          savedMovies={savedMovies}
-          likedMovies={likedList}
-          invites={incomingInvites}
-          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
-          onDismissInvite={dismissInvite}
-          onOpenDetail={openDetail}
-          onPlay={openWatch}
-          onSave={toggleSaved}
-          currentUser={currentUser}
-          onProfile={openProfileOrLogin}
-          onSelectProfile={switchToProfile}
-          onManageProfiles={openManageProfiles}
-          onTransferProfile={openLord}
-          onAccount={openProfileOrLogin}
-          onHelp={openHelpCenter}
-          onSignOut={signOut}
-          onSetLordPin={() => setShowSetLordPin(true)}
-          profiles={profiles}
-          onSearch={() => setScreen('search')}
-          designMode={designMode}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <BrowseScreen
+            key={screen}
+            mode={screen}
+            movies={designMode === 'netflix' ? anime : (screen === 'anime' ? anime : screen === 'tv' ? tvShows : movies)}
+            collection={designMode === 'netflix' ? animeCollection : (screen === 'anime' ? animeCollection : screen === 'tv' ? tvShowCollection : movieCollection)}
+            featuredMovie={designMode === 'netflix' ? (anime[0] || featuredMovie) : (screen === 'anime' ? anime[0] : screen === 'tv' ? featuredTvShow ?? tvShows[0] : featuredMovie ?? movies[0])}
+            savedMovies={savedMovies}
+            likedMovies={likedList}
+            invites={incomingInvites}
+            onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+            onDismissInvite={dismissInvite}
+            onOpenDetail={openDetail}
+            onPlay={openWatch}
+            onSave={toggleSaved}
+            currentUser={currentUser}
+            onProfile={openProfileOrLogin}
+            onSelectProfile={switchToProfile}
+            onManageProfiles={openManageProfiles}
+            onTransferProfile={openLord}
+            onAccount={openProfileOrLogin}
+            onHelp={openHelpCenter}
+            onSignOut={signOut}
+            onSetLordPin={() => setShowSetLordPin(true)}
+            profiles={profiles}
+            onSearch={() => setScreen('search')}
+            designMode={designMode}
+          />
+        </ErrorBoundary>
       )}
 
       {screen === 'detail' && selectedMovie && (
-        <DetailScreen
-          movie={selectedMovie}
-          relatedMovies={relatedMedia}
-          isSaved={hasMatchingMovie(
-            savedMovies,
-            selectedMovie,
-            (savedMovie) => savedMovie,
-          )}
-          isLoading={detailLoading}
-          error={detailError}
-          onBack={() => setScreen(detailBackScreen)}
-          onOpenDetail={openDetail}
-          onPlay={(provider) => {
-            if (provider) {
-              setStreamProvider(provider)
-            }
-            openWatch(selectedMovie)
-          }}
-          onPlayEpisode={(season, episode, seasonAnilistId) => {
-            openWatch({
-              ...selectedMovie,
-              anilistId: seasonAnilistId ?? selectedMovie.anilistId,
-              tmdbType: selectedMovie.tmdbType ?? 'tv',
-              streamSeason: season,
-              streamEpisode: episode,
-            })
-          }}
-          onSave={() => toggleSaved(selectedMovie)}
-          isLiked={hasMatchingMovie(
-            likedMovies,
-            selectedMovie,
-            (likedMovie) => likedMovie,
-          )}
-          onToggleLike={() => toggleLiked(selectedMovie)}
-          onShare={shareSelectedMovie}
-          onBff={() => openBff(selectedMovie)}
-          onOpenPoster={openSelectedPoster}
-          designMode={designMode}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <DetailScreen
+            movie={selectedMovie}
+            relatedMovies={relatedMedia}
+            isSaved={hasMatchingMovie(
+              savedMovies,
+              selectedMovie,
+              (savedMovie) => savedMovie,
+            )}
+            isLoading={detailLoading}
+            error={detailError}
+            onBack={() => setScreen(detailBackScreen)}
+            onOpenDetail={openDetail}
+            onPlay={(provider) => {
+              if (provider) {
+                setStreamProvider(provider)
+              }
+              openWatch(selectedMovie)
+            }}
+            onPlayEpisode={(season, episode, seasonAnilistId) => {
+              openWatch({
+                ...selectedMovie,
+                anilistId: seasonAnilistId ?? selectedMovie.anilistId,
+                tmdbType: selectedMovie.tmdbType ?? 'tv',
+                streamSeason: season,
+                streamEpisode: episode,
+              })
+            }}
+            onSave={() => toggleSaved(selectedMovie)}
+            isLiked={hasMatchingMovie(
+              likedMovies,
+              selectedMovie,
+              (likedMovie) => likedMovie,
+            )}
+            onToggleLike={() => toggleLiked(selectedMovie)}
+            onShare={shareSelectedMovie}
+            onBff={() => openBff(selectedMovie)}
+            onOpenPoster={openSelectedPoster}
+            designMode={designMode}
+          />
+        </ErrorBoundary>
       )}
 
       {screen === 'watch' && selectedMovie && (
-        <WatchScreen
-          movie={selectedMovie}
-          relatedMovies={relatedMedia}
-          isSaved={hasMatchingMovie(
-            savedMovies,
-            selectedMovie,
-            (savedMovie) => savedMovie,
-          )}
-          isLiked={hasMatchingMovie(
-            likedMovies,
-            selectedMovie,
-            (likedMovie) => likedMovie,
-          )}
-          onToggleLike={() => toggleLiked(selectedMovie)}
-          streamLoading={streamLoading}
-          streamError={streamError}
-          streamProvider={streamProvider}
-          streamSandboxEnabled={streamSandboxEnabled}
-          onBack={() => {
-            if (
-              detailBackScreen === 'lord' ||
-              (selectedMovie &&
-                (selectedMovie.id.startsWith('phub-') ||
-                  selectedMovie.label === 'PHub' ||
-                  selectedMovie.hentaiSlug?.startsWith('phub-')))
-            ) {
-              setScreen('lord')
-            } else if (detailBackScreen) {
-              setScreen(detailBackScreen)
-            } else {
-              setScreen('home')
-            }
-          }}
-          onSave={() => toggleSaved(selectedMovie)}
-          onStartWatching={markContinueWatching}
-          onStreamSandboxChange={setStreamSandboxEnabled}
-          onStreamProviderChange={setStreamProvider}
-          onSelectMovie={openWatch}
-          designMode={designMode}
-          activeParty={activeParty}
-          isScreenSharing={isScreenSharing}
-          remoteStream={remoteStream}
-          latestFrameUrl={latestFrameUrl}
-          onStartScreenShare={startScreenShare}
-          onStopScreenShare={stopScreenShare}
-          screenShareError={screenShareError}
-          currentUserEmail={currentUser?.email}
-          currentUser={currentUser}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <WatchScreen
+            movie={selectedMovie}
+            relatedMovies={relatedMedia}
+            isSaved={hasMatchingMovie(
+              savedMovies,
+              selectedMovie,
+              (savedMovie) => savedMovie,
+            )}
+            isLiked={hasMatchingMovie(
+              likedMovies,
+              selectedMovie,
+              (likedMovie) => likedMovie,
+            )}
+            onToggleLike={() => toggleLiked(selectedMovie)}
+            streamLoading={streamLoading}
+            streamError={streamError}
+            streamProvider={streamProvider}
+            streamSandboxEnabled={streamSandboxEnabled}
+            onBack={() => {
+              if (
+                detailBackScreen === 'lord' ||
+                (selectedMovie &&
+                  (selectedMovie.id.startsWith('phub-') ||
+                    selectedMovie.label === 'PHub' ||
+                    selectedMovie.hentaiSlug?.startsWith('phub-')))
+              ) {
+                setScreen('lord')
+              } else if (detailBackScreen) {
+                setScreen(detailBackScreen)
+              } else {
+                setScreen('home')
+              }
+            }}
+            onSave={() => toggleSaved(selectedMovie)}
+            onStartWatching={markContinueWatching}
+            onStreamSandboxChange={setStreamSandboxEnabled}
+            onStreamProviderChange={setStreamProvider}
+            onSelectMovie={openWatch}
+            designMode={designMode}
+            activeParty={activeParty}
+            isScreenSharing={isScreenSharing}
+            remoteStream={remoteStream}
+            latestFrameUrl={latestFrameUrl}
+            onStartScreenShare={startScreenShare}
+            onStopScreenShare={stopScreenShare}
+            screenShareError={screenShareError}
+            currentUserEmail={currentUser?.email}
+            currentUser={currentUser}
+          />
+        </ErrorBoundary>
       )}
 
       {screen === 'search' && (
-        <SearchScreen
-          query={searchQuery}
-          results={searchResults}
-          categoryTiles={searchCategoryTiles}
-          loading={searchLoading}
-          error={searchError}
-          onQueryChange={setSearchQuery}
-          onSearch={performSearch}
-          onClear={handleClearSearch}
-          onOpenDetail={openDetail}
-          onClose={() => setScreen('home')}
-          designMode={designMode}
-          searchRecommendations={
-            designMode === 'netflix'
-              ? searchMode === 'drama'
-                ? dramaList.length
-                  ? dramaList.slice(0, 18)
-                  : searchRecommendations
-                : anime.length
-                  ? anime.slice(0, 18)
-                  : searchRecommendations
-              : searchRecommendations
-          }
-          searchMode={searchMode}
-          onSearchModeChange={setSearchMode}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <SearchScreen
+            query={searchQuery}
+            results={searchResults}
+            categoryTiles={searchCategoryTiles}
+            loading={searchLoading}
+            error={searchError}
+            onQueryChange={setSearchQuery}
+            onSearch={performSearch}
+            onClear={handleClearSearch}
+            onOpenDetail={openDetail}
+            onClose={() => setScreen('home')}
+            designMode={designMode}
+            searchRecommendations={
+              designMode === 'netflix'
+                ? searchMode === 'drama'
+                  ? dramaList.length
+                    ? dramaList.slice(0, 18)
+                    : searchRecommendations
+                  : anime.length
+                    ? anime.slice(0, 18)
+                    : searchRecommendations
+                : searchRecommendations
+            }
+            searchMode={searchMode}
+            onSearchModeChange={setSearchMode}
+          />
+        </ErrorBoundary>
       )}
 
       {screen === 'library' && (
-        <LibraryScreen
-          savedMovies={savedList}
-          likedMovies={likedList}
-          invites={incomingInvites}
-          onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
-          onDismissInvite={dismissInvite}
-          onOpenDetail={openDetail}
-          currentUser={currentUser}
-          onProfile={openProfileOrLogin}
-          onSelectProfile={switchToProfile}
-          onManageProfiles={openManageProfiles}
-          onTransferProfile={openLord}
-          onAccount={openProfileOrLogin}
-          onHelp={openHelpCenter}
-          onSignOut={signOut}
-          onSetLordPin={() => setShowSetLordPin(true)}
-          profiles={profiles}
-          onSearch={() => setScreen('search')}
-          designMode={designMode}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <LibraryScreen
+            savedMovies={savedList}
+            likedMovies={likedList}
+            invites={incomingInvites}
+            onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
+            onDismissInvite={dismissInvite}
+            onOpenDetail={openDetail}
+            currentUser={currentUser}
+            onProfile={openProfileOrLogin}
+            onSelectProfile={switchToProfile}
+            onManageProfiles={openManageProfiles}
+            onTransferProfile={openLord}
+            onAccount={openProfileOrLogin}
+            onHelp={openHelpCenter}
+            onSignOut={signOut}
+            onSetLordPin={() => setShowSetLordPin(true)}
+            profiles={profiles}
+            onSearch={() => setScreen('search')}
+            designMode={designMode}
+          />
+        </ErrorBoundary>
       )}
 
       {screen === 'login' && (
-        <LoginScreen
-          currentUser={currentUser}
-          onLogin={(user) => {
-            const sanitizedUser: UserInfo = {
-              name: user?.name?.trim() || (user?.email ? user.email.split('@')[0] : 'User'),
-              email: user?.email?.trim().toLowerCase() || '',
-              avatarColor: user?.avatarColor || 'red',
-            }
-            setTempUser(sanitizedUser)
-            const initialProfiles = readProfilesFor(sanitizedUser)
-            setProfiles(initialProfiles)
-            try {
-              window.localStorage.setItem(profilesKeyFor(sanitizedUser), JSON.stringify(initialProfiles))
-            } catch {
-              // ignore
-            }
-            try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
-            setShowSplash(false)
-            setScreen('profiles')
-          }}
-          onLogout={() => {
-            setCurrentUser(null)
-            setScreen('login')
-          }}
-          onBack={() => setScreen(loginBackScreen)}
-          onSwitchProfile={() => {
-            setTempUser(currentUser)
-            setScreen('profiles')
-          }}
-          onSelectProfile={switchToProfile}
-          onSetLordPin={() => setShowSetLordPin(true)}
-          profiles={profiles}
-          designMode={designMode}
-        />
+        <ErrorBoundary onReset={() => setScreen(loginBackScreen || 'home')}>
+          <LoginScreen
+            currentUser={currentUser}
+            onLogin={(user) => {
+              const sanitizedUser: UserInfo = {
+                name: user?.name?.trim() || (user?.email ? user.email.split('@')[0] : 'User'),
+                email: user?.email?.trim().toLowerCase() || '',
+                avatarColor: user?.avatarColor || 'red',
+              }
+              setTempUser(sanitizedUser)
+              const initialProfiles = readProfilesFor(sanitizedUser)
+              setProfiles(initialProfiles)
+              try {
+                window.localStorage.setItem(profilesKeyFor(sanitizedUser), JSON.stringify(initialProfiles))
+              } catch {
+                // ignore
+              }
+              try { window.sessionStorage.setItem('lumen.splash-done', '1') } catch { /* ignore */ }
+              setShowSplash(false)
+              setScreen('profiles')
+            }}
+            onLogout={() => {
+              setCurrentUser(null)
+              setScreen('login')
+            }}
+            onBack={() => setScreen(loginBackScreen)}
+            onSwitchProfile={() => {
+              setTempUser(currentUser)
+              setScreen('profiles')
+            }}
+            onSelectProfile={switchToProfile}
+            onSetLordPin={() => setShowSetLordPin(true)}
+            profiles={profiles}
+            designMode={designMode}
+          />
+        </ErrorBoundary>
       )}
 
       {screen === 'profiles' && (
-        <ProfilesScreen
-          profiles={profiles}
-          onSelectProfile={(profileName) => {
-            const list = Array.isArray(profiles) ? profiles : []
-            const matchedProfile = list.find((p) => p && p.name && p.name.toLowerCase() === profileName.toLowerCase())
-            const finalUser: UserInfo = {
-              name: profileName,
-              email: tempUser?.email || currentUser?.email || 'guest@apple-tv.com',
-              avatarColor: matchedProfile?.avatarColor || 'red',
-            }
-            setCurrentUser(finalUser)
-            try {
-              window.localStorage.setItem(currentUserKey, JSON.stringify(finalUser))
-            } catch {}
-            const targetScreen =
-              loginBackScreen && loginBackScreen !== 'profiles' && loginBackScreen !== 'login'
-                ? loginBackScreen
-                : 'home'
-            setScreen(targetScreen)
-            setTempUser(null)
-          }}
-          onAddProfile={handleAddProfile}
-          onEditProfile={handleEditProfile}
-          onDeleteProfile={handleDeleteProfile}
-          backdrops={[...tvShows, ...movies, ...anime]
-            .map((m) => m.hero || m.still || m.poster)
-            .filter((src): src is string => Boolean(src && src.startsWith('http')))
-            .slice(0, 12)}
-          mobileBackdrops={[...tvShows, ...movies, ...anime]
-            .map((m) => m.poster || m.still || m.hero)
-            .filter((src): src is string => Boolean(src && src.startsWith('http')))
-            .slice(0, 12)}
-          onBack={() => {
-            setScreen('login')
-            setTempUser(null)
-          }}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <ProfilesScreen
+            profiles={profiles}
+            onSelectProfile={(profileName) => {
+              const list = Array.isArray(profiles) ? profiles : []
+              const matchedProfile = list.find((p) => p && p.name && p.name.toLowerCase() === profileName.toLowerCase())
+              const finalUser: UserInfo = {
+                name: profileName,
+                email: tempUser?.email || currentUser?.email || 'guest@apple-tv.com',
+                avatarColor: matchedProfile?.avatarColor || 'red',
+              }
+              setCurrentUser(finalUser)
+              try {
+                window.localStorage.setItem(currentUserKey, JSON.stringify(finalUser))
+              } catch {}
+              const targetScreen =
+                loginBackScreen && loginBackScreen !== 'profiles' && loginBackScreen !== 'login'
+                  ? loginBackScreen
+                  : 'home'
+              setScreen(targetScreen)
+              setTempUser(null)
+            }}
+            onAddProfile={handleAddProfile}
+            onEditProfile={handleEditProfile}
+            onDeleteProfile={handleDeleteProfile}
+            backdrops={[...tvShows, ...movies, ...anime]
+              .map((m) => m.hero || m.still || m.poster)
+              .filter((src): src is string => Boolean(src && src.startsWith('http')))
+              .slice(0, 12)}
+            onBack={() => {
+              setScreen('login')
+              setTempUser(null)
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {screen === 'lord' && (
-        <LordScreen
-          movies={lordMovies}
-          rails={lordRails}
-          loading={lordLoading}
-          continueMovies={continueWatchingLord}
-          activeTab={activeLordTab}
-          onTabChange={setActiveLordTab}
-          onOpenDetail={openDetail}
-          onPlay={openWatch}
-          onSelectProfile={switchToProfile}
-          onBack={() => setScreen(lordBackScreen)}
-          onClearContinueWatching={clearLordContinueWatching}
-          onMarkWatched={markWatchedMovie}
-          onRemoveContinue={removeContinueMovie}
-          onRemoveWatchlist={removeWatchlistMovie}
-        />
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <LordScreen
+            movies={lordMovies}
+            rails={lordRails}
+            loading={lordLoading}
+            continueMovies={continueWatchingLord}
+            activeTab={activeLordTab}
+            onTabChange={setActiveLordTab}
+            onOpenDetail={openDetail}
+            onPlay={openWatch}
+            onSelectProfile={switchToProfile}
+            onBack={() => setScreen(lordBackScreen)}
+            onClearContinueWatching={clearLordContinueWatching}
+            onMarkWatched={markWatchedMovie}
+            onRemoveContinue={removeContinueMovie}
+            onRemoveWatchlist={removeWatchlistMovie}
+          />
+        </ErrorBoundary>
       )}
 
       {showLordPin && (
@@ -8456,14 +8494,21 @@ function LoginScreen({
     const designName = designMode === 'netflix' ? 'Anime' : 'Lumen'
     const planName = designMode === 'netflix' ? 'Anime Premium 4K' : 'Lumen Premium 4K'
 
+    const list = Array.isArray(profiles)
+      ? profiles.filter((p): p is UserProfile => Boolean(p && typeof p === 'object' && typeof p.name === 'string' && p.name.trim().length > 0))
+      : []
+    const currentName = currentUser?.name ? currentUser.name.trim().toLowerCase() : ''
+
     // Order for the account overview: the profile currently in use first, the
     // Kids profile always last, everything else in between.
-    const orderedProfiles = [...profiles].sort((a, b) => {
-      const aCurrent = a.name.toLowerCase() === currentUser.name.toLowerCase()
-      const bCurrent = b.name.toLowerCase() === currentUser.name.toLowerCase()
+    const orderedProfiles = [...list].sort((a, b) => {
+      const aName = a?.name ? a.name.trim().toLowerCase() : ''
+      const bName = b?.name ? b.name.trim().toLowerCase() : ''
+      const aCurrent = Boolean(aName && currentName && aName === currentName)
+      const bCurrent = Boolean(bName && currentName && bName === currentName)
       if (aCurrent !== bCurrent) return aCurrent ? -1 : 1
-      const aKids = a.avatarColor === 'kids'
-      const bKids = b.avatarColor === 'kids'
+      const aKids = a?.avatarColor === 'kids'
+      const bKids = b?.avatarColor === 'kids'
       if (aKids !== bKids) return aKids ? 1 : -1
       return 0
     })
@@ -8574,7 +8619,7 @@ function LoginScreen({
                 <span className="account-email-avatar">
                   {renderProfileAvatarMini(currentUser, profiles)}
                 </span>
-                {currentUser.email}
+                {currentUser?.email || ''}
               </div>
 
               <button
@@ -8654,11 +8699,11 @@ function LoginScreen({
                     <span className="account-email-avatar">
                       {renderProfileAvatarMini(currentUser, profiles)}
                     </span>
-                    {currentUser.email}
+                    {currentUser?.email || ''}
                   </div>
                   <p className="account-plan-sub">Password: ••••••••</p>
                 </div>
-                {isMainAccount(currentUser.email) && (
+                {isMainAccount(currentUser?.email) && (
                   <button
                     type="button"
                     className="account-row account-manage-toggle"
@@ -8678,7 +8723,7 @@ function LoginScreen({
                     />
                   </button>
                 )}
-                {isMainAccount(currentUser.email) && manageAccountsOpen && (
+                {isMainAccount(currentUser?.email) && manageAccountsOpen && (
                   <div className="account-card account-manage-inline">
                     <p className="account-manage-note">
                       Enter your admin password to unlock. Add, edit or remove
@@ -8793,7 +8838,7 @@ function LoginScreen({
                     </div>
                   </div>
                 )}
-                {isMainAccount(currentUser.email) && (
+                {isMainAccount(currentUser?.email) && (
                   <button
                     type="button"
                     className="account-row account-manage-toggle"
@@ -8813,7 +8858,7 @@ function LoginScreen({
                     />
                   </button>
                 )}
-                {isMainAccount(currentUser.email) && changeAdminOpen && (
+                {isMainAccount(currentUser?.email) && changeAdminOpen && (
                   <div className="account-card account-manage-inline">
                     <p className="account-manage-note">
                       Used to sign in as the main account and to unlock account
@@ -8843,7 +8888,7 @@ function LoginScreen({
                     {adminPwMsg && <p className="bff-status">{adminPwMsg}</p>}
                   </div>
                 )}
-                {isMainAccount(currentUser.email) && (
+                {isMainAccount(currentUser?.email) && (
                   <button
                     type="button"
                     className="account-row account-manage-toggle"
@@ -8863,7 +8908,7 @@ function LoginScreen({
                     />
                   </button>
                 )}
-                {isMainAccount(currentUser.email) && changeLordOpen && (
+                {isMainAccount(currentUser?.email) && changeLordOpen && (
                   <div className="account-card account-manage-inline">
                     <p className="account-manage-note">
                       The 4-digit PIN that unlocks the hidden Lord profile.
@@ -9139,6 +9184,16 @@ function LoginScreen({
       <div
         className="mobile-login"
         style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          height: '100%',
+          minHeight: '100%',
+          visibility: 'visible',
+          opacity: 1,
           backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.1) 42%, rgba(0,0,0,0.45) 74%, rgba(0,0,0,0.72) 100%), url(${loginBg})`,
         }}
       >
@@ -9365,15 +9420,20 @@ function getAvatarSrc(avatarKey: string | null | undefined): string {
   return avatarAssets[assetPath] ?? `/src/assets/${assetPath}`
 }
 
-export function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserProfile[] | null | undefined) {
-  if (!currentUser) return '👤'
+export function ProfileAvatarMini({
+  currentUser,
+  profiles,
+}: {
+  currentUser: UserInfo | null
+  profiles?: UserProfile[] | null | undefined
+}) {
+  if (!currentUser) return <>👤</>
   const list = Array.isArray(profiles) ? profiles : []
-  const matched = list.find((p) => p && p.name && currentUser.name && p.name.toLowerCase() === currentUser.name.toLowerCase())
-  const avatarColor = currentUser.avatarColor ?? matched?.avatarColor
-  
-  if (!avatarColor) {
-    return getInitials(currentUser.name)
-  }
+  const currentName = currentUser?.name ? currentUser.name.trim().toLowerCase() : ''
+  const matched = currentName
+    ? list.find((p) => p && p.name && p.name.trim().toLowerCase() === currentName)
+    : undefined
+  const avatarColor = currentUser?.avatarColor ?? matched?.avatarColor ?? 'red'
 
   if (avatarColor === 'kids') {
     return (
@@ -9413,11 +9473,15 @@ export function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: 
     >
       <img 
         src={getAvatarSrc(avatarColor)} 
-        alt={currentUser.name || 'User'} 
+        alt={currentUser?.name || 'User'} 
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       />
     </div>
   )
+}
+
+function renderProfileAvatarMini(currentUser: UserInfo | null, profiles: UserProfile[] | null | undefined) {
+  return <ProfileAvatarMini currentUser={currentUser} profiles={profiles} />
 }
 
 type ProfilesScreenProps = {
@@ -9428,7 +9492,6 @@ type ProfilesScreenProps = {
   onDeleteProfile: (name: string) => void
   onBack: () => void
   backdrops?: string[]
-  mobileBackdrops?: string[]
 }
 
 function ProfilesScreen({
@@ -9439,18 +9502,8 @@ function ProfilesScreen({
   onDeleteProfile,
   onBack,
   backdrops = [],
-  mobileBackdrops = [],
 }: ProfilesScreenProps) {
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 900)
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 900)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
-  const rawList = isMobile && mobileBackdrops.length > 0 ? mobileBackdrops : backdrops
-  const activeList = Array.isArray(rawList) && rawList.length > 0 ? rawList : []
+  const activeList = Array.isArray(backdrops) && backdrops.length > 0 ? backdrops : []
 
   // Rotating TV/movie key-art behind the profile chooser (changes every 5s).
   const [backdropIndex, setBackdropIndex] = useState(0)
@@ -9465,10 +9518,10 @@ function ProfilesScreen({
     return () => window.clearInterval(timer)
   }, [activeList.length])
 
-  const activeBackdrop = activeList[backdropIndex] ?? activeList[0] ?? null
-  const safeProfiles = Array.isArray(profiles) && profiles.length > 0
+  const safeProfiles = (Array.isArray(profiles) && profiles.length > 0
     ? profiles
-    : [{ name: 'Children', avatarColor: 'kids' }]
+    : [{ name: 'Children', avatarColor: 'kids' }]).filter((p): p is UserProfile => Boolean(p && typeof p === 'object' && typeof p.name === 'string' && p.name.trim().length > 0))
+  const displayProfiles = safeProfiles.length > 0 ? safeProfiles : [{ name: 'Children', avatarColor: 'kids' }]
   const [isAdding, setIsAdding] = useState(false)
   const [isChoosingIcon, setIsChoosingIcon] = useState(false)
   const [newName, setNewName] = useState('')
@@ -9489,7 +9542,7 @@ function ProfilesScreen({
       setError('Profile name cannot be empty.')
       return
     }
-    if (profiles.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
+    if (profiles.some((p) => p && p.name && p.name.toLowerCase() === trimmed.toLowerCase())) {
       setError('A profile with this name already exists.')
       return
     }
@@ -9509,7 +9562,7 @@ function ProfilesScreen({
       setError('Profile name cannot be empty.')
       return
     }
-    if (profiles.some((p) => p.name.toLowerCase() === trimmed.toLowerCase() && p.name !== editingProfile.name)) {
+    if (profiles.some((p) => p && p.name && p.name.toLowerCase() === trimmed.toLowerCase() && p.name !== editingProfile.name)) {
       setError('A profile with this name already exists.')
       return
     }
@@ -10177,20 +10230,18 @@ function ProfilesScreen({
   }
 
   return (
-    <section className="screen profiles-screen profiles-screen-hero">
-      {activeBackdrop && (
-        <div className="profiles-backdrop" aria-hidden="true">
-          {activeList.map((src, index) => (
-            <img
-              key={src}
-              src={src}
-              alt=""
-              className={index === backdropIndex ? 'active' : ''}
-            />
-          ))}
-          <div className="profiles-backdrop-fade" />
-        </div>
-      )}
+    <section className="screen profiles-screen">
+      <div className="profiles-backdrop" aria-hidden="true">
+        {activeList.map((src, index) => (
+          <img
+            key={src}
+            src={src}
+            alt=""
+            className={index === backdropIndex ? 'active' : ''}
+          />
+        ))}
+        <div className="profiles-backdrop-fade" />
+      </div>
 
       <header className="profiles-header">
         <button className="round-nav" type="button" onClick={onBack} title="Back">
@@ -10203,7 +10254,7 @@ function ProfilesScreen({
         <div className="profiles-sheet-container">
           <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : "Who's watching?"}</h1>
           <div className="profiles-grid">
-            {safeProfiles.map((profile) => (
+            {displayProfiles.map((profile) => (
               <button 
                 key={profile.name}
                 className="profile-item" 
@@ -13637,7 +13688,7 @@ export function ProfileMenu({
               <span className="profile-menu-avatar">
                 {renderProfileAvatarMini(currentUser, profiles)}
               </span>
-              <span className="profile-menu-name">{currentUser.name}</span>
+              <span className="profile-menu-name">{currentUser?.name || 'Account'}</span>
             </button>
           )}
 

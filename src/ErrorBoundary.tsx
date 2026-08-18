@@ -3,6 +3,8 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 interface ErrorBoundaryProps {
   children: ReactNode
   fallback?: ReactNode
+  title?: string
+  onReset?: () => void
 }
 
 interface ErrorBoundaryState {
@@ -22,6 +24,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('Lumen ErrorBoundary caught an unhandled exception:', error, errorInfo)
+  }
+
+  handleRetry = (): void => {
+    this.setState({ hasError: false, error: null })
+    if (this.props.onReset) {
+      this.props.onReset()
+    }
   }
 
   handleReload = (): void => {
@@ -131,18 +140,39 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               </pre>
             )}
 
-            <div style={{ display: 'flex', gap: '10px', width: '100%', marginTop: '8px' }}>
+            <div style={{ display: 'flex', gap: '10px', width: '100%', marginTop: '8px', flexWrap: 'wrap' }}>
+              {this.props.onReset ? (
+                <button
+                  type="button"
+                  onClick={this.handleRetry}
+                  style={{
+                    flex: '1 1 100%',
+                    height: '46px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    backgroundColor: '#e50914',
+                    color: '#fff',
+                    fontSize: '15px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'opacity 0.2s ease',
+                  }}
+                >
+                  Return to Home
+                </button>
+              ) : null}
+
               <button
                 type="button"
                 onClick={this.handleReload}
                 style={{
                   flex: 1,
-                  height: '46px',
+                  height: '44px',
                   borderRadius: '12px',
                   border: 'none',
                   backgroundColor: '#0071e3',
                   color: '#fff',
-                  fontSize: '15px',
+                  fontSize: '14px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'opacity 0.2s ease',
@@ -156,12 +186,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 onClick={this.handleResetToLogin}
                 style={{
                   flex: 1,
-                  height: '46px',
+                  height: '44px',
                   borderRadius: '12px',
                   border: '1px solid rgba(255, 255, 255, 0.2)',
                   backgroundColor: 'transparent',
                   color: 'rgba(255, 255, 255, 0.85)',
-                  fontSize: '15px',
+                  fontSize: '14px',
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
