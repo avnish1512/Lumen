@@ -54,6 +54,8 @@ import {
   fetchDevices,
   registerDevice,
   removeDevice,
+  removeOtherDevices,
+  type DeviceRecord,
 } from './_lib/devices-core.js'
 
 const inMemoryProfilesMap = new Map<string, StoredProfile[]>()
