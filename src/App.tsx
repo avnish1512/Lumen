@@ -2164,15 +2164,29 @@ function App() {
       '',
       nextScreen === 'home' ? window.location.pathname : `#${nextScreen}`,
     )
-    window.requestAnimationFrame(() => {
+    const resetScroll = () => {
       const shell = appShellRef.current
-
       if (shell) {
         shell.scrollTo({ top: 0, behavior: 'auto' })
+        shell.scrollTop = 0
       }
-
+      const root = document.getElementById('root')
+      if (root) {
+        root.scrollTo({ top: 0, behavior: 'auto' })
+        root.scrollTop = 0
+      }
+      if (document.documentElement) {
+        document.documentElement.scrollTo({ top: 0, behavior: 'auto' })
+        document.documentElement.scrollTop = 0
+      }
+      if (document.body) {
+        document.body.scrollTo({ top: 0, behavior: 'auto' })
+        document.body.scrollTop = 0
+      }
       window.scrollTo({ top: 0, behavior: 'auto' })
-    })
+    }
+    resetScroll()
+    window.requestAnimationFrame(resetScroll)
   }
 
   const openProfileOrLogin = () => {

@@ -8349,10 +8349,32 @@ a.watch-option-card {
   z-index: 9999;
 }
 
-/* The login is a fixed full-screen overlay — stop the page behind it from
-   adding its own (side) scrollbar so it reads as a single fixed page. */
-body:has(.login-screen) {
-  overflow: hidden;
+/* The login/account/profile views are fixed full-screen overlays — stop the page behind them from
+   adding its own scrollbar or causing scroll offset displacement on mobile. */
+html:has(.login-screen),
+body:has(.login-screen),
+#root:has(.login-screen),
+.app-shell:has(.login-screen),
+html:has(.account-screen),
+body:has(.account-screen),
+#root:has(.account-screen),
+.app-shell:has(.account-screen),
+html:has(.profiles-screen),
+body:has(.profiles-screen),
+#root:has(.profiles-screen),
+.app-shell:has(.profiles-screen),
+html:has(.choose-icon-screen),
+body:has(.choose-icon-screen),
+#root:has(.choose-icon-screen),
+.app-shell:has(.choose-icon-screen),
+html:has(.add-profile-screen),
+body:has(.add-profile-screen),
+#root:has(.add-profile-screen),
+.app-shell:has(.add-profile-screen) {
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
 }
 
 /* Background: rotating backroll images (dimmed a touch for card readability). */
@@ -9085,11 +9107,9 @@ body:has(.login-screen) {
   left: 0;
   right: 0;
   bottom: 0;
-  width: 100vw;
-  min-height: 100vh;
-  min-height: -webkit-fill-available;
+  width: 100%;
+  min-height: 100%;
   height: 100%;
-  height: 100dvh;
   background: #0b0b0f !important;
   background: radial-gradient(circle at 50% 25%, #181822 0%, #0b0b0f 85%) !important;
   color: #fff;
@@ -9100,9 +9120,6 @@ body:has(.login-screen) {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
-  -webkit-transform: translate3d(0, 0, 0);
-  transform: translate3d(0, 0, 0);
-  isolation: isolate;
 }
 
 .profiles-backdrop {
@@ -9118,8 +9135,6 @@ body:has(.login-screen) {
   overflow: hidden;
   background: radial-gradient(circle at 50% 25%, #181822 0%, #0b0b0f 85%);
   pointer-events: none;
-  -webkit-transform: translate3d(0, 0, 0);
-  transform: translate3d(0, 0, 0);
 }
 
 .profiles-backdrop img {
@@ -9179,9 +9194,9 @@ body:has(.login-screen) {
   width: 100%;
   max-width: 440px;
   background: #18181e;
-  background: rgba(24, 24, 30, 0.94);
-  backdrop-filter: blur(32px);
-  -webkit-backdrop-filter: blur(32px);
+  background: rgba(24, 24, 30, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   padding: 32px 24px 28px;
@@ -9193,8 +9208,6 @@ body:has(.login-screen) {
   margin: 0 auto;
   position: relative;
   z-index: 5;
-  -webkit-transform: translate3d(0, 0, 0);
-  transform: translate3d(0, 0, 0);
 }
 
 .profiles-title {
@@ -9611,10 +9624,8 @@ body:has(.login-screen) {
 .choose-icon-screen {
   position: fixed;
   inset: 0;
-  width: 100vw;
+  width: 100%;
   height: 100%;
-  height: 100dvh;
-  min-height: 100vh;
   background-color: #0e0e12;
   color: #fff;
   z-index: 10200;
@@ -19503,25 +19514,147 @@ body:has(.login-screen) {
   padding-bottom: 0 !important;
 }
 
-/* Keep the authentication surfaces out of the generic content reset above.
-   WebKit can retain their touch targets but skip painting nested fixed content
-   when a fullscreen screen is reset to an auto height. */
+/* Keep the authentication, profile, and account surfaces out of the generic content reset above.
+   Ensures complete visibility and proper layer compositing on iOS WebKit / iPhone without black screen issues. */
 @media (max-width: 899px) {
   .screen.login-screen,
   .screen.profiles-screen,
-  .screen.account-screen {
+  .screen.account-screen,
+  .screen.choose-icon-screen,
+  .screen.add-profile-screen {
     position: fixed !important;
     inset: 0 !important;
     width: 100% !important;
-    height: 100svh !important;
-    min-height: 100svh !important;
-    height: 100dvh !important;
-    min-height: 100dvh !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    max-height: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    isolation: isolate;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 9999 !important;
   }
 
+  /* Profiles Screen Mobile */
+  .screen.profiles-screen {
+    z-index: 10000 !important;
+    background: #0b0b0f !important;
+    background: radial-gradient(circle at 50% 25%, #181822 0%, #0b0b0f 85%) !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .screen.profiles-screen .profiles-backdrop {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 0 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+  }
+
+  .screen.profiles-screen .profiles-backdrop img {
+    visibility: visible !important;
+  }
+
+  .screen.profiles-screen .profiles-header {
+    position: relative !important;
+    z-index: 10 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
+  }
+
+  .screen.profiles-screen .profiles-container {
+    position: relative !important;
+    z-index: 5 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    min-height: calc(100% - 70px) !important;
+    width: 100% !important;
+  }
+
+  .screen.profiles-screen .profiles-sheet-container {
+    position: relative !important;
+    z-index: 5 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    background: #18181e !important;
+    background: rgba(24, 24, 30, 0.95) !important;
+  }
+
+  .screen.profiles-screen .profiles-title,
+  .screen.profiles-screen .profiles-grid,
+  .screen.profiles-screen .profile-item,
+  .screen.profiles-screen .profile-avatar-container,
+  .screen.profiles-screen .profile-avatar,
+  .screen.profiles-screen .profile-name {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Account Screen Mobile */
+  .screen.account-screen {
+    background: #000000 !important;
+  }
+
+  .screen.account-screen .account-shell {
+    min-height: 100% !important;
+    position: relative !important;
+    z-index: 1 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .screen.account-screen .account-sidebar,
+  .screen.account-screen .account-back,
+  .screen.account-screen .account-nav,
+  .screen.account-screen .account-nav-item,
+  .screen.account-screen .account-main,
+  .screen.account-screen .account-title,
+  .screen.account-screen .account-subtitle,
+  .screen.account-screen .account-card,
+  .screen.account-screen .account-badge,
+  .screen.account-screen .account-plan,
+  .screen.account-screen .account-plan-sub,
+  .screen.account-screen .account-plan-email,
+  .screen.account-screen .account-profiles-card,
+  .screen.account-screen .account-profile-tile,
+  .screen.account-screen .account-profile-name,
+  .screen.account-screen .account-plans,
+  .screen.account-screen .account-plan-card,
+  .screen.account-screen .account-links,
+  .screen.account-screen .account-row,
+  .screen.account-screen .account-stats {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Choose Icon & Add Profile Screens Mobile */
+  .screen.choose-icon-screen,
+  .screen.add-profile-screen {
+    z-index: 10200 !important;
+    background: #0e0e12 !important;
+  }
+
+  .screen.choose-icon-screen *,
+  .screen.add-profile-screen * {
+    visibility: visible !important;
+  }
+
+  /* Login Screen Mobile */
   .screen.login-screen .mobile-login {
     position: absolute;
     inset: 0;
@@ -19535,11 +19668,5 @@ body:has(.login-screen) {
   .screen.login-screen .mobile-login-panel {
     visibility: visible !important;
     opacity: 1 !important;
-  }
-
-  .screen.account-screen .account-shell {
-    min-height: 100%;
-    position: relative;
-    z-index: 1;
   }
 }
