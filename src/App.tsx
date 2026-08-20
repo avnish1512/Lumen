@@ -1095,7 +1095,14 @@ function continueRuntimeLabel(movie: Movie) {
   const runtime = compactRuntime(movie.runtime)
 
   if (isTvShow(movie)) {
-    return `S${movie.streamSeason ?? 1}, E${movie.streamEpisode ?? 1} / ${runtime}`
+    const s = movie.streamSeason ?? 1
+    const e = movie.streamEpisode ?? 1
+    return `S${s}, E${e} / ${runtime}`
+  }
+
+  // Anime with multiple episodes that aren't classified as TV shows
+  if (movie.isAnime && (movie.streamEpisode ?? 0) > 0) {
+    return `E${movie.streamEpisode} / ${runtime}`
   }
 
   return runtime
@@ -6834,6 +6841,7 @@ function WatchScreen({
     setLanguage(movie.streamLanguage ?? 'sub')
   }, [movie.id, movie.anilistId, movie.streamEpisode, movie.streamSeason, movie.streamLanguage])
 
+
   // Anime stays a single standalone entry (no cross-season grouping).
   const [watchAnimeSeasons] = useState<AnimeSeasonInfo[]>(movie.animeSeasons || [])
 
@@ -6851,6 +6859,17 @@ function WatchScreen({
     }),
     [movie, activeWatchAnimeSeason?.anilistId, episode, season, language],
   )
+
+  // Persist the current season/episode to continue-watching history whenever
+  // the user switches episodes so the rail always shows the correct position.
+  const initialEpRef = useRef({ episode: movie.streamEpisode ?? 1, season: movie.streamSeason ?? 1 })
+  useEffect(() => {
+    // Skip the initial render (episode/season === defaults from movie prop).
+    if (episode === initialEpRef.current.episode && season === initialEpRef.current.season) {
+      return
+    }
+    onStartWatching(streamMovie)
+  }, [episode, season])
 
   const streamUrl = useMemo(
     () => buildStreamUrl(streamMovie, activeProviderId),
@@ -6993,7 +7012,7 @@ function WatchScreen({
 
       if (!started && isPlaybackEvent) {
         started = true
-        onStartWatching(movie)
+        onStartWatching(streamMovie)
       }
     }
 
@@ -7002,14 +7021,14 @@ function WatchScreen({
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-  }, [activeProviderId, movie, onStartWatching])
+  }, [activeProviderId, movie, streamMovie, onStartWatching])
 
   const openCurrentStream = () => {
     if (!streamUrl) {
       return
     }
 
-    onStartWatching(movie)
+    onStartWatching(streamMovie)
     window.open(streamUrl, '_blank', 'noopener,noreferrer')
   }
 
