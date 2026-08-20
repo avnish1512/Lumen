@@ -946,28 +946,90 @@ function formatAnimeEpisodeTitle(number: number, rawTitle?: string): string {
   return `Episode ${number} - ${trimmed}`
 }
 
-function getAnimeEpisodeDuration(movie: Movie, episodeNumber: number, rawEpDuration?: string): string {
-  if (rawEpDuration && /^\d+:\d{2}$/.test(rawEpDuration.trim())) {
-    return rawEpDuration.trim()
-  }
-
-  let baseMins = 24
-  if (typeof movie.episodeRuntimeMinutes === 'number' && movie.episodeRuntimeMinutes > 0) {
-    baseMins = movie.episodeRuntimeMinutes
-  } else if (movie.runtime) {
-    const match = movie.runtime.match(/(\d+)\s*min/i)
-    if (match) {
-      baseMins = parseInt(match[1], 10)
+function getEpisodeDuration(
+  movie: Movie,
+  episodeNumber: number,
+  rawEpDuration?: string | number,
+  fallbackRuntime?: string,
+): string {
+  // 1. If explicit duration is provided (e.g. "45m", "1h 10m", "24:15", "52 min", 52)
+  if (rawEpDuration) {
+    if (typeof rawEpDuration === 'number' && rawEpDuration > 0) {
+      const hrs = Math.floor(rawEpDuration / 60)
+      const mins = rawEpDuration % 60
+      return hrs > 0 ? (mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`) : `${rawEpDuration}m`
+    }
+    if (typeof rawEpDuration === 'string') {
+      const trimmed = rawEpDuration.trim()
+      if (/^\d+:\d{2}$/.test(trimmed)) {
+        return trimmed
+      }
+      const numMatch = trimmed.match(/^(\d+)\s*(?:m|min)?$/i)
+      if (numMatch) {
+        const mins = parseInt(numMatch[1], 10)
+        if (mins > 0) {
+          const hrs = Math.floor(mins / 60)
+          const remMins = mins % 60
+          return hrs > 0 ? (remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`) : `${mins}m`
+        }
+      }
+      const cleaned = trimmed.replace(/mm+$/i, 'm')
+      if (cleaned && !cleaned.toLowerCase().includes('series') && !cleaned.toLowerCase().includes('unavailable')) {
+        return cleaned
+      }
     }
   }
 
-  const seed = (movie.id || 'anime').split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
-  const offset = ((episodeNumber * 19 + seed * 7) % 45) - 25
-  const totalSeconds = Math.max(60, baseMins * 60 + offset)
-  const m = Math.floor(totalSeconds / 60)
-  const s = totalSeconds % 60
+  // 2. If fallbackRuntime is provided
+  if (fallbackRuntime) {
+    const trimmed = fallbackRuntime.trim()
+    if (trimmed && !trimmed.toLowerCase().includes('series') && !trimmed.toLowerCase().includes('unavailable')) {
+      const numMatch = trimmed.match(/^(\d+)\s*(?:m|min)?$/i)
+      if (numMatch) {
+        const mins = parseInt(numMatch[1], 10)
+        if (mins > 0) {
+          const hrs = Math.floor(mins / 60)
+          const remMins = mins % 60
+          return hrs > 0 ? (remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`) : `${mins}m`
+        }
+      }
+      return trimmed
+    }
+  }
 
-  return `${m}:${s < 10 ? '0' : ''}${s}`
+  // 3. If movie has episodeRuntimeMinutes
+  if (typeof movie.episodeRuntimeMinutes === 'number' && movie.episodeRuntimeMinutes > 0) {
+    const mins = movie.episodeRuntimeMinutes
+    const hrs = Math.floor(mins / 60)
+    const remMins = mins % 60
+    return hrs > 0 ? (remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`) : `${mins}m`
+  }
+
+  // 4. If movie.runtime has numeric minutes (e.g. "45 min", "55 min")
+  if (movie.runtime) {
+    const match = movie.runtime.match(/(\d+)\s*min/i)
+    if (match) {
+      const mins = parseInt(match[1], 10)
+      if (mins > 0) {
+        const hrs = Math.floor(mins / 60)
+        const remMins = mins % 60
+        return hrs > 0 ? (remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`) : `${mins}m`
+      }
+    }
+  }
+
+  // 5. For Anime ONLY: fallback seed offset if no exact time is available
+  if (movie.isAnime) {
+    const baseMins = 24
+    const seed = (movie.id || 'anime').split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+    const offset = ((episodeNumber * 19 + seed * 7) % 45) - 25
+    const totalSeconds = Math.max(60, baseMins * 60 + offset)
+    const m = Math.floor(totalSeconds / 60)
+    const s = totalSeconds % 60
+    return `${m}:${s < 10 ? '0' : ''}${s}`
+  }
+
+  return ''
 }
 
 function episodeSynopsis(movie: Movie, season: number, episode: number) {
@@ -5985,21 +6047,37 @@ function SeasonEpisodeSection({
   const [highlightedEpisode, setHighlightedEpisode] = useState<number | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
 
-  // Anime is driven entirely by the AniList season structure (each season is a
-  // distinct AniList entry, and streaming resolves by that per-season anilistId).
-  // Never let TMDB seasons/episodes override it, or switching seasons shows the
-  // wrong episodes and per-season titles fall back to the root entry's absolute
-  // numbering (e.g. "Episode 103" under Season 2's "Episode 1").
+  const [resolvedTmdbId, setResolvedTmdbId] = useState<number | undefined>(movie.tmdbId)
+
+  useEffect(() => {
+    if (movie.tmdbId) {
+      setResolvedTmdbId(movie.tmdbId)
+      return
+    }
+    if (!movie.isAnime && movie.id && (movie.id.startsWith('tt') || !isNaN(Number(movie.id)))) {
+      let active = true
+      void fetchTmdbMatch(movie.id, false, 'tv').then((match) => {
+        if (active && match?.tmdbId) {
+          setResolvedTmdbId(match.tmdbId)
+        }
+      }).catch(() => {})
+      return () => {
+        active = false
+      }
+    }
+  }, [movie.tmdbId, movie.id, movie.isAnime])
+
+  const targetTmdbId = resolvedTmdbId || movie.tmdbId
   const isTvId =
-    !movie.isAnime && Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
+    !movie.isAnime && Boolean(targetTmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
 
   // Load the accurate season list from TMDB so the dropdown/counts are correct.
   useEffect(() => {
     let active = true
     setTmdbSeasons([])
 
-    if (isTvId && movie.tmdbId) {
-      void fetchTvSeasons(movie.tmdbId).then((list) => {
+    if (isTvId && targetTmdbId) {
+      void fetchTvSeasons(targetTmdbId).then((list) => {
         if (active) {
           setTmdbSeasons(list)
         }
@@ -6009,7 +6087,7 @@ function SeasonEpisodeSection({
     return () => {
       active = false
     }
-  }, [movie.tmdbId, isTvId])
+  }, [targetTmdbId, isTvId])
 
   // Keep the selected season valid once the real season list arrives.
   useEffect(() => {
@@ -6023,8 +6101,8 @@ function SeasonEpisodeSection({
     let active = true
     setTmdbEpisodes([])
 
-    if (isTvId && movie.tmdbId) {
-      void fetchSeasonEpisodes(movie.tmdbId, selectedSeason).then((episodes) => {
+    if (isTvId && targetTmdbId) {
+      void fetchSeasonEpisodes(targetTmdbId, selectedSeason).then((episodes) => {
         if (active) {
           setTmdbEpisodes(episodes)
         }
@@ -6034,7 +6112,7 @@ function SeasonEpisodeSection({
     return () => {
       active = false
     }
-  }, [movie.tmdbId, isTvId, selectedSeason])
+  }, [targetTmdbId, isTvId, selectedSeason])
 
   const activeSeason =
     seasons.find((season) => season.season === selectedSeason) ?? seasons[0]
@@ -6187,8 +6265,8 @@ function SeasonEpisodeSection({
             const overview =
               data?.overview || (movie.isHentaiOcean ? `Episode ${episode} of ${movie.title}` : episodeSynopsis(movie, selectedSeason, episode))
             const runtime = movie.isAnime
-              ? getAnimeEpisodeDuration(movie, episode, (animeEp as any)?.duration)
-              : (data?.runtime || episodeRuntime(movie, selectedSeason, episode))
+              ? getEpisodeDuration(movie, episode, (animeEp as any)?.duration)
+              : getEpisodeDuration(movie, episode, data?.runtime, episodeRuntime(movie, selectedSeason, episode))
 
             // "Coming soon" detection: a future TMDB air_date, or — for anime —
             // any episode at or after the next-airing one (everything from the
@@ -6916,14 +6994,35 @@ function WatchScreen({
     return undefined
   }, [isAnimeMovie, watchAnimeSeasons])
 
+  const [resolvedWatchTmdbId, setResolvedWatchTmdbId] = useState<number | undefined>(movie.tmdbId)
+
+  useEffect(() => {
+    if (movie.tmdbId) {
+      setResolvedWatchTmdbId(movie.tmdbId)
+      return
+    }
+    if (!isAnimeMovie && movie.id && (movie.id.startsWith('tt') || !isNaN(Number(movie.id)))) {
+      let active = true
+      void fetchTmdbMatch(movie.id, false, 'tv').then((match) => {
+        if (active && match?.tmdbId) {
+          setResolvedWatchTmdbId(match.tmdbId)
+        }
+      }).catch(() => {})
+      return () => {
+        active = false
+      }
+    }
+  }, [movie.tmdbId, movie.id, isAnimeMovie])
+
+  const watchTargetTmdbId = resolvedWatchTmdbId || movie.tmdbId
   const watchIsTvId =
-    !isAnimeMovie && Boolean(movie.tmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
+    !isAnimeMovie && Boolean(watchTargetTmdbId) && (movie.tmdbType === 'tv' || isTvShow(movie))
 
   useEffect(() => {
     let active = true
     setTmdbWatchSeasons([])
-    if (watchIsTvId && movie.tmdbId) {
-      void fetchTvSeasons(movie.tmdbId).then((list) => {
+    if (watchIsTvId && watchTargetTmdbId) {
+      void fetchTvSeasons(watchTargetTmdbId).then((list) => {
         if (active) {
           setTmdbWatchSeasons(list)
         }
@@ -6932,15 +7031,15 @@ function WatchScreen({
     return () => {
       active = false
     }
-  }, [movie.tmdbId, watchIsTvId])
+  }, [watchTargetTmdbId, watchIsTvId])
 
   const [watchTmdbEpisodes, setWatchTmdbEpisodes] = useState<SeasonEpisode[]>([])
 
   useEffect(() => {
     let active = true
     setWatchTmdbEpisodes([])
-    if (watchIsTvId && movie.tmdbId) {
-      void fetchSeasonEpisodes(movie.tmdbId, season).then((episodes) => {
+    if (watchIsTvId && watchTargetTmdbId) {
+      void fetchSeasonEpisodes(watchTargetTmdbId, season).then((episodes) => {
         if (active) {
           setWatchTmdbEpisodes(episodes)
         }
@@ -6949,7 +7048,7 @@ function WatchScreen({
     return () => {
       active = false
     }
-  }, [movie.tmdbId, watchIsTvId, season])
+  }, [watchTargetTmdbId, watchIsTvId, season])
 
   const activeWatchSeason =
     watchSeasons.find((entry) => entry.season === season) ?? watchSeasons[0]
@@ -7308,13 +7407,14 @@ function WatchScreen({
               ? (animeEp?.thumbnail || movie.still || movie.poster)
               : (tmdbEp?.still || animeEp?.thumbnail || movie.still || movie.poster)
 
-            const epDurationStr = getAnimeEpisodeDuration(
-              movie,
-              number,
-              movie.isAnime
-                ? (animeEp as any)?.duration
-                : (tmdbEp?.runtime ? `${tmdbEp.runtime}m` : undefined)
-            )
+            const epDurationStr = movie.isAnime
+              ? getEpisodeDuration(movie, number, (animeEp as any)?.duration)
+              : getEpisodeDuration(
+                  movie,
+                  number,
+                  tmdbEp?.runtime,
+                  episodeRuntime(movie, season, number),
+                )
             const providerName = currentProvider?.name || 'MegaPlay'
             const audioText = movie.isAnime ? 'English Sub' : 'English'
 
@@ -7346,7 +7446,9 @@ function WatchScreen({
                       <span>EP {number}</span>
                     </div>
                   )}
-                  <span className="anime-yt-thumb-duration">{epDurationStr}</span>
+                  {epDurationStr ? (
+                    <span className="anime-yt-thumb-duration">{epDurationStr}</span>
+                  ) : null}
                 </div>
 
                 <div className="anime-yt-info">

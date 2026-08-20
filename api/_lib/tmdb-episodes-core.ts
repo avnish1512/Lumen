@@ -36,10 +36,24 @@ type TmdbSeasonResponse = {
 }
 
 type TmdbTvDetailResponse = {
+  episode_run_time?: number[]
+  last_episode_to_air?: {
+    runtime?: number | null
+  }
   seasons?: Array<{
     season_number?: number
     episode_count?: number
   }>
+}
+
+function formatRuntimeMins(mins: number): string {
+  if (!mins || mins <= 0) return ''
+  const hrs = Math.floor(mins / 60)
+  const remMins = mins % 60
+  if (hrs > 0) {
+    return remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`
+  }
+  return `${mins}m`
 }
 
 function applyTmdbAuth(url: URL, auth: TmdbAuth) {
@@ -82,17 +96,47 @@ export async function fetchTmdbSeasonEpisodes(
       const body = (await response.json()) as TmdbSeasonResponse
       const episodes = (body.episodes ?? [])
         .filter((episode) => typeof episode.episode_number === 'number')
-        .map((episode) => ({
-          number: episode.episode_number as number,
-          name: episode.name || `Episode ${episode.episode_number}`,
-          overview: episode.overview || '',
-          // w300 thumbnails load far faster than w780 for the episode rail.
-          still: episode.still_path
-            ? `${TMDB_IMAGE_BASE_URL}/w300${episode.still_path}`
-            : '',
-          runtime: episode.runtime ? `${episode.runtime}m` : '',
-          airDate: episode.air_date ?? '',
-        }))
+        .map((episode) => {
+          const epRuntime = typeof episode.runtime === 'number' && episode.runtime > 0
+            ? formatRuntimeMins(episode.runtime)
+            : ''
+          return {
+            number: episode.episode_number as number,
+            name: episode.name || `Episode ${episode.episode_number}`,
+            overview: episode.overview || '',
+            // w300 thumbnails load far faster than w780 for the episode rail.
+            still: episode.still_path
+              ? `${TMDB_IMAGE_BASE_URL}/w300${episode.still_path}`
+              : '',
+            runtime: epRuntime,
+            airDate: episode.air_date ?? '',
+          }
+        })
+
+      // If any episodes are missing individual runtime, fetch show's episode_run_time
+      if (episodes.some((ep) => !ep.runtime)) {
+        try {
+          const showUrl = new URL(`${TMDB_BASE_URL}/tv/${tmdbId}`)
+          showUrl.searchParams.set('language', 'en-US')
+          const showRes = await fetch(showUrl, applyTmdbAuth(showUrl, auth))
+          if (showRes.ok) {
+            const showBody = (await showRes.json()) as TmdbTvDetailResponse
+            const defaultMins =
+              showBody.episode_run_time?.[0] ||
+              showBody.last_episode_to_air?.runtime
+            if (typeof defaultMins === 'number' && defaultMins > 0) {
+              const defaultRuntimeStr = formatRuntimeMins(defaultMins)
+              for (const ep of episodes) {
+                if (!ep.runtime) {
+                  ep.runtime = defaultRuntimeStr
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore show detail fetch error
+        }
+      }
 
       cache.set(cacheKey, { value: episodes, expiresAt: Date.now() + CACHE_TTL })
       return episodes
