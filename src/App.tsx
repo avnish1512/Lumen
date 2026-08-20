@@ -1604,15 +1604,15 @@ function PullToRefresh({ containerRef, disabled = false }: { containerRef: RefOb
       }
     }
 
-    el.addEventListener('touchstart', onStart, { passive: true })
-    el.addEventListener('touchmove', onMove, { passive: false })
-    el.addEventListener('touchend', finish, { passive: true })
-    el.addEventListener('touchcancel', finish, { passive: true })
+    window.addEventListener('touchstart', onStart, { passive: true })
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', finish, { passive: true })
+    window.addEventListener('touchcancel', finish, { passive: true })
     return () => {
-      el.removeEventListener('touchstart', onStart)
-      el.removeEventListener('touchmove', onMove)
-      el.removeEventListener('touchend', finish)
-      el.removeEventListener('touchcancel', finish)
+      window.removeEventListener('touchstart', onStart)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', finish)
+      window.removeEventListener('touchcancel', finish)
     }
   }, [containerRef, refreshing])
 
@@ -3712,7 +3712,7 @@ function App() {
       {showSplash && screen !== 'login' && screen !== 'profiles' && (
         <SplashScreen onFinish={finishSplash} />
       )}
-      <PullToRefresh containerRef={appShellRef} disabled={screen === 'lord'} />
+      <PullToRefresh containerRef={appShellRef} disabled={screen === 'lord' || screen === 'watch' || screen === 'login' || screen === 'profiles'} />
       {screen === 'home' && (
         <ErrorBoundary onReset={() => setScreen('home')}>
           {featuredMovie ? (
