@@ -6976,7 +6976,7 @@ function WatchScreen({
   // MegaPlay (VidNest) posts playback events to the parent window. Use the
   // first time/watching-log event to flag the title as "continue watching".
   useEffect(() => {
-    if (activeProviderId !== 'megaplay') {
+    if (activeProviderId !== 'megaplay' && activeProviderId !== 'embedmaster') {
       return
     }
 
@@ -7005,10 +7005,12 @@ function WatchScreen({
         | { channel?: string; type?: string; event?: string }
         | null
 
+      const isEmbedMasterEvent = (payload as any)?.source === 'embedmaster_player'
       const isPlaybackEvent =
         message?.event === 'time' ||
         message?.event === 'complete' ||
-        message?.type === 'watching-log'
+        message?.type === 'watching-log' ||
+        (isEmbedMasterEvent && ((payload as any)?.event === 'play' || (payload as any)?.event === 'time'))
 
       if (!started && isPlaybackEvent) {
         started = true
@@ -7519,7 +7521,7 @@ function WatchScreen({
           // sent with no referer for privacy.
           referrerPolicy={activeProviderId === 'megabuzz' ? 'origin' : 'no-referrer'}
           sandbox={
-            streamSandboxEnabled
+            streamSandboxEnabled && activeProviderId !== 'embedmaster'
               ? 'allow-forms allow-presentation allow-same-origin allow-scripts'
               : undefined
           }

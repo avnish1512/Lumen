@@ -9,6 +9,7 @@ export type TmdbMatch = {
 }
 
 export type StreamProvider =
+  | 'embedmaster'
   | 'filmu'
   | 'nhdapi'
   | 'yenime'
@@ -111,6 +112,12 @@ const emptyMediaCollection: MediaCollection = {
 export const defaultStreamProvider: StreamProvider = 'rivestream'
 
 export const streamProviderOptions: StreamProviderOption[] = [
+  {
+    id: 'embedmaster',
+    name: 'EmbedMaster',
+    logo: 'EM',
+    description: 'Movies & TV',
+  },
   {
     id: 'filmu',
     name: 'Filmu',
@@ -414,6 +421,21 @@ function buildVidsyncUrl(movie: Movie) {
   return `https://vidsrc.pm/embed/movie/${movie.tmdbId}?${params}`
 }
 
+
+function buildEmbedMasterUrl(movie: Movie) {
+  const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
+  if (!identifier) {
+    return ''
+  }
+
+  if (movie.tmdbType === 'tv') {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://embedmaster.link/tv/${identifier}/${season}/${episode}`
+  }
+
+  return `https://embedmaster.link/movie/${identifier}`
+}
 
 function buildRivestreamUrl(movie: Movie) {
   const params = new URLSearchParams({
@@ -761,6 +783,14 @@ export function buildStreamUrl(
     return provider === 'megabuzz'
       ? `https://megaplay.buzz/stream/ani/${movie.anilistId}/${ep}/${language}`
       : `https://vidnest.fun/anime/${movie.anilistId}/${ep}/${language}`
+  }
+
+  if (provider === 'embedmaster') {
+    return buildEmbedMasterUrl(movie)
+  }
+
+  if (provider === 'embedmaster') {
+    return buildEmbedMasterUrl(movie)
   }
 
   if (provider === 'filmu') {
