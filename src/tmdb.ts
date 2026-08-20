@@ -815,14 +815,6 @@ export function buildStreamUrl(
     return buildPrimeSrcUrl(movie)
   }
 
-  if (provider === 'primesrc') {
-    return buildPrimeSrcUrl(movie)
-  }
-
-  if (provider === 'embedmaster') {
-    return buildEmbedMasterUrl(movie)
-  }
-
   if (provider === 'embedmaster') {
     return buildEmbedMasterUrl(movie)
   }
