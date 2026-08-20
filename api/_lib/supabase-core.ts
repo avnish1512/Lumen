@@ -16,6 +16,7 @@
 export type StoredProfile = {
   name: string
   avatarColor: string
+  starredServer?: string
 }
 
 export type SupabaseConfig = {

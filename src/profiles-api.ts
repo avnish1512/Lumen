@@ -5,6 +5,7 @@
 export type RemoteProfile = {
   name: string
   avatarColor: string
+  starredServer?: string
 }
 
 export async function fetchAccountProfiles(

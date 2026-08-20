@@ -33,6 +33,7 @@ import {
   RefreshCcw,
   Search,
   Share,
+  Star,
   Trash2,
   Tv,
   Users,
@@ -322,6 +323,37 @@ export type UserInfo = {
 export type UserProfile = {
   name: string
   avatarColor: string
+  starredServer?: string
+}
+
+function starredServerKeyFor(user: UserInfo | null) {
+  return user?.name
+    ? `lumen.starredServer.${user.email ? user.email.toLowerCase() + '.' : ''}${user.name}`
+    : `lumen.starredServer.default`
+}
+
+function readStarredServerFor(user: UserInfo | null): string {
+  try {
+    const key = starredServerKeyFor(user)
+    const saved = window.localStorage.getItem(key)
+    if (saved) return saved
+    const profiles = readProfilesFor(user)
+    const matched = profiles.find((p) => p.name === user?.name)
+    return matched?.starredServer || ''
+  } catch {
+    return ''
+  }
+}
+
+function saveStarredServerFor(user: UserInfo | null, serverId: string) {
+  try {
+    const key = starredServerKeyFor(user)
+    if (serverId) {
+      window.localStorage.setItem(key, serverId)
+    } else {
+      window.localStorage.removeItem(key)
+    }
+  } catch {}
 }
 
 // Profiles are stored per login account (keyed by email) so each of the
@@ -354,6 +386,7 @@ function readProfilesFor(user: UserInfo | null): UserProfile[] {
         .map((p) => ({
           name: p.name.trim(),
           avatarColor: typeof p.avatarColor === 'string' && p.avatarColor.trim() ? p.avatarColor : 'red',
+          starredServer: typeof p.starredServer === 'string' && p.starredServer.trim() ? p.starredServer.trim() : undefined,
         }))
       return sanitized.length > 0 ? sanitized : fallback
     }
@@ -1838,6 +1871,38 @@ function App() {
       setScreenState('login')
     }
   }
+
+  const [starredServer, setStarredServer] = useState<string>(() =>
+    readStarredServerFor(readCurrentUser()),
+  )
+
+  useEffect(() => {
+    setStarredServer(readStarredServerFor(currentUser))
+  }, [currentUser])
+
+  const handleToggleStarServer = useCallback((serverId: string) => {
+    setStarredServer((prev) => {
+      const next = prev === serverId ? '' : serverId
+      saveStarredServerFor(currentUser, next)
+      if (currentUser?.name) {
+        setProfiles((currProfiles) => {
+          const updated = currProfiles.map((p) => {
+            if (p.name === currentUser.name) {
+              return { ...p, starredServer: next || undefined }
+            }
+            return p
+          })
+          const account = currentUser ?? tempUser
+          window.localStorage.setItem(profilesKeyFor(account), JSON.stringify(updated))
+          if (account?.email) {
+            void saveRemoteProfiles(account.email, updated)
+          }
+          return updated
+        })
+      }
+      return next
+    })
+  }, [currentUser, tempUser])
 
   // Load the active account's own profile list whenever the login changes, so
   // each of the separate logins always sees its own profiles.
@@ -4037,6 +4102,8 @@ function App() {
             screenShareError={screenShareError}
             currentUserEmail={currentUser?.email}
             currentUser={currentUser}
+            starredServer={starredServer}
+            onToggleStarServer={handleToggleStarServer}
           />
         </ErrorBoundary>
       )}
@@ -6680,6 +6747,8 @@ type WatchScreenProps = {
   screenShareError?: string
   currentUserEmail?: string
   currentUser?: UserInfo | null
+  starredServer?: string
+  onToggleStarServer?: (serverId: string) => void
 }
 
 function WatchScreen({
@@ -6708,6 +6777,8 @@ function WatchScreen({
   screenShareError,
   currentUserEmail,
   currentUser,
+  starredServer,
+  onToggleStarServer,
 }: WatchScreenProps) {
   const isPartyHost = activeParty ? currentUserEmail === activeParty.host_email : false
   const isPartyGuest = activeParty ? currentUserEmail !== activeParty.host_email : false
@@ -6772,6 +6843,10 @@ function WatchScreen({
 
   const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'megaplay', 'megabuzz']
 
+  const chosenProvider = (starredServer && isStreamProvider(starredServer))
+    ? (streamProvider === defaultStreamProvider ? (starredServer as StreamProvider) : streamProvider)
+    : streamProvider
+
   const activeProviderId = isJavVideo
     ? 'apijav'
     : isPhubVideo
@@ -6779,11 +6854,11 @@ function WatchScreen({
       : isHentai
         ? 'oceanplay'
         : isAnimeMovie
-          ? animeProviderIds.includes(streamProvider)
-            ? streamProvider
+          ? animeProviderIds.includes(chosenProvider)
+            ? chosenProvider
             : 'filmu'
-          : (!animeProviderIds.includes(streamProvider) || streamProvider === 'filmu' || streamProvider === 'nhdapi')
-            ? streamProvider
+          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi')
+            ? chosenProvider
             : 'filmu'
 
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
@@ -7808,19 +7883,47 @@ function WatchScreen({
 
                   return filteredOptions.map((provider) => {
                     const isActive = provider.id === activeProviderId
+                    const isStarred = provider.id === starredServer
                     return (
-                      <button
+                      <div
                         key={provider.id}
-                        className={`server-option${isActive ? ' active' : ''}`}
-                        type="button"
-                        role="radio"
-                        aria-checked={isActive}
-                        title={provider.name}
-                        aria-label={provider.name}
-                        onClick={() => onStreamProviderChange(provider.id)}
+                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
                       >
-                        <span className="provider-logo">{provider.logo}</span>
-                      </button>
+                        <button
+                          className={`server-option${isActive ? ' active' : ''}`}
+                          type="button"
+                          role="radio"
+                          aria-checked={isActive}
+                          title={`${provider.name} — ${provider.description}`}
+                          aria-label={provider.name}
+                          onClick={() => onStreamProviderChange(provider.id)}
+                        >
+                          <span className="provider-logo">{provider.logo}</span>
+                          <span className="provider-name">{provider.name}</span>
+                        </button>
+                        {onToggleStarServer && (
+                          <button
+                            type="button"
+                            className={`server-star-btn${isStarred ? ' is-starred' : ''}`}
+                            title={
+                              isStarred
+                                ? `Unstar ${provider.name} (Favorite for ${activeProfileName})`
+                                : `Star ${provider.name} as favorite for ${activeProfileName}`
+                            }
+                            aria-label={isStarred ? `Unstar ${provider.name}` : `Star ${provider.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onToggleStarServer(provider.id)
+                            }}
+                          >
+                            <Star
+                              size={13}
+                              fill={isStarred ? '#ffc107' : 'none'}
+                              color={isStarred ? '#ffc107' : 'rgba(255, 255, 255, 0.45)'}
+                            />
+                          </button>
+                        )}
+                      </div>
                     )
                   })
                 })()}
@@ -7867,19 +7970,47 @@ function WatchScreen({
 
                   return filteredOptions.map((provider) => {
                     const isActive = provider.id === activeProviderId
+                    const isStarred = provider.id === starredServer
                     return (
-                      <button
+                      <div
                         key={provider.id}
-                        className={`server-option${isActive ? ' active' : ''}`}
-                        type="button"
-                        role="radio"
-                        aria-checked={isActive}
-                        title={provider.name}
-                        aria-label={provider.name}
-                        onClick={() => onStreamProviderChange(provider.id)}
+                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
                       >
-                        <span className="provider-logo">{provider.logo}</span>
-                      </button>
+                        <button
+                          className={`server-option${isActive ? ' active' : ''}`}
+                          type="button"
+                          role="radio"
+                          aria-checked={isActive}
+                          title={`${provider.name} — ${provider.description}`}
+                          aria-label={provider.name}
+                          onClick={() => onStreamProviderChange(provider.id)}
+                        >
+                          <span className="provider-logo">{provider.logo}</span>
+                          <span className="provider-name">{provider.name}</span>
+                        </button>
+                        {onToggleStarServer && (
+                          <button
+                            type="button"
+                            className={`server-star-btn${isStarred ? ' is-starred' : ''}`}
+                            title={
+                              isStarred
+                                ? `Unstar ${provider.name} (Favorite for ${activeProfileName})`
+                                : `Star ${provider.name} as favorite for ${activeProfileName}`
+                            }
+                            aria-label={isStarred ? `Unstar ${provider.name}` : `Star ${provider.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onToggleStarServer(provider.id)
+                            }}
+                          >
+                            <Star
+                              size={13}
+                              fill={isStarred ? '#ffc107' : 'none'}
+                              color={isStarred ? '#ffc107' : 'rgba(255, 255, 255, 0.45)'}
+                            />
+                          </button>
+                        )}
+                      </div>
                     )
                   })
                 })()}

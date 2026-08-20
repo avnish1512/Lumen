@@ -1025,49 +1025,116 @@ button {
   width: 100%;
 }
 
-.server-option {
+.server-option-wrapper {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: auto;
-  min-width: 48px;
-  height: 44px;
-  min-height: 44px;
-  padding: 0 12px;
-  color: #fff;
+  background: #151516;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
-  background: #151516;
-  cursor: pointer;
   transition: all 0.18s ease;
+  overflow: hidden;
+  user-select: none;
 }
 
-.server-option:hover {
+.server-option-wrapper:hover {
   background: #222226;
   border-color: rgba(255, 255, 255, 0.28);
   transform: translateY(-1px);
 }
 
-.server-option.active {
+.server-option-wrapper.active {
   border-color: #47a8ff;
   background: linear-gradient(135deg, #102538, #16202c);
   box-shadow: 0 0 14px rgba(71, 168, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
-.server-option .provider-logo {
-  display: grid;
-  place-items: center;
-  width: auto;
-  height: auto;
-  background: transparent;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
+.server-option-wrapper.starred {
+  border-color: rgba(255, 193, 7, 0.45);
 }
 
-.server-option.active .provider-logo {
+.server-option-wrapper.active.starred {
+  border-color: #47a8ff;
+  box-shadow: 0 0 14px rgba(71, 168, 255, 0.3), 0 0 8px rgba(255, 193, 7, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.server-option-wrapper .server-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 10px 0 12px;
+  color: #fff;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+}
+
+.server-option-wrapper .provider-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.server-option-wrapper.active .provider-logo {
+  background: rgba(71, 168, 255, 0.25);
   color: #47a8ff;
+}
+
+.server-option-wrapper .provider-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.server-option-wrapper.active .provider-name {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.server-star-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  height: 44px;
+  padding: 0 10px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.45);
+  transition: all 0.18s ease;
+  outline: none;
+}
+
+.server-star-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffc107;
+  transform: scale(1.12);
+}
+
+.server-star-btn.is-starred {
+  color: #ffc107;
+  border-left-color: rgba(255, 193, 7, 0.3);
+}
+
+.server-star-btn.is-starred:hover {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 5px rgba(255, 193, 7, 0.5));
 }
 
 .server-copy strong,
@@ -1085,17 +1152,6 @@ button {
   color: rgba(255, 255, 255, 0.58);
   font-size: 14px;
   font-weight: 750;
-}
-
-.server-option svg {
-  width: 24px;
-  height: 24px;
-  justify-self: center;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.server-option.active svg {
-  color: #47a8ff;
 }
 
 .subscription-card {
