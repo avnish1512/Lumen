@@ -7710,14 +7710,11 @@ function WatchScreen({
                         type="button"
                         role="radio"
                         aria-checked={isActive}
+                        title={provider.name}
+                        aria-label={provider.name}
                         onClick={() => onStreamProviderChange(provider.id)}
                       >
                         <span className="provider-logo">{provider.logo}</span>
-                        <span className="server-copy">
-                          <strong>{provider.name}</strong>
-                          <small>{provider.description}</small>
-                        </span>
-                        {isActive ? <Check /> : <ChevronRight />}
                       </button>
                     )
                   })
@@ -7772,14 +7769,11 @@ function WatchScreen({
                         type="button"
                         role="radio"
                         aria-checked={isActive}
+                        title={provider.name}
+                        aria-label={provider.name}
                         onClick={() => onStreamProviderChange(provider.id)}
                       >
                         <span className="provider-logo">{provider.logo}</span>
-                        <span className="server-copy">
-                          <strong>{provider.name}</strong>
-                          <small>{provider.description}</small>
-                        </span>
-                        {isActive ? <Check /> : <ChevronRight />}
                       </button>
                     )
                   })

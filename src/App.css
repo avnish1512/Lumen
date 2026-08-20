@@ -1018,36 +1018,56 @@ button {
 
 
 .server-selector {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   width: 100%;
 }
 
 .server-option {
-  display: grid;
-  grid-template-columns: 62px 1fr 34px;
-  gap: 13px;
-  width: 100%;
-  min-height: 82px;
+  display: inline-flex;
   align-items: center;
-  padding: 10px;
+  justify-content: center;
+  width: auto;
+  min-width: 48px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 12px;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
   background: #151516;
-  text-align: left;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.server-option:hover {
+  background: #222226;
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-1px);
 }
 
 .server-option.active {
-  border-color: rgba(71, 168, 255, 0.66);
-  background: linear-gradient(135deg, #102132, #19191a 64%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-color: #47a8ff;
+  background: linear-gradient(135deg, #102538, #16202c);
+  box-shadow: 0 0 14px rgba(71, 168, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .server-option .provider-logo {
-  width: 62px;
-  height: 62px;
-  font-size: 24px;
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  background: transparent;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.server-option.active .provider-logo {
+  color: #47a8ff;
 }
 
 .server-copy strong,
@@ -8139,10 +8159,9 @@ a.watch-option-card {
   }
 
   .watch-screen .server-option {
-    min-height: 66px;
-    grid-template-columns: 50px 1fr 26px;
-    gap: 10px;
-    padding: 8px;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 10px;
   }
 
   .watch-screen .server-option .provider-logo {
