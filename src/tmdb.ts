@@ -9,6 +9,7 @@ export type TmdbMatch = {
 }
 
 export type StreamProvider =
+  | 'primesrc'
   | 'embedmaster'
   | 'filmu'
   | 'nhdapi'
@@ -112,6 +113,12 @@ const emptyMediaCollection: MediaCollection = {
 export const defaultStreamProvider: StreamProvider = 'rivestream'
 
 export const streamProviderOptions: StreamProviderOption[] = [
+  {
+    id: 'primesrc',
+    name: 'PrimeSrc',
+    logo: 'PS',
+    description: 'Movies & TV',
+  },
   {
     id: 'embedmaster',
     name: 'EmbedMaster',
@@ -421,6 +428,25 @@ function buildVidsyncUrl(movie: Movie) {
   return `https://vidsrc.pm/embed/movie/${movie.tmdbId}?${params}`
 }
 
+
+function buildPrimeSrcUrl(movie: Movie) {
+  const params = new URLSearchParams()
+  if (movie.tmdbId) {
+    params.set('tmdb', String(movie.tmdbId))
+  } else if (movie.id.startsWith('tt')) {
+    params.set('imdb', movie.id)
+  } else {
+    return ''
+  }
+
+  if (movie.tmdbType === 'tv') {
+    params.set('season', String(movie.streamSeason ?? 1))
+    params.set('episode', String(movie.streamEpisode ?? 1))
+    return `https://primesrc.me/embed/tv?${params}`
+  }
+
+  return `https://primesrc.me/embed/movie?${params}`
+}
 
 function buildEmbedMasterUrl(movie: Movie) {
   const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
@@ -783,6 +809,14 @@ export function buildStreamUrl(
     return provider === 'megabuzz'
       ? `https://megaplay.buzz/stream/ani/${movie.anilistId}/${ep}/${language}`
       : `https://vidnest.fun/anime/${movie.anilistId}/${ep}/${language}`
+  }
+
+  if (provider === 'primesrc') {
+    return buildPrimeSrcUrl(movie)
+  }
+
+  if (provider === 'primesrc') {
+    return buildPrimeSrcUrl(movie)
   }
 
   if (provider === 'embedmaster') {

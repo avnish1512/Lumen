@@ -1503,7 +1503,7 @@ async function fetchAnimeRails(): Promise<AnimeHomeExtras> {
 // refresh is disabled inside the Expo WebView, so we replicate it: when the
 // scroll container is already at the top and the user drags down past a
 // threshold, we reload the app.
-function PullToRefresh({ containerRef }: { containerRef: RefObject<HTMLElement | null> }) {
+function PullToRefresh({ containerRef, disabled = false }: { containerRef: RefObject<HTMLElement | null>; disabled?: boolean }) {
   const [distance, setDistance] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const gesture = useRef({
@@ -1514,6 +1514,9 @@ function PullToRefresh({ containerRef }: { containerRef: RefObject<HTMLElement |
   })
 
   useEffect(() => {
+    if (disabled) {
+      return
+    }
     const el = containerRef.current
     if (!el) {
       return
@@ -3709,7 +3712,7 @@ function App() {
       {showSplash && screen !== 'login' && screen !== 'profiles' && (
         <SplashScreen onFinish={finishSplash} />
       )}
-      <PullToRefresh containerRef={appShellRef} />
+      <PullToRefresh containerRef={appShellRef} disabled={screen === 'lord'} />
       {screen === 'home' && (
         <ErrorBoundary onReset={() => setScreen('home')}>
           {featuredMovie ? (

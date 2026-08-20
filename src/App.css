@@ -9200,9 +9200,9 @@ body:has(.add-profile-screen),
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
   align-items: center;
-  padding: 16px 20px calc(env(safe-area-inset-bottom, 20px) + 24px);
+  padding: 16px 20px calc(env(safe-area-inset-bottom, 20px) + 32px);
   width: 100%;
   box-sizing: border-box;
   position: relative;
@@ -18458,7 +18458,7 @@ body:has(.add-profile-screen),
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
   margin-top: 12px;
   margin-bottom: 24px;
@@ -18466,8 +18466,12 @@ body:has(.add-profile-screen),
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 14px 20px;
+  padding: 14px 18px;
   border-radius: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .jav-pills {
@@ -18475,8 +18479,16 @@ body:has(.add-profile-screen),
   align-items: center;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  overflow-y: visible;
+  padding: 4px 0;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .jav-pills::-webkit-scrollbar {
@@ -18484,15 +18496,23 @@ body:has(.add-profile-screen),
 }
 
 .jav-pill {
-  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 16px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(15, 23, 42, 0.6);
   color: #cbd5e1;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
+  line-height: normal;
+  box-sizing: border-box;
   transition: all 0.2s ease;
 }
 
@@ -18513,6 +18533,7 @@ body:has(.add-profile-screen),
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .jav-sort-label {
@@ -18850,13 +18871,48 @@ body:has(.add-profile-screen),
 }
 
 @media (max-width: 768px) {
-  .jav-container {
-    padding: 16px;
+  .jav-container,
+  .phub-container {
+    padding: 16px 12px 60px !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
   }
 
   .jav-controls {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .jav-pills {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 0 0 auto !important;
+    min-height: 44px !important;
+    height: auto !important;
+    padding: 4px 0 !important;
+  }
+
+  .jav-pill {
+    height: 36px !important;
+    min-height: 36px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .jav-sort-group {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    padding-top: 8px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    flex-shrink: 0 !important;
+    min-height: 36px !important;
   }
 
   .jav-grid {
@@ -19594,10 +19650,11 @@ body:has(.add-profile-screen),
     opacity: 1 !important;
     display: flex !important;
     flex-direction: column !important;
-    justify-content: center !important;
+    justify-content: flex-end !important;
     align-items: center !important;
     min-height: calc(100% - 70px) !important;
     width: 100% !important;
+    padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 24px) !important;
   }
 
   .screen.profiles-screen .profiles-sheet-container {
