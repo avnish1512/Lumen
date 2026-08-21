@@ -14808,25 +14808,40 @@ body:has(.add-profile-screen),
   align-self: start;
 }
 
-.anime-server-subdub-row {
+.anime-server-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-top: 14px;
+}
+
+.anime-actions-subdub-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  flex-wrap: wrap;
   width: 100%;
+  margin-top: 14px;
 }
 
-.anime-server-subdub-row .watch-lang-toggle {
+.anime-actions-subdub-row .anime-watch-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  flex-wrap: nowrap;
+}
+
+.anime-actions-subdub-row .watch-lang-toggle {
   margin-left: auto;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
 }
 
-.anime-server-subdub-row .watch-lang-toggle button {
-  padding: 14px 34px;
-  font-size: 18px;
+.anime-actions-subdub-row .watch-lang-toggle button {
+  padding: 12px 28px;
+  font-size: 16px;
   font-weight: 850;
   letter-spacing: 0.05em;
 }
@@ -19237,7 +19252,7 @@ body:has(.add-profile-screen),
   align-items: center;
   gap: 10px;
   flex-wrap: nowrap;
-  width: 100%;
+  width: auto;
 }
 
 .anime-watch-actions .watch-play {
@@ -20048,3 +20063,46 @@ body:has(.add-profile-screen),
     opacity: 1 !important;
   }
 }
+
+/* ==========================================================================
+   Watch Screen Actions Row + Sandbox Button
+   ========================================================================== */
+.watch-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  margin-bottom: 4px;
+}
+
+.watch-actions-row .watch-mylist-btn {
+  margin-top: 0;
+}
+
+.watch-sandbox-btn {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.watch-sandbox-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.36);
+  transform: translateY(-1px);
+}
+
+.watch-sandbox-btn.is-sandbox-active {
+  border-color: rgba(71, 168, 255, 0.55);
+  background: rgba(71, 168, 255, 0.16);
+  color: #47a8ff;
+  box-shadow: 0 0 14px rgba(71, 168, 255, 0.25);
+}
+
+.watch-sandbox-btn.is-sandbox-active svg {
+  color: #47a8ff;
+  fill: rgba(71, 168, 255, 0.25);
+}
+
+.watch-sandbox-btn.is-sandbox-active span {
+  color: #47a8ff;
+}
+

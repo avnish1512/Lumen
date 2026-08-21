@@ -65,6 +65,7 @@ import {
   Minimize2,
   SkipBack,
   SkipForward,
+  Shield,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -7917,45 +7918,42 @@ function WatchScreen({
 
             <Metadata movie={movie} />
 
-            <button
-              type="button"
-              className="watch-mylist-btn"
-              onClick={onSave}
-              title={isSaved ? 'Saved to My List' : 'Add to My List'}
-            >
-              {isSaved ? <Check /> : <Plus />}
-              <span>{isSaved ? 'Saved' : 'My List'}</span>
-            </button>
+            <div className="watch-actions-row">
+              <button
+                type="button"
+                className="watch-mylist-btn"
+                onClick={onSave}
+                title={isSaved ? 'Saved to My List' : 'Add to My List'}
+              >
+                {isSaved ? <Check /> : <Plus />}
+                <span>{isSaved ? 'Saved' : 'My List'}</span>
+              </button>
 
-            <button
-              type="button"
-              className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
-              onClick={onToggleLike}
-              aria-pressed={isLiked}
-              title={isLiked ? 'Liked' : 'Like'}
-            >
-              <Heart fill={isLiked ? 'currentColor' : 'none'} />
-              <span>{isLiked ? 'Liked' : 'Like'}</span>
-            </button>
+              <button
+                type="button"
+                className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
+                onClick={onToggleLike}
+                aria-pressed={isLiked}
+                title={isLiked ? 'Liked' : 'Like'}
+              >
+                <Heart fill={isLiked ? 'currentColor' : 'none'} />
+                <span>{isLiked ? 'Liked' : 'Like'}</span>
+              </button>
 
-            {!isPartyGuest && (
-              <label className="stream-sandbox-toggle">
-                <span>
-                  <strong>Sandbox</strong>
-                  <small>
-                    {streamSandboxEnabled ? 'Blocks popups and redirects' : 'Allows full player behavior'}
-                  </small>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={streamSandboxEnabled}
-                  onChange={(event) => onStreamSandboxChange(event.target.checked)}
-                />
-                <span aria-hidden="true" className="toggle-track">
-                  <span />
-                </span>
-              </label>
-            )}
+              {!isPartyGuest && (
+                <button
+                  type="button"
+                  className={`watch-mylist-btn watch-sandbox-btn${streamSandboxEnabled ? ' is-sandbox-active' : ''}`}
+                  onClick={() => onStreamSandboxChange(!streamSandboxEnabled)}
+                  aria-pressed={streamSandboxEnabled}
+                  title={streamSandboxEnabled ? 'Sandbox Enabled (Blocks popups and redirects)' : 'Sandbox Disabled (Allows full player behavior)'}
+                  aria-label={streamSandboxEnabled ? 'Sandbox Enabled' : 'Sandbox Disabled'}
+                >
+                  <Shield fill={streamSandboxEnabled ? 'currentColor' : 'none'} />
+                  <span>{streamSandboxEnabled ? 'Sandbox On' : 'Sandbox Off'}</span>
+                </button>
+              )}
+            </div>
 
             {!isPartyGuest && (
               <div className="server-selector" role="radiogroup" aria-label="Streaming server">
@@ -8044,8 +8042,8 @@ function WatchScreen({
           {renderPlayerSection()}
           {renderUnderIframeBar()}
 
-          <div className="anime-server-subdub-row">
-            {!isPartyGuest && (
+          {!isPartyGuest && (
+            <div className="anime-server-row">
               <div className="server-selector anime-inline-servers" role="radiogroup" aria-label="Streaming server">
                 {(() => {
                   const filteredOptions = isJavVideo
@@ -8112,19 +8110,10 @@ function WatchScreen({
                   })
                 })()}
               </div>
-            )}
+            </div>
+          )}
 
-            {(isAnimeMovie || isHentai) && (
-              <div className="watch-lang-toggle" role="group" aria-label="Audio language">
-                <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
-                  SUB
-                </button>
-                <button type="button" className={language === 'dub' ? 'active' : ''} onClick={() => setLanguage('dub')}>
-                  DUB
-                </button>
-              </div>
-            )}
-
+          <div className="anime-actions-subdub-row">
             <div className="anime-watch-actions">
               {!isPartyGuest && (
                 <button
@@ -8161,19 +8150,20 @@ function WatchScreen({
               </button>
 
               {!isPartyGuest && (
-                <label className="stream-sandbox-toggle inline-sandbox-toggle" title={streamSandboxEnabled ? 'Sandbox Active: Blocks popups' : 'Sandbox Off'}>
-                  <span>
-                    <strong>Sandbox</strong>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={streamSandboxEnabled}
-                    onChange={(event) => onStreamSandboxChange(event.target.checked)}
-                  />
-                  <span aria-hidden="true" className="toggle-track">
-                    <span />
-                  </span>
-                </label>
+                <button
+                  type="button"
+                  className={`watch-mylist-btn watch-sandbox-btn watch-icon-only-btn${streamSandboxEnabled ? ' is-sandbox-active' : ''}`}
+                  onClick={() => onStreamSandboxChange(!streamSandboxEnabled)}
+                  aria-pressed={streamSandboxEnabled}
+                  title={
+                    streamSandboxEnabled
+                      ? 'Sandbox Enabled (Blocks popups and redirects)'
+                      : 'Sandbox Disabled (Allows full player behavior)'
+                  }
+                  aria-label={streamSandboxEnabled ? 'Sandbox Enabled' : 'Sandbox Disabled'}
+                >
+                  <Shield fill={streamSandboxEnabled ? 'currentColor' : 'none'} />
+                </button>
               )}
 
               {activeParty && isPartyHost && (
@@ -8187,6 +8177,17 @@ function WatchScreen({
                 </button>
               )}
             </div>
+
+            {(isAnimeMovie || isHentai) && (
+              <div className="watch-lang-toggle" role="group" aria-label="Audio language">
+                <button type="button" className={language === 'sub' ? 'active' : ''} onClick={() => setLanguage('sub')}>
+                  SUB
+                </button>
+                <button type="button" className={language === 'dub' ? 'active' : ''} onClick={() => setLanguage('dub')}>
+                  DUB
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="anime-details-block">
