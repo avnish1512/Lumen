@@ -5517,6 +5517,37 @@ a.watch-option-card {
   }
 }
 
+.detail-poster-viewport {
+  position: relative;
+}
+
+.detail-poster-viewport .detail-poster-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.detail-poster-viewport:hover .detail-poster-arrow {
+  opacity: 1;
+}
+
+.detail-poster-viewport .detail-poster-arrow.rail-arrow-prev {
+  left: 4px;
+}
+
+.detail-poster-viewport .detail-poster-arrow.rail-arrow-next {
+  right: 4px;
+}
+
+@media (max-width: 899px) {
+  .detail-poster-viewport .detail-poster-arrow {
+    opacity: 0.9;
+  }
+}
+
 .episode-card {
   position: relative;
   display: block;
@@ -19470,6 +19501,21 @@ body:has(.add-profile-screen),
   right: 6px;
   background: rgba(0, 0, 0, 0.85);
   color: #ffffff;
+}
+
+.youtube-badge.relation-badge {
+  top: 6px;
+  left: 6px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+  font-weight: 750;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .youtube-badge.code {

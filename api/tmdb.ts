@@ -302,51 +302,171 @@ async function fetchTmdbByTitle(title: string, preferredType?: 'movie' | 'tv') {
   }
 }
 
+
+async function fetchTmdbRelated(tmdbId: string | number, mediaType: 'movie' | 'tv' = 'movie', imdbId?: string) {
+  let resolvedId = Number(tmdbId)
+  let resolvedType = mediaType
+
+  if ((!resolvedId || isNaN(resolvedId)) && imdbId) {
+    const findRes = await fetchTmdbByImdbId(imdbId)
+    if (findRes.status === 200 && (findRes.body as any)?.tmdbId) {
+      resolvedId = (findRes.body as any).tmdbId
+      resolvedType = (findRes.body as any).mediaType || mediaType
+    }
+  }
+
+  if (!resolvedId || isNaN(resolvedId)) {
+    return { status: 400, body: { results: [] } }
+  }
+
+  const authChain = getTmdbAuthChain()
+  if (authChain.length === 0) {
+    return { status: 200, body: { results: [] } }
+  }
+
+  const auth = authChain[0]
+  const isMovie = resolvedType === 'movie'
+  const endpoint = isMovie ? `/movie/${resolvedId}` : `/tv/${resolvedId}`
+
+  const results: any[] = []
+  const seenIds = new Set<number>([resolvedId])
+
+  try {
+    const detailUrl = new URL(`${TMDB_BASE_URL}${endpoint}`)
+    detailUrl.searchParams.set('append_to_response', 'belongs_to_collection,recommendations,similar')
+    const authConfig = applyTmdbAuth(detailUrl, auth)
+    const res = await fetch(detailUrl.toString(), authConfig)
+
+    if (res.ok) {
+      const data = await res.json()
+
+      // 1. Franchise Collection parts (e.g. Harry Potter, Spider-Man, Avengers, John Wick, Fast & Furious)
+      if (isMovie && data.belongs_to_collection?.id) {
+        try {
+          const colUrl = new URL(`${TMDB_BASE_URL}/collection/${data.belongs_to_collection.id}`)
+          const colAuthConfig = applyTmdbAuth(colUrl, auth)
+          const colRes = await fetch(colUrl.toString(), colAuthConfig)
+          if (colRes.ok) {
+            const colData = await colRes.json()
+            if (Array.isArray(colData.parts)) {
+              for (const part of colData.parts) {
+                if (!seenIds.has(part.id)) {
+                  seenIds.add(part.id)
+                  results.push({
+                    id: String(part.id),
+                    tmdbId: part.id,
+                    title: part.title,
+                    poster: part.poster_path ? `https://image.tmdb.org/t/p/w500${part.poster_path}` : '',
+                    hero: part.backdrop_path ? `https://image.tmdb.org/t/p/original${part.backdrop_path}` : '',
+                    still: part.backdrop_path ? `https://image.tmdb.org/t/p/w780${part.backdrop_path}` : '',
+                    synopsis: part.overview || '',
+                    year: (part.release_date || '').slice(0, 4),
+                    rating: part.vote_average ? part.vote_average.toFixed(1) : '8.0',
+                    type: 'Movie',
+                    isAnime: false,
+                    label: 'Franchise Part',
+                    genres: [],
+                  })
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // 2. Recommendations (algorithmically related by TMDB)
+      if (Array.isArray(data.recommendations?.results)) {
+        for (const item of data.recommendations.results) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id)
+            results.push({
+              id: String(item.id),
+              tmdbId: item.id,
+              title: item.title || item.name,
+              poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '',
+              hero: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : '',
+              still: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : '',
+              synopsis: item.overview || '',
+              year: (item.release_date || item.first_air_date || '').slice(0, 4),
+              rating: item.vote_average ? item.vote_average.toFixed(1) : '7.8',
+              type: isMovie ? 'Movie' : 'Series',
+              isAnime: false,
+              label: 'Recommended',
+              genres: [],
+            })
+          }
+        }
+      }
+
+      // 3. Similar titles
+      if (Array.isArray(data.similar?.results)) {
+        for (const item of data.similar.results) {
+          if (!seenIds.has(item.id)) {
+            seenIds.add(item.id)
+            results.push({
+              id: String(item.id),
+              tmdbId: item.id,
+              title: item.title || item.name,
+              poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '',
+              hero: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : '',
+              still: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : '',
+              synopsis: item.overview || '',
+              year: (item.release_date || item.first_air_date || '').slice(0, 4),
+              rating: item.vote_average ? item.vote_average.toFixed(1) : '7.5',
+              type: isMovie ? 'Movie' : 'Series',
+              isAnime: false,
+              label: 'Similar',
+              genres: [],
+            })
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('fetchTmdbRelated error:', err)
+  }
+
+  return { status: 200, body: { results } }
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
-  if (req.method && req.method !== 'GET') {
-    res.status(405).json({ Response: 'False', Error: 'Method not allowed.' })
+  const action = getQueryValue(req.query.action) || getQueryValue(req.query.endpoint)
+  if (action === 'related') {
+    const tmdbId = getQueryValue(req.query.tmdbId) || ''
+    const imdbId = getQueryValue(req.query.imdbId) || ''
+    const typeHint = getQueryValue(req.query.type) === 'tv' ? 'tv' : 'movie'
+    const result = await fetchTmdbRelated(tmdbId, typeHint, imdbId)
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800')
+    res.status(result.status).json(result.body)
     return
   }
 
-  const action = getQueryValue(req.query.action)
-
-  if (action === 'dramovnime') {
+  if (req.query.id && req.query.type === 'filmbox') {
+    const apiKey =
+      process.env.RAPIDAPI_KEY || '5b3524ee59msh498263595c20ecap1552cfjsn65a7114ff4aa'
     let id = getQueryValue(req.query.id)
-    const title = getQueryValue(req.query.title)
-    const se = getQueryValue(req.query.se)
-    const ep = getQueryValue(req.query.ep)
+    const se = getQueryValue(req.query.se) || '1'
+    const ep = getQueryValue(req.query.ep) || '1'
     const quality = getQueryValue(req.query.quality)
     const lang = getQueryValue(req.query.lang)
+    let detailPath = getQueryValue(req.query.detailPath)
 
-    const apiKey = process.env.RAPIDAPI_KEY
-    if (!apiKey) {
-      res.status(500).json({ error: 'RAPIDAPI_KEY not configured' })
-      return
-    }
-
-    let detailPath = ''
-
-    // Resolve the internal Dramovnime subject ID by searching via Filmbox
-    if (title) {
+    if (id && !/^\d+$/.test(id)) {
       try {
+        const searchParams = new URLSearchParams()
+        searchParams.set('keyword', id)
         const searchResponse = await fetch(
-          'https://multilang-movie-drama-database-api.p.rapidapi.com/filmbox/search',
+          `https://multilang-movie-drama-database-api.p.rapidapi.com/dramovnime/search?${searchParams}`,
           {
-            method: 'POST',
+            method: 'GET',
             headers: {
               'x-rapidapi-key': apiKey,
               'x-rapidapi-host': 'multilang-movie-drama-database-api.p.rapidapi.com',
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              keyword: title,
-              page: '1',
-              perPage: '5',
-              subjectType: '2',
-            }),
           },
         )
-
         if (searchResponse.ok) {
           const searchData = await searchResponse.json()
           const firstResult = searchData?.data?.[0]

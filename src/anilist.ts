@@ -43,24 +43,126 @@ export type AniListAnime = {
   };
 };
 
-const ANILIST_GRAPHQL_URL = 'https://graphql.anilist.co';
+export type AniListClient = {
+  id: string;
+  secret: string;
+  name: string;
+};
 
-async function queryAniList(query: string, variables: Record<string, any>) {
-  const response = await fetch(ANILIST_GRAPHQL_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+export const ANILIST_CLIENTS: AniListClient[] = [
+  {
+    name: 'Primary (45397)',
+    id: (import.meta as any).env?.ANILIST_CLIENT_ID || (import.meta as any).env?.VITE_ANILIST_CLIENT_ID || '45397',
+    secret: (import.meta as any).env?.ANILIST_CLIENT_SECRET || (import.meta as any).env?.VITE_ANILIST_CLIENT_SECRET || 'sx912uXkCtWuA3wLZPP3T9IAyEfYfkC8qjxxWvHn',
+  },
+  {
+    name: 'Secondary (49118)',
+    id: (import.meta as any).env?.ANILIST_SECONDARY_CLIENT_ID || (import.meta as any).env?.VITE_ANILIST_SECONDARY_CLIENT_ID || '49118',
+    secret: (import.meta as any).env?.ANILIST_SECONDARY_CLIENT_SECRET || (import.meta as any).env?.VITE_ANILIST_SECONDARY_CLIENT_SECRET || 'fjVuedrK0l2Jg6DrNE3vbKPlXp2QyQ0DANHXIorF',
+  },
+];
 
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(json.errors?.[0]?.message || 'AniList query failed');
+let currentClientIndex = 0;
+const clientCooldownUntil: Map<number, number> = new Map();
+
+export function getActiveAniListClient(): AniListClient {
+  const idx = getNextAvailableClientIndex();
+  return ANILIST_CLIENTS[idx];
+}
+
+function getNextAvailableClientIndex(): number {
+  const now = Date.now();
+  const currentCooldown = clientCooldownUntil.get(currentClientIndex) || 0;
+  if (now > currentCooldown) {
+    return currentClientIndex;
   }
 
-  return json.data;
+  for (let i = 0; i < ANILIST_CLIENTS.length; i++) {
+    const idx = (currentClientIndex + i) % ANILIST_CLIENTS.length;
+    const cd = clientCooldownUntil.get(idx) || 0;
+    if (now > cd) {
+      currentClientIndex = idx;
+      return idx;
+    }
+  }
+
+  return currentClientIndex;
+}
+
+export function rotateToNextAniListClient(cooldownSeconds = 60): AniListClient {
+  const now = Date.now();
+  clientCooldownUntil.set(currentClientIndex, now + cooldownSeconds * 1000);
+  const oldClient = ANILIST_CLIENTS[currentClientIndex];
+  currentClientIndex = (currentClientIndex + 1) % ANILIST_CLIENTS.length;
+  const newClient = ANILIST_CLIENTS[currentClientIndex];
+  console.warn(`[AniList] Limit reached on ${oldClient.name}. Rolling over to ${newClient.name}. Cooldown: ${cooldownSeconds}s.`);
+  return newClient;
+}
+
+const ANILIST_GRAPHQL_URL = 'https://graphql.anilist.co';
+
+async function queryAniList(query: string, variables: Record<string, any>, retryCount = 0): Promise<any> {
+  const maxRetries = ANILIST_CLIENTS.length;
+  const clientIdx = getNextAvailableClientIndex();
+  const client = ANILIST_CLIENTS[clientIdx];
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    'X-Client-ID': client.id,
+  };
+
+  try {
+    const response = await fetch(ANILIST_GRAPHQL_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query, variables }),
+    });
+
+    const remaining = response.headers.get('X-RateLimit-Remaining');
+    const retryAfter = response.headers.get('Retry-After') || response.headers.get('X-RateLimit-Reset');
+
+    if (response.status === 429 || (remaining !== null && Number(remaining) === 0)) {
+      const waitTime = retryAfter ? Math.max(10, parseInt(retryAfter, 10)) : 60;
+      rotateToNextAniListClient(waitTime);
+
+      if (retryCount < maxRetries) {
+        return queryAniList(query, variables, retryCount + 1);
+      }
+    }
+
+    const json = await response.json();
+
+    if (!response.ok || (Array.isArray(json.errors) && json.errors.length > 0)) {
+      const errorMsg = json.errors?.[0]?.message || 'AniList query failed';
+      const status = json.errors?.[0]?.status || response.status;
+      if (
+        status === 429 ||
+        errorMsg.toLowerCase().includes('rate limit') ||
+        errorMsg.toLowerCase().includes('too many requests')
+      ) {
+        rotateToNextAniListClient(60);
+        if (retryCount < maxRetries) {
+          return queryAniList(query, variables, retryCount + 1);
+        }
+      }
+      if (!response.ok) {
+        throw new Error(errorMsg);
+      }
+    }
+
+    return json.data;
+  } catch (err: any) {
+    if (
+      err?.message &&
+      (err.message.toLowerCase().includes('rate limit') || err.message.toLowerCase().includes('too many requests')) &&
+      retryCount < maxRetries
+    ) {
+      rotateToNextAniListClient(60);
+      return queryAniList(query, variables, retryCount + 1);
+    }
+    throw err;
+  }
 }
 
 export async function searchAnime(query: string, page = 1, perPage = 20): Promise<{
@@ -457,4 +559,168 @@ export async function fetchAniListSeasons(anilistId: number): Promise<AnimeSeaso
     return [];
   }
 }
+
+export async function fetchAnimeRelationsAndRecommendations(anilistId: number): Promise<any[]> {
+  if (!anilistId || isNaN(anilistId)) {
+    return [];
+  }
+
+  const query = `
+    query ($id: Int) {
+      Media(id: $id, type: ANIME) {
+        relations {
+          edges {
+            relationType
+            node {
+              id
+              idMal
+              title {
+                romaji
+                english
+                native
+                userPreferred
+              }
+              coverImage {
+                extraLarge
+                large
+                medium
+              }
+              bannerImage
+              description
+              genres
+              seasonYear
+              episodes
+              duration
+              format
+              status
+              averageScore
+            }
+          }
+        }
+        recommendations(sort: RATING_DESC, perPage: 16) {
+          nodes {
+            mediaRecommendation {
+              id
+              idMal
+              title {
+                romaji
+                english
+                native
+                userPreferred
+              }
+              coverImage {
+                extraLarge
+                large
+                medium
+              }
+              bannerImage
+              description
+              genres
+              seasonYear
+              episodes
+              duration
+              format
+              status
+              averageScore
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const data = await queryAniList(query, { id: anilistId });
+    const rawRelations = data?.Media?.relations?.edges || [];
+    const relationPriority: Record<string, number> = {
+      SEQUEL: 1,
+      PREQUEL: 2,
+      SIDE_STORY: 3,
+      PARENT: 4,
+      ALTERNATIVE: 5,
+      SPIN_OFF: 6,
+      SUMMARY: 7,
+      OTHER: 8,
+    };
+
+    const formatRelationLabel = (relType: string) => {
+      switch (relType) {
+        case 'SEQUEL': return 'Next Season / Sequel';
+        case 'PREQUEL': return 'Prequel';
+        case 'SIDE_STORY': return 'Side Story';
+        case 'ALTERNATIVE': return 'Alternative';
+        case 'PARENT': return 'Main Series';
+        case 'SUMMARY': return 'Movie / Recap';
+        case 'SPIN_OFF': return 'Spin-off';
+        default: return 'Related';
+      }
+    };
+
+    const seenIds = new Set<number>([anilistId]);
+    const results: any[] = [];
+
+    // 1. Direct Relations (Sequels, Prequels, Next Seasons, Side Stories)
+    const sortedEdges = [...rawRelations].sort((a: any, b: any) => {
+      const pA = relationPriority[a?.relationType] || 99;
+      const pB = relationPriority[b?.relationType] || 99;
+      return pA - pB;
+    });
+
+    for (const edge of sortedEdges) {
+      const node = edge?.node;
+      if (!node?.id || seenIds.has(node.id)) continue;
+      seenIds.add(node.id);
+
+      const title = node.title?.english || node.title?.userPreferred || node.title?.romaji || 'Anime';
+      results.push({
+        id: `al-${node.id}`,
+        anilistId: node.id,
+        title,
+        poster: node.coverImage?.extraLarge || node.coverImage?.large || '',
+        hero: node.bannerImage || node.coverImage?.extraLarge || '',
+        still: node.bannerImage || node.coverImage?.extraLarge || '',
+        genres: node.genres || ['Anime'],
+        synopsis: (node.description || '').replace(/<[^>]*>?/gm, ''),
+        year: String(node.seasonYear || ''),
+        type: node.format === 'MOVIE' ? 'Movie' : 'Anime',
+        isAnime: true,
+        rating: node.averageScore ? (node.averageScore / 10).toFixed(1) : '8.5',
+        label: formatRelationLabel(edge.relationType),
+        duration: node.duration ? `${node.duration}m` : undefined,
+      });
+    }
+
+    // 2. High-rated recommendations
+    const rawRecs = data?.Media?.recommendations?.nodes || [];
+    for (const rec of rawRecs) {
+      const node = rec?.mediaRecommendation;
+      if (!node?.id || seenIds.has(node.id)) continue;
+      seenIds.add(node.id);
+
+      const title = node.title?.english || node.title?.userPreferred || node.title?.romaji || 'Anime';
+      results.push({
+        id: `al-${node.id}`,
+        anilistId: node.id,
+        title,
+        poster: node.coverImage?.extraLarge || node.coverImage?.large || '',
+        hero: node.bannerImage || node.coverImage?.extraLarge || '',
+        still: node.bannerImage || node.coverImage?.extraLarge || '',
+        genres: node.genres || ['Anime'],
+        synopsis: (node.description || '').replace(/<[^>]*>?/gm, ''),
+        year: String(node.seasonYear || ''),
+        type: node.format === 'MOVIE' ? 'Movie' : 'Anime',
+        isAnime: true,
+        rating: node.averageScore ? (node.averageScore / 10).toFixed(1) : '8.2',
+        label: 'Recommended',
+        duration: node.duration ? `${node.duration}m` : undefined,
+      });
+    }
+
+    return results;
+  } catch (err) {
+    console.error('fetchAnimeRelationsAndRecommendations error:', err);
+    return [];
+  }
+}
+
 

@@ -101,7 +101,7 @@ import {
 } from './tmdb'
 import { HlsPlayer } from './HlsPlayer'
 import { MangaScreen } from './MangaScreen'
-import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds, type AnimeSeasonInfo } from './anilist'
+import { searchAnime, syncAnimeProgressToAniList, fetchAnimeByOptions, getAnimeDetails, fetchAnimeListByIds, fetchAnimeRelationsAndRecommendations, type AnimeSeasonInfo } from './anilist'
 import {
   fetchAccountProfiles as fetchRemoteProfiles,
   saveAccountProfiles as saveRemoteProfiles,
@@ -1376,6 +1376,63 @@ function setMagneticNavOffset(event: PointerEvent<HTMLElement>) {
 function resetMagneticNavOffset(event: PointerEvent<HTMLElement>) {
   event.currentTarget.style.setProperty('--nav-magnetic-x', '0px')
   event.currentTarget.style.setProperty('--nav-magnetic-y', '0px')
+}
+
+function extractFranchisePrefix(title: string): string {
+  if (!title) return ''
+  const clean = title
+    .replace(/[:\-–—].*$/, '') // Remove subtitle after colon or dash
+    .replace(/\b(season|series|part|act|chapter|saga|volume|vol|movie|r\d+|shippuden|brotherhood|the movie)\b.*$/i, '')
+    .trim()
+    .toLowerCase()
+  return clean.length >= 3 ? clean : title.trim().toLowerCase()
+}
+
+async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
+  if (!movie) return []
+
+  // 1. Anime: fetch exact relations (Sequels, Prequels, Next Seasons, Side Stories) & Recommendations from AniList
+  if (movie.isAnime || movie.anilistId || movie.id.startsWith('al-')) {
+    const anilistId = movie.anilistId || (movie.id.startsWith('al-') ? Number(movie.id.replace('al-', '')) : undefined)
+    if (anilistId) {
+      try {
+        const results = await fetchAnimeRelationsAndRecommendations(anilistId)
+        if (results && results.length > 0) {
+          return results
+        }
+      } catch (err) {
+        console.error('fetchAnimeRelationsAndRecommendations error:', err)
+      }
+    }
+  }
+
+  // 2. Movie or TV Show: fetch TMDB collection parts, sequels, recommendations, and similar
+  const tmdbId = movie.tmdbId
+  const imdbId = movie.id.startsWith('tt') ? movie.id : undefined
+  const isTv = movie.type === 'Series' || movie.tmdbType === 'tv' || isTvShow(movie)
+
+  if (tmdbId || imdbId) {
+    try {
+      const params = new URLSearchParams({
+        action: 'related',
+        type: isTv ? 'tv' : 'movie',
+      })
+      if (tmdbId) params.set('tmdbId', String(tmdbId))
+      if (imdbId) params.set('imdbId', imdbId)
+
+      const res = await fetch(`/api/tmdb?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.results) && data.results.length > 0) {
+          return data.results
+        }
+      }
+    } catch (err) {
+      console.error('fetchRelatedTitles TMDB error:', err)
+    }
+  }
+
+  return []
 }
 
 function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
@@ -5528,15 +5585,90 @@ function DetailScreen({
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [])
-  const relatedItems = useMemo(
-    () =>
-      buildRail(
-        relatedMovies.filter((related) => related.id !== movie.id),
-        [],
-        12,
-      ),
-    [movie.id, relatedMovies],
-  )
+  const [liveRelated, setLiveRelated] = useState<Movie[]>([])
+
+  useEffect(() => {
+    let active = true
+    void fetchRelatedTitlesForMovie(movie).then((items) => {
+      if (active && items.length > 0) {
+        setLiveRelated(items)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [movie.id, movie.anilistId, movie.tmdbId])
+
+  const relatedItems = useMemo(() => {
+    const isAdultMovie = (m: Movie) =>
+      Boolean(
+        m.isJav ||
+          m.isHentaiOcean ||
+          m.id.startsWith('jav-') ||
+          m.id.startsWith('phub-') ||
+          m.label === 'JAV' ||
+          m.label === 'PHub' ||
+          m.genres.some((g) => g.toLowerCase() === 'hentai'),
+      )
+
+    const cleanRelated = (relatedMovies || []).filter(
+      (m) => m.id !== movie.id && !isAdultMovie(m),
+    )
+
+    const franchiseKey = extractFranchisePrefix(movie.title)
+    const seenIds = new Set<string>([String(movie.id)])
+    const combined: Movie[] = []
+
+    // 1. Live relations from AniList / TMDB (Sequels, Prequels, Next Seasons, Franchise Collection parts, Recommendations)
+    for (const item of liveRelated) {
+      const idKey = String(item.id)
+      if (!seenIds.has(idKey) && !isAdultMovie(item)) {
+        seenIds.add(idKey)
+        combined.push(item)
+      }
+    }
+
+    // 2. Franchise titles from local pool that share the same franchise base name
+    if (franchiseKey && franchiseKey.length >= 3) {
+      for (const item of cleanRelated) {
+        const otherKey = extractFranchisePrefix(item.title)
+        const idKey = String(item.id)
+        if (
+          !seenIds.has(idKey) &&
+          (otherKey === franchiseKey ||
+            item.title.toLowerCase().includes(franchiseKey) ||
+            movie.title.toLowerCase().includes(otherKey))
+        ) {
+          seenIds.add(idKey)
+          combined.push({
+            ...item,
+            label: item.label || 'Franchise / Sequel',
+          })
+        }
+      }
+    }
+
+    // 3. Fallback recommendations sorted by genre similarity
+    const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+    const sortedFallback = [...cleanRelated]
+      .filter((m) => !seenIds.has(String(m.id)))
+      .sort((a, b) => {
+        const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+        const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+        return bMatches - aMatches
+      })
+
+    for (const item of sortedFallback) {
+      const idKey = String(item.id)
+      if (!seenIds.has(idKey)) {
+        seenIds.add(idKey)
+        combined.push(item)
+      }
+    }
+
+    return combined.slice(0, 16)
+  }, [movie.id, movie.title, movie.genres, liveRelated, relatedMovies])
+
   const trailerItems = useMemo(
     () => buildRail([movie, ...relatedItems], relatedItems, 2),
     [movie, relatedItems],
@@ -6526,28 +6658,48 @@ function DetailPosterRail({
     return null
   }
 
-  const scrollRow = () => {
+  const scrollRow = (direction: 1 | -1 = 1) => {
     rowRef.current?.scrollBy({
-      left: rowRef.current.clientWidth * 0.82,
+      left: direction * (rowRef.current.clientWidth * 0.82),
       behavior: 'smooth',
     })
   }
 
   return (
     <section className="detail-section detail-related-section">
-      <DetailSectionHeading title={title} onClick={scrollRow} />
-      <div ref={rowRef} className="detail-poster-row">
-        {movies.map((item) => (
-          <button
-            key={item.id}
-            className="detail-related-card"
-            type="button"
-            aria-label={`Open ${item.title}`}
-            onClick={() => onOpenDetail(item)}
-          >
-            <PosterImage movie={item} fallback={posterImageFor(item)} />
-          </button>
-        ))}
+      <DetailSectionHeading title={title} onClick={() => scrollRow(1)} />
+      <div className="detail-poster-viewport rail-viewport">
+        <button
+          className="rail-arrow rail-arrow-prev detail-poster-arrow"
+          type="button"
+          aria-label="Scroll left"
+          onClick={() => scrollRow(-1)}
+        >
+          <ChevronLeft />
+        </button>
+
+        <div ref={rowRef} className="detail-poster-row">
+          {movies.map((item) => (
+            <button
+              key={item.id}
+              className="detail-related-card"
+              type="button"
+              aria-label={`Open ${item.title}`}
+              onClick={() => onOpenDetail(item)}
+            >
+              <PosterImage movie={item} fallback={posterImageFor(item)} />
+            </button>
+          ))}
+        </div>
+
+        <button
+          className="rail-arrow rail-arrow-next detail-poster-arrow"
+          type="button"
+          aria-label="Scroll right"
+          onClick={() => scrollRow(1)}
+        >
+          <ChevronRight />
+        </button>
       </div>
     </section>
   )
@@ -6910,6 +7062,26 @@ function WatchScreen({
     }
   }, [isJavVideo, movie.id, movie.genres])
 
+  const [liveRelated, setLiveRelated] = useState<Movie[]>([])
+
+  useEffect(() => {
+    let active = true
+    if (isJavVideo || isPhubVideo) {
+      setLiveRelated([])
+      return
+    }
+
+    void fetchRelatedTitlesForMovie(movie).then((items) => {
+      if (active && items.length > 0) {
+        setLiveRelated(items)
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [movie.id, movie.anilistId, movie.tmdbId, isJavVideo, isPhubVideo])
+
   const relatedList = useMemo(() => {
     const isAdultMovie = (m: Movie) =>
       Boolean(
@@ -6930,28 +7102,70 @@ function WatchScreen({
         )
         pool = [...pool, ...fallbackItems]
       }
-      return pool.slice(0, 18)
+      return pool.slice(0, 5)
     }
 
     if (isJavVideo && javRelated.length > 0) {
-      return javRelated.slice(0, 18)
+      return javRelated.slice(0, 5)
     }
 
-    // Normal Apple UI / Netflix UI movie, TV show, or Anime:
-    // Only return matching relatedMovies (strictly non-adult, genre-relevant content)
     const cleanRelated = (relatedMovies || []).filter(
       (m) => m.id !== movie.id && !isAdultMovie(m),
     )
 
-    const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
-    const sorted = [...cleanRelated].sort((a, b) => {
-      const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
-      const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
-      return bMatches - aMatches
-    })
+    const franchiseKey = extractFranchisePrefix(movie.title)
+    const seenIds = new Set<string>([String(movie.id)])
+    const combined: Movie[] = []
 
-    return sorted.slice(0, 18)
-  }, [isPhubVideo, similarPhubVideos, isJavVideo, javRelated, movie.id, movie.genres, relatedMovies])
+    // 1. Live relations from AniList / TMDB (Sequels, Prequels, Next Seasons, Franchise Collection parts, Recommendations)
+    for (const item of liveRelated) {
+      const idKey = String(item.id)
+      if (!seenIds.has(idKey) && !isAdultMovie(item)) {
+        seenIds.add(idKey)
+        combined.push(item)
+      }
+    }
+
+    // 2. Franchise titles from local pool that share the same franchise base name
+    if (franchiseKey && franchiseKey.length >= 3) {
+      for (const item of cleanRelated) {
+        const otherKey = extractFranchisePrefix(item.title)
+        const idKey = String(item.id)
+        if (
+          !seenIds.has(idKey) &&
+          (otherKey === franchiseKey ||
+            item.title.toLowerCase().includes(franchiseKey) ||
+            movie.title.toLowerCase().includes(otherKey))
+        ) {
+          seenIds.add(idKey)
+          combined.push({
+            ...item,
+            label: item.label || 'Franchise / Sequel',
+          })
+        }
+      }
+    }
+
+    // 3. Fallback recommendations sorted by genre similarity
+    const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+    const sortedFallback = [...cleanRelated]
+      .filter((m) => !seenIds.has(String(m.id)))
+      .sort((a, b) => {
+        const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+        const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+        return bMatches - aMatches
+      })
+
+    for (const item of sortedFallback) {
+      const idKey = String(item.id)
+      if (!seenIds.has(idKey)) {
+        seenIds.add(idKey)
+        combined.push(item)
+      }
+    }
+
+    return combined.slice(0, 5)
+  }, [isPhubVideo, similarPhubVideos, isJavVideo, javRelated, movie.id, movie.title, movie.genres, liveRelated, relatedMovies])
 
   const renderYouTubeRelatedSidebar = () => {
     if (relatedList.length === 0) return null
@@ -6959,7 +7173,7 @@ function WatchScreen({
     return (
       <div className="youtube-related-sidebar">
         <div className="youtube-related-header">
-          <h3 className="youtube-related-header-title">Related</h3>
+          <h3 className="youtube-related-header-title">Related & Next Parts</h3>
         </div>
         <div className="youtube-related-list">
           {relatedList.map((item) => (
@@ -6971,6 +7185,13 @@ function WatchScreen({
             >
               <div className="youtube-related-thumb">
                 <img src={item.still || item.hero || item.poster} alt="" loading="lazy" />
+                {item.label &&
+                  item.label !== 'Anime' &&
+                  item.label !== 'Movie' &&
+                  item.label !== 'Series' &&
+                  item.label !== 'Video' && (
+                    <span className="youtube-badge relation-badge">{item.label}</span>
+                  )}
                 {item.runtime && item.runtime !== '00:00:00' && (
                   <span className="youtube-badge duration">{item.runtime}</span>
                 )}
@@ -6986,7 +7207,7 @@ function WatchScreen({
                   </p>
                 )}
                 <p className="youtube-related-meta">
-                  <span className="youtube-genre">{item.genres[0] ?? item.label ?? 'Video'}</span>
+                  <span className="youtube-genre">{item.label || item.genres[0] || 'Related'}</span>
                   {item.year && <span className="youtube-dot">• {item.year}</span>}
                   {item.rating && item.rating !== 'N/A' && (
                     <span className="youtube-rating">{item.rating}</span>
