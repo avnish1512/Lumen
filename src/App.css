@@ -14247,6 +14247,252 @@ body:has(.add-profile-screen),
   height: 18px;
 }
 
+/* Episode navigation buttons (Previous / Play Next) */
+.watch-ep-nav-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.watch-ep-nav-group-lower {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+}
+
+.watch-ep-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.watch-ep-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.45);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.watch-ep-nav-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.watch-ep-nav-btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+  pointer-events: auto;
+}
+
+.watch-next-ep-btn {
+  background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(184, 29, 39, 0.9)) !important;
+  border-color: rgba(255, 75, 85, 0.5) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(229, 9, 20, 0.35) !important;
+}
+
+.watch-next-ep-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #e50914, #ff1e27) !important;
+  box-shadow: 0 6px 20px rgba(229, 9, 20, 0.55) !important;
+}
+
+.watch-next-ep-btn:disabled {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
+}
+
+.anime-watch-actions .watch-ep-nav-btn {
+  height: 54px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+
+.anime-ep-nav-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ep-panel-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ep-panel-nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.ep-panel-nav-btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.ep-panel-next-btn {
+  background: rgba(229, 9, 20, 0.35);
+  border-color: rgba(229, 9, 20, 0.55);
+  color: #fff;
+}
+
+.ep-panel-next-btn:hover:not(:disabled) {
+  background: rgba(229, 9, 20, 0.65);
+}
+
+/* Under-iframe episode control bar */
+.player-under-iframe-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 18px;
+  margin-top: 14px;
+  border-radius: 16px;
+  background: rgba(18, 20, 29, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(16px);
+  box-sizing: border-box;
+}
+
+.player-under-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.player-under-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.player-under-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.player-under-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.player-under-btn.player-next-btn {
+  background: linear-gradient(135deg, #e50914, #b81d24) !important;
+  border-color: rgba(255, 75, 85, 0.6) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 18px rgba(229, 9, 20, 0.4) !important;
+}
+
+.player-under-btn.player-next-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ff1e27, #e50914) !important;
+  box-shadow: 0 8px 24px rgba(229, 9, 20, 0.65) !important;
+  transform: translateY(-2px);
+}
+
+.player-under-btn.player-next-btn:disabled {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: none !important;
+}
+
+.player-under-ep-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  justify-content: center;
+  flex: 1;
+}
+
+.player-under-ep-pill {
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.player-under-ep-title {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+  .player-under-iframe-bar {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .player-under-btn {
+    padding: 0 12px;
+    height: 42px;
+    font-size: 13px;
+    gap: 6px;
+  }
+  .player-under-btn span {
+    display: inline;
+  }
+  .player-under-ep-title {
+    display: none;
+  }
+}
+
 /* Season header row with the episode finder next to the season dropdown. */
 .season-section .season-header {
   display: flex;

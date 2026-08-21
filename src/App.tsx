@@ -63,6 +63,8 @@ import {
   Video,
   Maximize2,
   Minimize2,
+  SkipBack,
+  SkipForward,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -5772,6 +5774,17 @@ function DetailScreen({
                   <Download />
                   <span>Download</span>
                 </button>
+                {isDesktop && (
+                  <button
+                    className="circle-action"
+                    type="button"
+                    onClick={onSave}
+                    title={isSaved ? 'Saved to My List' : 'Add to My List'}
+                    aria-label={isSaved ? 'Saved to My List' : 'Add to My List'}
+                  >
+                    {isSaved ? <Check /> : <Plus />}
+                  </button>
+                )}
                 {!isDesktop && (
                   <div className="netflix-detail-iconrow">
                     <button type="button" className="netflix-icon-action" title="Set Reminders">
@@ -7150,6 +7163,39 @@ function WatchScreen({
     })
   }, [episodeNumbers, epSearchQuery, movie.animeEpisodes])
 
+  const canGoPrevEpisode = Boolean(
+    isSeries && (episode > 1 || season > 1),
+  )
+  const canGoNextEpisode = Boolean(
+    isSeries &&
+      (episode < episodeNumbers.length ||
+        watchSeasons.some((s) => s.season > season)),
+  )
+
+  const handlePrevEpisode = () => {
+    if (episode > 1) {
+      setEpisode((e) => e - 1)
+    } else if (season > 1) {
+      const prevSeasonNum = season - 1
+      const prevSeason = watchSeasons.find((s) => s.season === prevSeasonNum)
+      setSeason(prevSeasonNum)
+      setEpisode(prevSeason ? prevSeason.episodeCount : 1)
+    }
+  }
+
+  const handleNextEpisode = () => {
+    if (episode < episodeNumbers.length) {
+      setEpisode((e) => e + 1)
+    } else {
+      const nextSeasonNum = season + 1
+      const nextSeason = watchSeasons.find((s) => s.season === nextSeasonNum)
+      if (nextSeason) {
+        setSeason(nextSeasonNum)
+        setEpisode(1)
+      }
+    }
+  }
+
   // MegaPlay (VidNest) posts playback events to the parent window. Use the
   // first time/watching-log event to flag the title as "continue watching".
   useEffect(() => {
@@ -7749,12 +7795,62 @@ function WatchScreen({
     </section>
   )
 
+  const renderUnderIframeBar = () => {
+    if (!isSeries) return null
+    return (
+      <div className="player-under-iframe-bar" aria-label="Episode Navigation">
+        <button
+          type="button"
+          className="player-under-btn player-prev-btn"
+          onClick={handlePrevEpisode}
+          disabled={!canGoPrevEpisode}
+          title={canGoPrevEpisode ? `Previous Episode (E${episode > 1 ? episode - 1 : 'Prev Season'})` : 'No previous episode'}
+          aria-label="Previous Episode"
+        >
+          <SkipBack size={18} />
+          <span>Previous Episode</span>
+        </button>
+
+        <div className="player-under-ep-indicator">
+          <span className="player-under-ep-pill">
+            S{season} · E{episode}
+          </span>
+          {(() => {
+            const animeEp = movie.animeEpisodes?.[episode - 1]
+            const tmdbEp = watchTmdbEpisodes.find((item) => item.number === episode)
+            const epTitle = movie.isAnime
+              ? animeEp?.title
+              : (tmdbEp?.name || animeEp?.title)
+            return epTitle ? (
+              <span className="player-under-ep-title" title={epTitle}>
+                {epTitle}
+              </span>
+            ) : null
+          })()}
+        </div>
+
+        <button
+          type="button"
+          className="player-under-btn player-next-btn"
+          onClick={handleNextEpisode}
+          disabled={!canGoNextEpisode}
+          title={canGoNextEpisode ? `Play Next Episode (E${episode < episodeNumbers.length ? episode + 1 : 'Next Season'})` : 'No next episode'}
+          aria-label="Play Next Episode"
+        >
+          <span>Play Next</span>
+          <SkipForward size={18} />
+        </button>
+      </div>
+    )
+  }
+
   if (isMobile) {
     return (
       <section className="screen watch-screen">
         <DetailTopBar onBack={onBack} dark />
 
         {renderPlayerSection()}
+        {renderUnderIframeBar()}
 
         <div className="watch-topbar">
           {!isPartyGuest && (
@@ -7943,9 +8039,10 @@ function WatchScreen({
       <DetailTopBar onBack={onBack} dark />
 
       <div className="anime-watch-main-grid">
-        {/* LEFT COLUMN: Player -> Control & Server bar -> Title/Synopsis/Metadata */}
+        {/* LEFT COLUMN: Player -> Under-iframe Bar -> Control & Server bar -> Title/Synopsis/Metadata */}
         <div className="anime-watch-left-col">
           {renderPlayerSection()}
+          {renderUnderIframeBar()}
 
           <div className="anime-server-subdub-row">
             {!isPartyGuest && (
