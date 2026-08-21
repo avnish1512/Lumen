@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  CircleMinus,
   Clapperboard,
   Download,
   Heart,
@@ -11197,9 +11196,9 @@ function MovieRail({ title, movies, compact, landscape, onOpenDetail }: MovieRai
 }
 
 type ContinueWatchingRailProps = MovieRailProps & {
-  onMarkWatched: (movie: Movie) => void
   onRemoveContinue: (movie: Movie) => void
-  onRemoveWatchlist: (movie: Movie) => void
+  onMarkWatched?: (movie: Movie) => void
+  onRemoveWatchlist?: (movie: Movie) => void
   isJavSection?: boolean
   isPhubSection?: boolean
 }
@@ -11215,9 +11214,7 @@ function ContinueWatchingRail({
   title,
   movies,
   onOpenDetail,
-  onMarkWatched,
   onRemoveContinue,
-  onRemoveWatchlist,
   isJavSection = false,
   isPhubSection = false,
 }: ContinueWatchingRailProps) {
@@ -11331,25 +11328,6 @@ function ContinueWatchingRail({
     document.body.append(link)
     link.click()
     link.remove()
-  }
-
-  const shareContinueItem = async (movie: Movie, label: string) => {
-    const url = imdbUrl(movie)
-
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: movie.title,
-          text: `${label}: ${movie.title}`,
-          url,
-        })
-        return
-      }
-
-      await navigator.clipboard.writeText(url)
-    } catch {
-      // Share sheets can be cancelled without needing app feedback.
-    }
   }
 
   const activeMenuMovie = menuState?.movie
@@ -11474,55 +11452,6 @@ function ContinueWatchingRail({
             >
               <Info />
               <span>{activeMenuIsTv ? 'Go to Show' : 'Go to Movie'}</span>
-            </button>
-            {activeMenuIsTv && (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() =>
-                  runMenuAction(() =>
-                    shareContinueItem(activeMenuMovie, 'Share Episode'),
-                  )
-                }
-              >
-                <Share />
-                <span>Share Episode</span>
-              </button>
-            )}
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() =>
-                runMenuAction(() =>
-                  shareContinueItem(
-                    activeMenuMovie,
-                    activeMenuIsTv ? 'Share Show' : 'Share Movie',
-                  ),
-                )
-              }
-            >
-              <Share />
-              <span>{activeMenuIsTv ? 'Share Show' : 'Share Movie'}</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() =>
-                runMenuAction(() => onRemoveWatchlist(activeMenuMovie))
-              }
-            >
-              <CircleMinus />
-              <span>Remove from Watchlist</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() =>
-                runMenuAction(() => onMarkWatched(activeMenuMovie))
-              }
-            >
-              <Check />
-              <span>Mark as Watched</span>
             </button>
             <button
               type="button"

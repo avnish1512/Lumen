@@ -103,13 +103,11 @@ const ANILIST_GRAPHQL_URL = 'https://graphql.anilist.co';
 
 async function queryAniList(query: string, variables: Record<string, any>, retryCount = 0): Promise<any> {
   const maxRetries = ANILIST_CLIENTS.length;
-  const clientIdx = getNextAvailableClientIndex();
-  const client = ANILIST_CLIENTS[clientIdx];
+  getNextAvailableClientIndex();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
-    'X-Client-ID': client.id,
   };
 
   try {
