@@ -7224,6 +7224,7 @@ function WatchScreen({
   const [season, setSeason] = useState(movie.streamSeason ?? 1)
   const [language, setLanguage] = useState<'sub' | 'dub'>(movie.streamLanguage ?? 'sub')
   const [epSearchQuery, setEpSearchQuery] = useState('')
+  const streamIframeRef = useRef<HTMLIFrameElement | null>(null)
 
   useEffect(() => {
     setEpisode(movie.streamEpisode ?? 1)
@@ -7417,8 +7418,7 @@ function WatchScreen({
     }
   }
 
-  // MegaPlay (VidNest) posts playback events to the parent window. Use the
-  // first time/watching-log event to flag the title as "continue watching".
+  // MegaPlay (VidNest) and EmbedMaster post playback events to the parent window.
   useEffect(() => {
     if (activeProviderId !== 'megaplay' && activeProviderId !== 'embedmaster') {
       return
@@ -7430,7 +7430,9 @@ function WatchScreen({
       if (
         typeof event.origin === 'string' &&
         !event.origin.includes('vidnest.fun') &&
-        !event.origin.includes('megaplay.buzz')
+        !event.origin.includes('megaplay.buzz') &&
+        !event.origin.includes('embedmaster.link') &&
+        !event.origin.includes('embedmaster')
       ) {
         return
       }
@@ -7450,6 +7452,27 @@ function WatchScreen({
         | null
 
       const isEmbedMasterEvent = (payload as any)?.source === 'embedmaster_player'
+
+      // Handle full screen requests if posted by player
+      if (
+        (payload as any)?.event === 'fullscreen' ||
+        (payload as any)?.event === 'enter_fullscreen' ||
+        (payload as any)?.event === 'request_fullscreen' ||
+        message?.type === 'fullscreen'
+      ) {
+        if (streamIframeRef.current) {
+          if (!document.fullscreenElement) {
+            if (streamIframeRef.current.requestFullscreen) {
+              streamIframeRef.current.requestFullscreen().catch(() => {})
+            } else if ((streamIframeRef.current as any).webkitRequestFullscreen) {
+              (streamIframeRef.current as any).webkitRequestFullscreen()
+            }
+          } else if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {})
+          }
+        }
+      }
+
       const isPlaybackEvent =
         message?.event === 'time' ||
         message?.event === 'complete' ||
@@ -7959,11 +7982,16 @@ function WatchScreen({
         />
       ) : streamUrl && !opensExternally ? (
         <iframe
+          ref={streamIframeRef}
           className="stream-player"
           src={streamUrl}
           title={`${movie.title} stream`}
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; accelerometer; gyroscope; clipboard-write"
           allowFullScreen
+          // @ts-ignore
+          webkitallowfullscreen="true"
+          // @ts-ignore
+          mozallowfullscreen="true"
           // MegaBuzz (megaplay.buzz) requires a referer; every other embed is
           // sent with no referer for privacy.
           referrerPolicy={activeProviderId === 'megabuzz' ? 'origin' : 'no-referrer'}
