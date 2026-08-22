@@ -80,6 +80,32 @@ function safeEqual(a: string, b: string): boolean {
   return mismatch === 0
 }
 
+// In-memory sliding window rate limiter
+type RateLimitBucket = { count: number; resetAt: number }
+const rateLimitBuckets = new Map<string, RateLimitBucket>()
+
+function getClientIp(req: ApiRequest): string {
+  const forwarded = req.headers?.['x-forwarded-for']
+  const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded
+  if (forwardedIp) return forwardedIp.split(',')[0].trim()
+  const realIp = req.headers?.['x-real-ip']
+  return String(Array.isArray(realIp) ? realIp[0] : realIp || 'unknown')
+}
+
+function checkRateLimit(key: string, limit: number, windowMs: number): boolean {
+  const now = Date.now()
+  const bucket = rateLimitBuckets.get(key)
+  if (!bucket || bucket.resetAt <= now) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs })
+    return true
+  }
+  if (bucket.count >= limit) {
+    return false
+  }
+  bucket.count += 1
+  return true
+}
+
 // Privileged actions (viewing/editing accounts, changing the Lord PIN) require
 // the admin credential, presented by the client via the `x-admin-key` header or
 // an `adminKey` body field. It's matched against ADMIN_PASSWORD (the admin's
@@ -291,6 +317,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   // so no admin password ships in the client bundle. Handled before the
   // Supabase gate so the admin can sign in even if Supabase is unavailable.
   if (kind === 'accounts' && qv(req.query.action) === 'verify') {
+    const ip = getClientIp(req)
+    if (!checkRateLimit(`login:${ip}`, 12, 60_000)) {
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(429).json({ ok: false, error: 'Too many login attempts. Please try again later.' })
+      return
+    }
     const email = String(body.email ?? '').trim().toLowerCase()
     const password = String(body.password ?? '')
     const adminPassword = await resolveAdminPassword(env, config)
@@ -399,6 +431,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         }
         // `verify` compares a candidate PIN server-side and returns only ok/no.
         if (qv(req.query.action) === 'verify') {
+          const ip = getClientIp(req)
+          if (!checkRateLimit(`pin:${ip}`, 8, 60_000)) {
+            res.status(429).json({ ok: false, error: 'Too many PIN attempts. Please wait a moment.' })
+            return
+          }
           res.status(200).json({ ok: safeEqual(String(qv(req.query.pin) ?? ''), pin) })
           return
         }
@@ -440,9 +477,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     try {
       if (req.method === 'GET') {
         if (action === 'friends') {
-          const email = (qv(req.query.email) ?? '').toLowerCase()
-          const emails = (await listAccountEmails(config)).filter((c) => c.toLowerCase() !== email)
-          res.status(200).json({ ok: true, configured: true, friends: emails })
+          const email = (qv(req.query.email) ?? '').trim().toLowerCase()
+          if (!email || !email.includes('@')) {
+            res.status(400).json({ ok: false, error: 'Valid email required.', friends: [] })
+            return
+          }
+          const allEmails = await listAccountEmails(config)
+          const isRegistered = email === adminEmailFromEnv(env) || allEmails.some((e) => e.toLowerCase() === email)
+          if (!isRegistered) {
+            res.status(403).json({ ok: false, error: 'Account not recognized.', friends: [] })
+            return
+          }
+          const friends = allEmails.filter((c) => c.toLowerCase() !== email)
+          res.status(200).json({ ok: true, configured: true, friends })
           return
         }
         if (action === 'incoming') {
