@@ -563,7 +563,7 @@ function safeText(value: string | undefined, fallback = 'N/A') {
   return value
 }
 
-function fallbackPoster(_rank: number) {
+function fallbackPoster() {
   return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
 }
 
@@ -608,7 +608,7 @@ function fallbackMovieFromId(id: string, rank = 1): Movie {
     maturity: fallback.maturity,
     progress: progressFor(id),
     hero: fallback.hero ?? fallbackHero(rank),
-    poster: fallback.poster ?? fallbackPoster(rank),
+    poster: fallback.poster ?? fallbackPoster(),
     still: fallback.still ?? fallback.hero ?? fallbackStill(rank),
     synopsis: fallback.synopsis,
     cast: fallback.cast,
@@ -621,8 +621,8 @@ function fallbackMovieFromId(id: string, rank = 1): Movie {
   }
 }
 
-function posterFor(movie: Pick<OmdbSearchItem, 'Poster'>, rank: number) {
-  return movie.Poster && movie.Poster !== 'N/A' ? movie.Poster : fallbackPoster(rank)
+function posterFor(movie: Pick<OmdbSearchItem, 'Poster'>) {
+  return movie.Poster && movie.Poster !== 'N/A' ? movie.Poster : fallbackPoster()
 }
 
 function splitList(value: string | undefined, fallback: string[]) {
@@ -667,7 +667,7 @@ function badgesFor(detail: Partial<OmdbDetail>) {
 
 export function movieFromDetail(detail: OmdbDetail, rank = 1): Movie {
   const fallback = fallbackMedia[detail.imdbID]
-  const poster = fallback?.poster ?? posterFor(detail, rank)
+  const poster = fallback?.poster ?? posterFor(detail)
   const genres = splitList(detail.Genre, ['Movie'])
 
   return {
@@ -701,7 +701,7 @@ export function movieFromDetail(detail: OmdbDetail, rank = 1): Movie {
 
 export function movieFromSearch(item: OmdbSearchItem, rank = 1): Movie {
   const fallback = fallbackMedia[item.imdbID]
-  const poster = fallback?.poster ?? posterFor(item, rank)
+  const poster = fallback?.poster ?? posterFor(item)
 
   return {
     id: item.imdbID,

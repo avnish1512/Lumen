@@ -30,7 +30,7 @@ type MangaScreenProps = {
 type View = 'browse' | 'detail' | 'reader'
 
 export function MangaScreen({
-  onBack: _onBack,
+  onBack,
   currentUser = null,
   onProfile,
   profiles = [],
@@ -285,7 +285,20 @@ export function MangaScreen({
   return (
     <section className="screen manga-screen">
       <header className="home-header">
-        <h1>Manga</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {onBack && (
+            <button
+              className="manga-back"
+              type="button"
+              onClick={onBack}
+              style={{ display: 'flex', alignItems: 'center', background: 'none', border: 0, color: '#fff', cursor: 'pointer' }}
+              title="Back to Home"
+            >
+              <ChevronLeft size={22} />
+            </button>
+          )}
+          <h1>Manga</h1>
+        </div>
         <div className="header-actions">
           <button
             className="mobile-search-btn"

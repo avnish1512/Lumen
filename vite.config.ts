@@ -1241,12 +1241,15 @@ function imgDevProxy(): Plugin {
         let allowed = false
         try {
           const parsed = new URL(target)
-          allowed =
+          if (
             parsed.protocol === 'https:' &&
             (parsed.hostname === 's4.anilist.co' ||
               parsed.hostname.endsWith('.anilist.co'))
+          ) {
+            allowed = true
+          }
         } catch {
-          allowed = false
+          // invalid url
         }
 
         if (!allowed) {
@@ -1440,7 +1443,9 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
             if (config) {
               try {
                 profiles = await fetchAccountProfiles(config, email)
-              } catch {}
+              } catch {
+                // ignore fetch failure
+              }
             }
             if (profiles && profiles.length > 0) {
               devProfilesMap.set(email, profiles)
@@ -1470,7 +1475,9 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
             if (config) {
               try {
                 await saveAccountProfiles(config, email, profiles)
-              } catch {}
+              } catch {
+                // ignore save failure
+              }
             }
             sendJson(res, 200, { ok: true, configured: Boolean(config) })
             return
@@ -1495,7 +1502,9 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
                 if (remotePin && remotePin.length > 0 && remotePin[0].name) {
                   pin = remotePin[0].name
                 }
-              } catch {}
+              } catch {
+                // ignore fetch failure
+              }
             }
             const requestUrl = new URL(req.url ?? '/', 'http://localhost')
             if (requestUrl.searchParams.get('action') === 'verify') {
@@ -1527,7 +1536,9 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
             if (config) {
               try {
                 await saveAccountProfiles(config, 'admin_lord_pin', [{ name: newPin, avatarColor: 'lord' }])
-              } catch {}
+              } catch {
+                // ignore save failure
+              }
             }
             sendJson(res, 200, { ok: true })
             return
@@ -1559,7 +1570,9 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
             if (config) {
               try {
                 history = await fetchWatchHistory(config, key)
-              } catch {}
+              } catch {
+                // ignore fetch failure
+              }
             }
             sendJson(res, 200, { ok: true, configured: Boolean(config), history })
             return
@@ -1583,7 +1596,9 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
             if (config) {
               try {
                 await saveWatchHistory(config, key, history)
-              } catch {}
+              } catch {
+                // ignore save failure
+              }
             }
             sendJson(res, 200, { ok: true, configured: Boolean(config) })
             return
