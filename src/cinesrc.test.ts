@@ -104,4 +104,12 @@ describe('CineSrc server integration', () => {
     const url = buildStreamUrl(tvShow, 'cinesrc')
     expect(url).toBe('https://cinesrc.st/embed/tv/1396?s=1&e=1&color=%2347A8FF&autonext=true&autoskip=true')
   })
+
+  it('correctly distinguishes admin main account from regular accounts', async () => {
+    const { isMainAccount, MAIN_ACCOUNT_EMAIL } = await import('./accounts-api')
+    expect(isMainAccount(MAIN_ACCOUNT_EMAIL)).toBe(true)
+    expect(isMainAccount('user@example.com')).toBe(false)
+    expect(isMainAccount(null)).toBe(false)
+    expect(isMainAccount(undefined)).toBe(false)
+  })
 })

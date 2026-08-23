@@ -328,7 +328,12 @@ export type UserProfile = {
   starredServer?: string
 }
 
+const adminStarredServerKey = 'lumen.starredServer.admin'
+
 function starredServerKeyFor(user: UserInfo | null) {
+  if (isMainAccount(user?.email)) {
+    return adminStarredServerKey
+  }
   return user?.name
     ? `lumen.starredServer.${user.email ? user.email.toLowerCase() + '.' : ''}${user.name}`
     : `lumen.starredServer.default`
@@ -336,9 +341,15 @@ function starredServerKeyFor(user: UserInfo | null) {
 
 function readStarredServerFor(user: UserInfo | null): string {
   try {
+    // 1. Admin-set global starred server takes precedence
+    const adminSaved = window.localStorage.getItem(adminStarredServerKey)
+    if (adminSaved && adminSaved.trim()) return adminSaved.trim()
+
+    // 2. User/Profile specific fallback
     const key = starredServerKeyFor(user)
     const saved = window.localStorage.getItem(key)
-    if (saved) return saved
+    if (saved && saved.trim()) return saved.trim()
+
     const profiles = readProfilesFor(user)
     const matched = profiles.find((p) => p.name === user?.name)
     return matched?.starredServer || ''
@@ -349,6 +360,13 @@ function readStarredServerFor(user: UserInfo | null): string {
 
 function saveStarredServerFor(user: UserInfo | null, serverId: string) {
   try {
+    if (isMainAccount(user?.email)) {
+      if (serverId) {
+        window.localStorage.setItem(adminStarredServerKey, serverId)
+      } else {
+        window.localStorage.removeItem(adminStarredServerKey)
+      }
+    }
     const key = starredServerKeyFor(user)
     if (serverId) {
       window.localStorage.setItem(key, serverId)
@@ -1934,6 +1952,9 @@ function App() {
   }, [currentUser])
 
   const handleToggleStarServer = useCallback((serverId: string) => {
+    if (!isMainAccount(currentUser?.email)) {
+      return
+    }
     setStarredServer((prev) => {
       const next = prev === serverId ? '' : serverId
       saveStarredServerFor(currentUser, next)
@@ -7001,10 +7022,13 @@ function WatchScreen({
         (movie.genres.includes('Animation') && !movie.tmdbId),
     )
 
+  const isAdmin = isMainAccount(currentUser?.email || currentUserEmail)
   const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'megaplay', 'megabuzz']
 
   const starProvider = (starredServer && isStreamProvider(starredServer)) ? (starredServer as StreamProvider) : null
-  const chosenProvider: StreamProvider = starProvider ?? (isStreamProvider(streamProvider) ? streamProvider : defaultStreamProvider)
+  const chosenProvider: StreamProvider = isAdmin
+    ? (isStreamProvider(streamProvider) ? streamProvider : (starProvider ?? defaultStreamProvider))
+    : (starProvider ?? defaultStreamProvider)
 
   const activeProviderId: StreamProvider = isJavVideo
     ? 'apijav'
@@ -7018,7 +7042,7 @@ function WatchScreen({
             : (starProvider && animeProviderIds.includes(starProvider))
               ? starProvider
               : 'filmu'
-          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream')
+          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc')
             ? chosenProvider
             : (starProvider && !animeProviderIds.includes(starProvider))
               ? starProvider
@@ -8216,70 +8240,96 @@ function WatchScreen({
 
             {!isPartyGuest && (
               <div className="server-selector" role="radiogroup" aria-label="Streaming server">
-                {(() => {
-                  const filteredOptions = isJavVideo
-                    ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
-                    : isPhubVideo
-                      ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
-                      : isHentai
-                        ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
-                        : streamProviderOptions.filter((provider) => {
-                            if (
-                              provider.id === 'oceanplay' ||
-                              provider.id === 'apijav' ||
-                              provider.id === 'phubplay'
-                            )
-                              return false
-                            const isAnimeProvider = animeProviderIds.includes(provider.id)
-                            return isAnimeMovie ? isAnimeProvider : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
-                          })
+                {isAdmin ? (
+                  (() => {
+                    const filteredOptions = isJavVideo
+                      ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
+                      : isPhubVideo
+                        ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+                        : isHentai
+                          ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                          : streamProviderOptions.filter((provider) => {
+                              if (
+                                provider.id === 'oceanplay' ||
+                                provider.id === 'apijav' ||
+                                provider.id === 'phubplay'
+                              )
+                                return false
+                              const isAnimeProvider = animeProviderIds.includes(provider.id)
+                              return isAnimeMovie ? isAnimeProvider : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
+                            })
 
-                  return filteredOptions.map((provider) => {
-                    const isActive = provider.id === activeProviderId
-                    const isStarred = provider.id === starredServer
-                    return (
-                      <div
-                        key={provider.id}
-                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
-                      >
-                        <button
-                          className={`server-option${isActive ? ' active' : ''}`}
-                          type="button"
-                          role="radio"
-                          aria-checked={isActive}
-                          title={`${provider.name} — ${provider.description}`}
-                          aria-label={provider.name}
-                          onClick={() => onStreamProviderChange(provider.id)}
+                    return filteredOptions.map((provider) => {
+                      const isActive = provider.id === activeProviderId
+                      const isStarred = provider.id === starredServer
+                      return (
+                        <div
+                          key={provider.id}
+                          className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
                         >
-                          <span className="provider-logo">{provider.logo}</span>
-                          <span className="provider-name">{provider.name}</span>
-                        </button>
-                        {onToggleStarServer && (
                           <button
+                            className={`server-option${isActive ? ' active' : ''}`}
                             type="button"
-                            className={`server-star-btn${isStarred ? ' is-starred' : ''}`}
-                            title={
-                              isStarred
-                                ? `Unstar ${provider.name} (Favorite for ${activeProfileName})`
-                                : `Star ${provider.name} as favorite for ${activeProfileName}`
-                            }
-                            aria-label={isStarred ? `Unstar ${provider.name}` : `Star ${provider.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onToggleStarServer(provider.id)
-                            }}
+                            role="radio"
+                            aria-checked={isActive}
+                            title={`${provider.name} — ${provider.description}`}
+                            aria-label={provider.name}
+                            onClick={() => onStreamProviderChange(provider.id)}
                           >
-                            <Star
-                              size={13}
-                              fill={isStarred ? '#ffc107' : 'none'}
-                              color={isStarred ? '#ffc107' : 'rgba(255, 255, 255, 0.45)'}
-                            />
+                            <span className="provider-logo">{provider.logo}</span>
+                            <span className="provider-name">{provider.name}</span>
                           </button>
-                        )}
+                          {onToggleStarServer && (
+                            <button
+                              type="button"
+                              className={`server-star-btn${isStarred ? ' is-starred' : ''}`}
+                              title={
+                                isStarred
+                                  ? `Unstar ${provider.name} (Favorite)`
+                                  : `Star ${provider.name} as favorite`
+                              }
+                              aria-label={isStarred ? `Unstar ${provider.name}` : `Star ${provider.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onToggleStarServer(provider.id)
+                              }}
+                            >
+                              <Star
+                                size={13}
+                                fill={isStarred ? '#ffc107' : 'none'}
+                                color={isStarred ? '#ffc107' : 'rgba(255, 255, 255, 0.45)'}
+                              />
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })
+                  })()
+                ) : (
+                  <div className="server-option-wrapper active starred">
+                    <div
+                      className="server-option active server-option-readonly"
+                      title={`${currentProvider.name} — ${currentProvider.description}`}
+                      aria-label={currentProvider.name}
+                    >
+                      <span className="provider-logo">{currentProvider.logo}</span>
+                      <span className="provider-name">{currentProvider.name}</span>
+                    </div>
+                    {starredServer && (
+                      <div
+                        className="server-star-btn is-starred server-star-badge"
+                        title={`${currentProvider.name} (Starred by Admin)`}
+                        aria-label="Starred by Admin"
+                      >
+                        <Star
+                          size={13}
+                          fill="#ffc107"
+                          color="#ffc107"
+                        />
                       </div>
-                    )
-                  })
-                })()}
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -8304,70 +8354,96 @@ function WatchScreen({
           {!isPartyGuest && (
             <div className="anime-server-row">
               <div className="server-selector anime-inline-servers" role="radiogroup" aria-label="Streaming server">
-                {(() => {
-                  const filteredOptions = isJavVideo
-                    ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
-                    : isPhubVideo
-                      ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
-                      : isHentai
-                        ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
-                        : streamProviderOptions.filter((provider) => {
-                            if (
-                              provider.id === 'oceanplay' ||
-                              provider.id === 'apijav' ||
-                              provider.id === 'phubplay'
-                            )
-                              return false
-                            const isAnimeProvider = animeProviderIds.includes(provider.id)
-                            return isAnimeMovie ? isAnimeProvider : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
-                          })
+                {isAdmin ? (
+                  (() => {
+                    const filteredOptions = isJavVideo
+                      ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
+                      : isPhubVideo
+                        ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+                        : isHentai
+                          ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                          : streamProviderOptions.filter((provider) => {
+                              if (
+                                provider.id === 'oceanplay' ||
+                                provider.id === 'apijav' ||
+                                provider.id === 'phubplay'
+                              )
+                                return false
+                              const isAnimeProvider = animeProviderIds.includes(provider.id)
+                              return isAnimeMovie ? isAnimeProvider : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
+                            })
 
-                  return filteredOptions.map((provider) => {
-                    const isActive = provider.id === activeProviderId
-                    const isStarred = provider.id === starredServer
-                    return (
-                      <div
-                        key={provider.id}
-                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
-                      >
-                        <button
-                          className={`server-option${isActive ? ' active' : ''}`}
-                          type="button"
-                          role="radio"
-                          aria-checked={isActive}
-                          title={`${provider.name} — ${provider.description}`}
-                          aria-label={provider.name}
-                          onClick={() => onStreamProviderChange(provider.id)}
+                    return filteredOptions.map((provider) => {
+                      const isActive = provider.id === activeProviderId
+                      const isStarred = provider.id === starredServer
+                      return (
+                        <div
+                          key={provider.id}
+                          className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
                         >
-                          <span className="provider-logo">{provider.logo}</span>
-                          <span className="provider-name">{provider.name}</span>
-                        </button>
-                        {onToggleStarServer && (
                           <button
+                            className={`server-option${isActive ? ' active' : ''}`}
                             type="button"
-                            className={`server-star-btn${isStarred ? ' is-starred' : ''}`}
-                            title={
-                              isStarred
-                                ? `Unstar ${provider.name} (Favorite for ${activeProfileName})`
-                                : `Star ${provider.name} as favorite for ${activeProfileName}`
-                            }
-                            aria-label={isStarred ? `Unstar ${provider.name}` : `Star ${provider.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onToggleStarServer(provider.id)
-                            }}
+                            role="radio"
+                            aria-checked={isActive}
+                            title={`${provider.name} — ${provider.description}`}
+                            aria-label={provider.name}
+                            onClick={() => onStreamProviderChange(provider.id)}
                           >
-                            <Star
-                              size={13}
-                              fill={isStarred ? '#ffc107' : 'none'}
-                              color={isStarred ? '#ffc107' : 'rgba(255, 255, 255, 0.45)'}
-                            />
+                            <span className="provider-logo">{provider.logo}</span>
+                            <span className="provider-name">{provider.name}</span>
                           </button>
-                        )}
+                          {onToggleStarServer && (
+                            <button
+                              type="button"
+                              className={`server-star-btn${isStarred ? ' is-starred' : ''}`}
+                              title={
+                                isStarred
+                                  ? `Unstar ${provider.name} (Favorite)`
+                                  : `Star ${provider.name} as favorite`
+                              }
+                              aria-label={isStarred ? `Unstar ${provider.name}` : `Star ${provider.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onToggleStarServer(provider.id)
+                              }}
+                            >
+                              <Star
+                                size={13}
+                                fill={isStarred ? '#ffc107' : 'none'}
+                                color={isStarred ? '#ffc107' : 'rgba(255, 255, 255, 0.45)'}
+                              />
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })
+                  })()
+                ) : (
+                  <div className="server-option-wrapper active starred">
+                    <div
+                      className="server-option active server-option-readonly"
+                      title={`${currentProvider.name} — ${currentProvider.description}`}
+                      aria-label={currentProvider.name}
+                    >
+                      <span className="provider-logo">{currentProvider.logo}</span>
+                      <span className="provider-name">{currentProvider.name}</span>
+                    </div>
+                    {starredServer && (
+                      <div
+                        className="server-star-btn is-starred server-star-badge"
+                        title={`${currentProvider.name} (Starred by Admin)`}
+                        aria-label="Starred by Admin"
+                      >
+                        <Star
+                          size={13}
+                          fill="#ffc107"
+                          color="#ffc107"
+                        />
                       </div>
-                    )
-                  })
-                })()}
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

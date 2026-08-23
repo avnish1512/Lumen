@@ -1137,6 +1137,21 @@ button {
   filter: drop-shadow(0 0 5px rgba(255, 193, 7, 0.5));
 }
 
+.server-option.server-option-readonly {
+  cursor: default;
+  pointer-events: none;
+}
+
+.server-star-btn.server-star-badge {
+  cursor: default;
+  pointer-events: none;
+}
+
+.server-star-btn.server-star-badge:hover {
+  transform: none;
+  filter: none;
+}
+
 .server-copy strong,
 .server-copy small {
   display: block;
