@@ -6,10 +6,11 @@ interface SplashScreenProps {
   durationMs?: number
 }
 
-export function SplashScreen({ onFinish, durationMs = 2800 }: SplashScreenProps) {
+export function SplashScreen({ onFinish, durationMs = 3000 }: SplashScreenProps) {
   const [fadingOut, setFadingOut] = useState(false)
   const [hidden, setHidden] = useState(false)
   const finishCalledRef = useRef(false)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const triggerFinish = useCallback(() => {
     if (finishCalledRef.current) return
@@ -20,17 +21,32 @@ export function SplashScreen({ onFinish, durationMs = 2800 }: SplashScreenProps)
     }
   }, [onFinish])
 
+  const startFadeOut = useCallback(() => {
+    setFadingOut(true)
+    setTimeout(triggerFinish, 500)
+  }, [triggerFinish])
+
   useEffect(() => {
+    if (videoRef.current && typeof videoRef.current.play === 'function') {
+      videoRef.current.muted = true
+      try {
+        const playPromise = videoRef.current.play()
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(() => {
+            // Autoplay may be deferred; timer will handle transition
+          })
+        }
+      } catch {
+        // Ignore playback errors
+      }
+    }
+
     const timer = setTimeout(() => {
-      setFadingOut(true)
-      const hideTimer = setTimeout(() => {
-        triggerFinish()
-      }, 600)
-      return () => clearTimeout(hideTimer)
+      startFadeOut()
     }, durationMs)
 
     return () => clearTimeout(timer)
-  }, [durationMs, triggerFinish])
+  }, [durationMs, startFadeOut])
 
   if (hidden) {
     return null
@@ -39,19 +55,23 @@ export function SplashScreen({ onFinish, durationMs = 2800 }: SplashScreenProps)
   return (
     <div
       className={`lumen-splash-overlay${fadingOut ? ' lumen-splash-fadeout' : ''}`}
-      onClick={() => {
-        setFadingOut(true)
-        setTimeout(triggerFinish, 200)
-      }}
+      onClick={startFadeOut}
+      role="button"
+      tabIndex={0}
+      aria-label="Skip splash animation"
     >
       <video
+        ref={videoRef}
         className="lumen-splash-video"
         src="/loading.mp4"
         autoPlay
-        loop
-        muted
         playsInline
-        onError={triggerFinish}
+        muted
+        preload="auto"
+        onEnded={startFadeOut}
+        onError={() => {
+          startFadeOut()
+        }}
       />
     </div>
   )

@@ -114,6 +114,12 @@ export const defaultStreamProvider: StreamProvider = 'rivestream'
 
 export const streamProviderOptions: StreamProviderOption[] = [
   {
+    id: 'rivestream',
+    name: 'Rivestream',
+    logo: 'RS',
+    description: 'Movies & TV · Direct',
+  },
+  {
     id: 'primesrc',
     name: 'PrimeSrc',
     logo: 'PS',
@@ -138,22 +144,16 @@ export const streamProviderOptions: StreamProviderOption[] = [
     description: 'Ad-Free · Movies, TV & Anime',
   },
   {
-    id: 'yenime',
-    name: 'Yenime',
-    logo: 'YN',
-    description: 'Anime · MAL ID',
-  },
-  {
     id: 'vidking',
     name: 'Vidking',
     logo: 'VK',
     description: 'HLS player · TMDB',
   },
   {
-    id: 'rivestream',
-    name: 'Rivestream',
-    logo: 'RS',
-    description: 'New server',
+    id: 'yenime',
+    name: 'Yenime',
+    logo: 'YN',
+    description: 'Anime · MAL ID',
   },
   {
     id: 'vidsync',
@@ -464,9 +464,14 @@ function buildEmbedMasterUrl(movie: Movie) {
 }
 
 function buildRivestreamUrl(movie: Movie) {
+  const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
+  if (!identifier) {
+    return ''
+  }
+
   const params = new URLSearchParams({
     type: movie.tmdbType === 'tv' ? 'tv' : 'movie',
-    id: String(movie.tmdbId),
+    id: identifier,
   })
 
   if (movie.tmdbType === 'tv') {
@@ -831,8 +836,20 @@ export function buildStreamUrl(
     return buildYenimeUrl(movie)
   }
 
+  if (provider === 'rivestream') {
+    return buildRivestreamUrl(movie)
+  }
+
+  if (provider === 'multiembed-vip') {
+    return buildSuperEmbedPlayerUrl(movie, superEmbedVipPreferredServer)
+  }
+
+  if (provider === 'vidsync') {
+    return buildVidsyncUrl(movie)
+  }
+
   if (!movie.tmdbId) {
-    return ''
+    return buildRivestreamUrl(movie)
   }
 
   if (provider === 'vidking') {
@@ -847,14 +864,6 @@ export function buildStreamUrl(
     }
 
     return `https://www.vidking.net/embed/movie/${movie.tmdbId}?color=${color}&autoPlay=true`
-  }
-
-  if (provider === 'multiembed-vip') {
-    return buildSuperEmbedPlayerUrl(movie, superEmbedVipPreferredServer)
-  }
-
-  if (provider === 'vidsync') {
-    return buildVidsyncUrl(movie)
   }
 
   return buildRivestreamUrl(movie)

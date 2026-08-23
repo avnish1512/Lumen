@@ -1,18 +1,15 @@
 .lumen-splash-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   width: 100vw;
   height: 100vh;
-  background-color: #ededf0;
+  background-color: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999999;
+  z-index: 9999999;
   opacity: 1;
-  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.6s ease;
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.5s ease;
   cursor: pointer;
   user-select: none;
 }
@@ -29,5 +26,5 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: cover;
-  background: #ededf0;
+  background: #000000;
 }

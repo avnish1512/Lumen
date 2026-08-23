@@ -481,16 +481,20 @@ const searchCategories = [
 
 function isStreamProvider(value: string | null): value is StreamProvider {
   return (
+    value === 'rivestream' ||
+    value === 'primesrc' ||
+    value === 'embedmaster' ||
     value === 'filmu' ||
     value === 'nhdapi' ||
     value === 'yenime' ||
-    value === 'rivestream' ||
     value === 'vidsync' ||
     value === 'multiembed-vip' ||
     value === 'vidking' ||
     value === 'megaplay' ||
     value === 'megabuzz' ||
-    value === 'oceanplay'
+    value === 'oceanplay' ||
+    value === 'apijav' ||
+    value === 'phubplay'
   )
 }
 
@@ -1792,23 +1796,12 @@ function PullToRefresh({ containerRef, disabled = false }: { containerRef: RefOb
 
 function App() {
   const appShellRef = useRef<HTMLElement | null>(null)
-  // Show splash only on cold start for an already signed-in session.
-  // Never show intro video during login or on profile select screen.
+  // Show Lumen logo animation splash on cold start when the app opens
   const [showSplash, setShowSplash] = useState(() => {
     try {
-      // The full-screen video splash can remain black in iOS WKWebView while
-      // the app is loading. Mobile goes straight to the usable screen.
-      if (window.matchMedia?.('(max-width: 899px)').matches) return false
-      const savedUser = readCurrentUser()
-      if (!savedUser) return false
-      const restoredScreen = readActiveScreen()
-      return (
-        restoredScreen !== 'login' &&
-        restoredScreen !== 'profiles' &&
-        !window.sessionStorage.getItem('lumen.splash-done')
-      )
+      return !window.sessionStorage.getItem('lumen.splash-done')
     } catch {
-      return false
+      return true
     }
   })
 
@@ -3895,7 +3888,7 @@ function App() {
       className={`app-shell ${designMode}-theme ${navScrolled ? 'nav-scrolled' : ''}`}
       style={appShellStyle}
     >
-      {showSplash && screen !== 'login' && screen !== 'profiles' && (
+      {showSplash && (
         <SplashScreen onFinish={finishSplash} />
       )}
       <PullToRefresh containerRef={appShellRef} disabled={screen === 'lord' || screen === 'watch' || screen === 'login' || screen === 'profiles'} />
@@ -6901,7 +6894,7 @@ type WatchScreenProps = {
   onStartWatching: (movie: Movie) => void
   onStreamSandboxChange: (enabled: boolean) => void
   onStreamProviderChange: (provider: StreamProvider) => void
-  designMode: 'apple' | 'netflix'
+  designMode?: 'apple' | 'netflix'
   onSelectMovie?: (movie: Movie) => void
   activeParty?: WatchParty | null
   isScreenSharing?: boolean
@@ -6931,7 +6924,6 @@ function WatchScreen({
   onStartWatching,
   onStreamSandboxChange,
   onStreamProviderChange,
-  designMode,
   onSelectMovie,
   activeParty,
   isScreenSharing,
@@ -7000,19 +6992,20 @@ function WatchScreen({
     !isHentai &&
     !isJavVideo &&
     !isPhubVideo &&
-    (movie.isAnime ||
-      movie.type === 'Anime' ||
-      movie.genres.includes('Anime') ||
-      movie.genres.includes('Animation') ||
-      designMode === 'netflix')
+    Boolean(
+      movie.isAnime ||
+        movie.type === 'Anime' ||
+        movie.anilistId ||
+        movie.genres.includes('Anime') ||
+        (movie.genres.includes('Animation') && !movie.tmdbId),
+    )
 
   const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'megaplay', 'megabuzz']
 
-  const chosenProvider = (starredServer && isStreamProvider(starredServer))
-    ? (streamProvider === defaultStreamProvider ? (starredServer as StreamProvider) : streamProvider)
-    : streamProvider
+  const starProvider = (starredServer && isStreamProvider(starredServer)) ? (starredServer as StreamProvider) : null
+  const chosenProvider: StreamProvider = starProvider ?? (isStreamProvider(streamProvider) ? streamProvider : defaultStreamProvider)
 
-  const activeProviderId = isJavVideo
+  const activeProviderId: StreamProvider = isJavVideo
     ? 'apijav'
     : isPhubVideo
       ? 'phubplay'
@@ -7021,10 +7014,14 @@ function WatchScreen({
         : isAnimeMovie
           ? animeProviderIds.includes(chosenProvider)
             ? chosenProvider
-            : 'filmu'
-          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi')
+            : (starProvider && animeProviderIds.includes(starProvider))
+              ? starProvider
+              : 'filmu'
+          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream')
             ? chosenProvider
-            : 'filmu'
+            : (starProvider && !animeProviderIds.includes(starProvider))
+              ? starProvider
+              : 'rivestream'
 
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
   const hasEpisodes = Boolean(
