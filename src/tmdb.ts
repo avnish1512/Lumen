@@ -9,6 +9,7 @@ export type TmdbMatch = {
 }
 
 export type StreamProvider =
+  | 'vidrift'
   | 'primesrc'
   | 'embedmaster'
   | 'cinesrc'
@@ -22,8 +23,10 @@ export type StreamProvider =
   | 'vidsync'
   | 'multiembed-vip'
   | 'vidking'
+  | 'clickhost'
   | 'megaplay'
   | 'megabuzz'
+  | 'megavid'
   | 'oceanplay'
   | 'apijav'
   | 'phubplay'
@@ -118,6 +121,12 @@ export const defaultStreamProvider: StreamProvider = 'rivestream'
 
 export const streamProviderOptions: StreamProviderOption[] = [
   {
+    id: 'vidrift',
+    name: 'VidRift',
+    logo: 'VR',
+    description: 'Movies & TV · Direct',
+  },
+  {
     id: 'rivestream',
     name: 'Rivestream',
     logo: 'RS',
@@ -196,6 +205,12 @@ export const streamProviderOptions: StreamProviderOption[] = [
     description: 'Local player',
   },
   {
+    id: 'clickhost',
+    name: 'ClickHost',
+    logo: 'CH',
+    description: 'Anime · TMDB',
+  },
+  {
     id: 'megaplay',
     name: 'VidNest',
     logo: 'VN',
@@ -205,6 +220,12 @@ export const streamProviderOptions: StreamProviderOption[] = [
     id: 'megabuzz',
     name: 'MegaPlay',
     logo: 'MP',
+    description: 'Anime · AniList',
+  },
+  {
+    id: 'megavid',
+    name: 'MegaVid',
+    logo: 'MV',
     description: 'Anime · AniList',
   },
   {
@@ -476,6 +497,34 @@ function buildPrimeSrcUrl(movie: Movie) {
   return `https://primesrc.me/embed/movie?${params}`
 }
 
+export function buildVidRiftUrl(movie: Movie): string {
+  if (!movie.tmdbId) {
+    return ''
+  }
+
+  const queryParams: string[] = []
+  if (movie.title) {
+    queryParams.push(`title=${encodeURIComponent(movie.title)}`)
+  }
+  queryParams.push('brand=Lumen')
+  queryParams.push(`brandColor=${encodeURIComponent(`#${streamTheme}`)}`)
+
+  const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : ''
+
+  if (
+    movie.tmdbType === 'tv' ||
+    movie.type === 'series' ||
+    movie.type === 'Series' ||
+    Boolean(movie.streamSeason && movie.streamSeason > 0)
+  ) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://embed.vidrift.in/embed/tv/${movie.tmdbId}/${season}/${episode}${queryString}`
+  }
+
+  return `https://embed.vidrift.in/embed/movie/${movie.tmdbId}${queryString}`
+}
+
 function buildEmbedMasterUrl(movie: Movie) {
   const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
   if (!identifier) {
@@ -685,6 +734,52 @@ function buildYenimeUrl(movie: Movie): string {
   return `https://api.yenime.net/anime/${encodeURIComponent(malId)}/${episode}?autoplay=true&color=e50914`
 }
 
+export function buildMegaVidUrl(movie: Movie): string {
+  const anilistId =
+    movie.anilistId ||
+    (movie.id && movie.id.startsWith('anilist-')
+      ? Number(movie.id.replace('anilist-', ''))
+      : movie.id && movie.id.startsWith('al-')
+        ? Number(movie.id.replace('al-', ''))
+        : undefined)
+
+  const ep = movie.streamEpisode ?? 1
+  const language = movie.streamLanguage === 'dub' ? 'dub' : 'sub'
+  const color = encodeURIComponent(`#${streamTheme}`)
+
+  if (anilistId && !isNaN(anilistId)) {
+    return `https://megavid.buzz/ani/${encodeURIComponent(anilistId)}/${encodeURIComponent(ep)}/${encodeURIComponent(language)}?color=${color}&autoplay=true`
+  }
+
+  if (movie.malId) {
+    return `https://megavid.buzz/mal/${encodeURIComponent(movie.malId)}/${encodeURIComponent(ep)}/${encodeURIComponent(language)}?color=${color}&autoplay=true`
+  }
+
+  if (movie.id && movie.id.startsWith('kisskh-')) {
+    const kisskhId = movie.id.replace('kisskh-', '')
+    return `https://megavid.buzz/kisskh/${encodeURIComponent(kisskhId)}?color=${color}&autoplay=true`
+  }
+
+  return ''
+}
+
+export function buildClickHostUrl(movie: Movie): string {
+  const identifier = movie.tmdbId
+    ? String(movie.tmdbId)
+    : movie.id && !movie.id.startsWith('anilist-') && !movie.id.startsWith('al-')
+      ? movie.id
+      : ''
+
+  if (!identifier) {
+    return ''
+  }
+
+  const season = movie.streamSeason ?? 1
+  const episode = movie.streamEpisode ?? 1
+
+  return `https://embed-api.clickhost.xyz/embed/anime/${encodeURIComponent(identifier)}/${encodeURIComponent(season)}/${encodeURIComponent(episode)}`
+}
+
 function buildFilmuUrl(movie: Movie): string {
   // 1. Anime with AniList ID
   if (movie.anilistId) {
@@ -889,20 +984,40 @@ export function buildStreamUrl(
     return `${rawUrl}${separator}la=${laValue}`
   }
 
+  if (provider === 'vidrift') {
+    return buildVidRiftUrl(movie)
+  }
+
+  if (provider === 'clickhost') {
+    return buildClickHostUrl(movie)
+  }
+
   if (provider === 'megaplay' || provider === 'megabuzz') {
     // AniList-native anime servers (the app carries no HiAnime/TMDB id for
     // anime), both sub/dub aware and keyed by the AniList id + episode:
     //   MegaPlay -> https://vidnest.fun/anime/{anilistId}/{ep}/{sub|dub}
     //   MegaBuzz -> https://megaplay.buzz/stream/ani/{anilistId}/{ep}/{sub|dub}
     // MegaBuzz needs a referer (see the iframe's referrerPolicy in WatchScreen).
-    if (!movie.anilistId) {
+    const anilistId =
+      movie.anilistId ||
+      (movie.id && movie.id.startsWith('anilist-')
+        ? Number(movie.id.replace('anilist-', ''))
+        : movie.id && movie.id.startsWith('al-')
+          ? Number(movie.id.replace('al-', ''))
+          : undefined)
+
+    if (!anilistId || isNaN(anilistId)) {
       return ''
     }
     const ep = movie.streamEpisode ?? 1
     const language = movie.streamLanguage === 'dub' ? 'dub' : 'sub'
     return provider === 'megabuzz'
-      ? `https://megaplay.buzz/stream/ani/${movie.anilistId}/${ep}/${language}`
-      : `https://vidnest.fun/anime/${movie.anilistId}/${ep}/${language}`
+      ? `https://megaplay.buzz/stream/ani/${anilistId}/${ep}/${language}`
+      : `https://vidnest.fun/anime/${anilistId}/${ep}/${language}`
+  }
+
+  if (provider === 'megavid') {
+    return buildMegaVidUrl(movie)
   }
 
   if (provider === 'primesrc') {

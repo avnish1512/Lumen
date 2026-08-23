@@ -500,6 +500,7 @@ const searchCategories = [
 
 function isStreamProvider(value: string | null): value is StreamProvider {
   return (
+    value === 'vidrift' ||
     value === 'rivestream' ||
     value === 'cinesrc' ||
     value === 'embedapi' ||
@@ -513,8 +514,10 @@ function isStreamProvider(value: string | null): value is StreamProvider {
     value === 'vidsync' ||
     value === 'multiembed-vip' ||
     value === 'vidking' ||
+    value === 'clickhost' ||
     value === 'megaplay' ||
     value === 'megabuzz' ||
+    value === 'megavid' ||
     value === 'oceanplay' ||
     value === 'apijav' ||
     value === 'phubplay'
@@ -7051,7 +7054,7 @@ function WatchScreen({
   const [activeProviderOverride, setActiveProviderOverride] = useState<StreamProvider | null>(null)
 
   const isAdmin = isMainAccount(currentUser?.email || currentUserEmail)
-  const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'megaplay', 'megabuzz']
+  const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'clickhost', 'megaplay', 'megabuzz', 'megavid']
 
   const starProvider = (starredServer && isStreamProvider(starredServer)) ? (starredServer as StreamProvider) : null
   const chosenProvider: StreamProvider = activeProviderOverride ?? (starProvider ?? (isStreamProvider(streamProvider) ? streamProvider : defaultStreamProvider))
@@ -7063,12 +7066,14 @@ function WatchScreen({
       : isHentai
         ? 'oceanplay'
         : isAnimeMovie
-          ? animeProviderIds.includes(chosenProvider)
+          ? movie.tmdbId
             ? chosenProvider
-            : (starProvider && animeProviderIds.includes(starProvider))
-              ? starProvider
-              : 'filmu'
-          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom' || chosenProvider === 'mgeb')
+            : animeProviderIds.includes(chosenProvider)
+              ? chosenProvider
+              : (starProvider && animeProviderIds.includes(starProvider))
+                ? starProvider
+                : 'filmu'
+          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'vidrift' || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom' || chosenProvider === 'mgeb')
             ? chosenProvider
             : (starProvider && !animeProviderIds.includes(starProvider))
               ? starProvider
@@ -7466,9 +7471,16 @@ function WatchScreen({
     }
   }
 
-  // MegaPlay (VidNest), EmbedMaster and CineSrc post playback events to the parent window.
+  // MegaPlay (VidNest), MegaBuzz, EmbedMaster, CineSrc, VidRift, and MegaVid post playback events to the parent window.
   useEffect(() => {
-    if (activeProviderId !== 'megaplay' && activeProviderId !== 'embedmaster' && activeProviderId !== 'cinesrc') {
+    if (
+      activeProviderId !== 'megaplay' &&
+      activeProviderId !== 'megabuzz' &&
+      activeProviderId !== 'embedmaster' &&
+      activeProviderId !== 'cinesrc' &&
+      activeProviderId !== 'vidrift' &&
+      activeProviderId !== 'megavid'
+    ) {
       return
     }
 
@@ -7481,7 +7493,9 @@ function WatchScreen({
         !event.origin.includes('megaplay.buzz') &&
         !event.origin.includes('embedmaster.link') &&
         !event.origin.includes('embedmaster') &&
-        !event.origin.includes('cinesrc.st')
+        !event.origin.includes('cinesrc.st') &&
+        !event.origin.includes('vidrift.in') &&
+        !event.origin.includes('megavid.buzz')
       ) {
         return
       }
@@ -7504,6 +7518,10 @@ function WatchScreen({
       const isCineSrcEvent =
         typeof (payload as any)?.type === 'string' &&
         (payload as any).type.startsWith('cinesrc:')
+      const isVidRiftEvent =
+        typeof (payload as any)?.type === 'string' &&
+        (payload as any).type.startsWith('vidrift:')
+      const isKisskhEvent = message?.channel === 'kisskh'
 
       // Handle full screen requests if posted by player
       if (
@@ -7533,12 +7551,25 @@ function WatchScreen({
         }
       }
 
+      if (isVidRiftEvent && (payload as any)?.type === 'vidrift:nextup-play') {
+        handleNextEpisode()
+      }
+
+      if (
+        (isVidRiftEvent && (payload as any)?.type === 'vidrift:ended') ||
+        (isKisskhEvent && message?.event === 'complete')
+      ) {
+        handleNextEpisode()
+      }
+
       const isPlaybackEvent =
         message?.event === 'time' ||
         message?.event === 'complete' ||
         message?.type === 'watching-log' ||
         (isEmbedMasterEvent && ((payload as any)?.event === 'play' || (payload as any)?.event === 'time')) ||
-        (isCineSrcEvent && ((payload as any)?.type === 'cinesrc:play' || (payload as any)?.type === 'cinesrc:timeupdate'))
+        (isCineSrcEvent && ((payload as any)?.type === 'cinesrc:play' || (payload as any)?.type === 'cinesrc:timeupdate')) ||
+        (isVidRiftEvent && (payload as any)?.type === 'vidrift:progress') ||
+        (isKisskhEvent && message?.event === 'time')
 
       if (!started && isPlaybackEvent) {
         started = true
@@ -8053,9 +8084,9 @@ function WatchScreen({
           webkitallowfullscreen="true"
           // @ts-ignore
           mozallowfullscreen="true"
-          // MegaBuzz (megaplay.buzz) requires a referer; every other embed is
+          // MegaBuzz and MegaVid require a referer; every other embed is
           // sent with no referer for privacy.
-          referrerPolicy={activeProviderId === 'megabuzz' ? 'origin' : 'no-referrer'}
+          referrerPolicy={activeProviderId === 'megabuzz' || activeProviderId === 'megavid' ? 'origin' : 'no-referrer'}
           sandbox={
             streamSandboxEnabled && activeProviderId !== 'embedmaster'
               ? 'allow-forms allow-presentation allow-same-origin allow-scripts'
@@ -8281,7 +8312,7 @@ function WatchScreen({
                             )
                               return false
                             const isAnimeProvider = animeProviderIds.includes(provider.id)
-                            return isAnimeMovie ? isAnimeProvider : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
+                            return isAnimeMovie ? (movie.tmdbId ? true : isAnimeProvider) : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
                           })
 
                   return filteredOptions.map((provider) => {
@@ -8387,7 +8418,7 @@ function WatchScreen({
                             )
                               return false
                             const isAnimeProvider = animeProviderIds.includes(provider.id)
-                            return isAnimeMovie ? isAnimeProvider : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
+                            return isAnimeMovie ? (movie.tmdbId ? true : isAnimeProvider) : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
                           })
 
                   return filteredOptions.map((provider) => {
