@@ -14,6 +14,7 @@ export type StreamProvider =
   | 'cinesrc'
   | 'embedapi'
   | 'vidphantom'
+  | 'mgeb'
   | 'filmu'
   | 'nhdapi'
   | 'yenime'
@@ -139,6 +140,12 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'VidPhantom',
     logo: 'VP',
     description: 'Movies & TV · Direct',
+  },
+  {
+    id: 'mgeb',
+    name: 'Mgeb',
+    logo: 'MG',
+    description: 'Dubbed · Movies & TV',
   },
   {
     id: 'primesrc',
@@ -530,6 +537,21 @@ function buildVidPhantomUrl(movie: Movie) {
   return `https://vidphantom.com/movie/${identifier}`
 }
 
+function buildMgebUrl(movie: Movie) {
+  const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
+  if (!identifier) {
+    return ''
+  }
+
+  if (movie.tmdbType === 'tv') {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://mgeb.top/embed/${identifier}/${season}/${episode}`
+  }
+
+  return `https://mgeb.top/embed/${identifier}`
+}
+
 function buildRivestreamUrl(movie: Movie) {
   const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
   if (!identifier) {
@@ -645,12 +667,12 @@ function buildNhdUrl(movie: Movie): string {
   if (isTv && mediaId) {
     const season = movie.streamSeason ?? 1
     const episode = movie.streamEpisode ?? 1
-    return `https://nhdapi.com/tv/${encodeURIComponent(mediaId)}/${season}/${episode}${keyParam}`
+    return `https://nhdapi.com/embed/tv/${encodeURIComponent(mediaId)}/${season}/${episode}${keyParam}`
   }
 
   // 3. Movie (TMDB / IMDb)
   if (mediaId) {
-    return `https://nhdapi.com/movie/${encodeURIComponent(mediaId)}${keyParam}`
+    return `https://nhdapi.com/embed/movie/${encodeURIComponent(mediaId)}${keyParam}`
   }
 
   return ''
@@ -897,6 +919,10 @@ export function buildStreamUrl(
 
   if (provider === 'vidphantom') {
     return buildVidPhantomUrl(movie)
+  }
+
+  if (provider === 'mgeb') {
+    return buildMgebUrl(movie)
   }
 
   if (provider === 'embedmaster') {

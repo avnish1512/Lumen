@@ -247,6 +247,120 @@ describe('CineSrc server integration', () => {
     expect(url).toBe('https://vidphantom.com/tv/94997/1/1')
   })
 
+  it('includes Mgeb in streamProviderOptions', () => {
+    const mgebOption = streamProviderOptions.find((p) => p.id === 'mgeb')
+    expect(mgebOption).toBeDefined()
+    expect(mgebOption?.name).toBe('Mgeb')
+    expect(mgebOption?.logo).toBe('MG')
+  })
+
+  it('builds valid Mgeb embed URL for a movie', () => {
+    const movie: Movie = {
+      id: 'movie-666243',
+      tmdbId: 666243,
+      tmdbType: 'movie',
+      rank: 1,
+      title: 'Sample Movie',
+      logoTitle: 'Sample Movie',
+      label: 'Feature Film',
+      type: 'Movie',
+      genres: ['Action'],
+      year: '2026',
+      runtime: '120 min',
+      rating: '8.5',
+      maturity: 'PG-13',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: 'A test movie synopsis',
+      cast: [],
+      director: 'Director',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const url = buildStreamUrl(movie, 'mgeb')
+    expect(url).toBe('https://mgeb.top/embed/666243')
+  })
+
+  it('builds valid Mgeb embed URL for a TV show with season and episode', () => {
+    const tvShow: Movie = {
+      id: 'tv-94997',
+      tmdbId: 94997,
+      tmdbType: 'tv',
+      streamSeason: 1,
+      streamEpisode: 1,
+      rank: 1,
+      title: 'Sample TV',
+      logoTitle: 'Sample TV',
+      label: 'TV Series',
+      type: 'Series',
+      genres: ['Drama'],
+      year: '2022',
+      runtime: '45 min',
+      rating: '8.5',
+      maturity: 'TV-MA',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: 'TV synopsis',
+      cast: [],
+      director: 'Director',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const url = buildStreamUrl(tvShow, 'mgeb')
+    expect(url).toBe('https://mgeb.top/embed/94997/1/1')
+  })
+
+  it('builds valid NHD embed URL for a movie and TV show', () => {
+    const movie: Movie = {
+      id: 'movie-666243',
+      tmdbId: 666243,
+      tmdbType: 'movie',
+      rank: 1,
+      title: 'Sample Movie',
+      logoTitle: 'Sample Movie',
+      label: 'Feature Film',
+      type: 'Movie',
+      genres: ['Action'],
+      year: '2026',
+      runtime: '120 min',
+      rating: '8.5',
+      maturity: 'PG-13',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: 'A test movie synopsis',
+      cast: [],
+      director: 'Director',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const movieUrl = buildStreamUrl(movie, 'nhdapi')
+    expect(movieUrl).toContain('https://nhdapi.com/embed/movie/666243')
+
+    const tvShow: Movie = {
+      ...movie,
+      id: 'tv-94997',
+      tmdbId: 94997,
+      tmdbType: 'tv',
+      streamSeason: 2,
+      streamEpisode: 3,
+    }
+
+    const tvUrl = buildStreamUrl(tvShow, 'nhdapi')
+    expect(tvUrl).toContain('https://nhdapi.com/embed/tv/94997/2/3')
+  })
+
   it('correctly distinguishes admin main account from regular accounts', async () => {
     const { isMainAccount, MAIN_ACCOUNT_EMAIL } = await import('./accounts-api')
     expect(isMainAccount(MAIN_ACCOUNT_EMAIL)).toBe(true)

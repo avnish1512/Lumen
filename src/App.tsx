@@ -504,6 +504,7 @@ function isStreamProvider(value: string | null): value is StreamProvider {
     value === 'cinesrc' ||
     value === 'embedapi' ||
     value === 'vidphantom' ||
+    value === 'mgeb' ||
     value === 'primesrc' ||
     value === 'embedmaster' ||
     value === 'filmu' ||
@@ -7067,7 +7068,7 @@ function WatchScreen({
             : (starProvider && animeProviderIds.includes(starProvider))
               ? starProvider
               : 'filmu'
-          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom')
+          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom' || chosenProvider === 'mgeb')
             ? chosenProvider
             : (starProvider && !animeProviderIds.includes(starProvider))
               ? starProvider
