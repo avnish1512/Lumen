@@ -1139,7 +1139,15 @@ button {
 
 .server-option.server-option-readonly {
   cursor: default;
-  pointer-events: none;
+}
+
+.server-option-wrapper.non-admin-locked:not(.active) {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.server-option-wrapper.non-admin-locked:not(.active) .server-option {
+  cursor: default;
 }
 
 .server-star-btn.server-star-badge {
