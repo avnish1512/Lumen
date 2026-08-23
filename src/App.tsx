@@ -125,6 +125,7 @@ import {
   deleteAccount as deleteAccountApi,
   getAdminKey,
   isMainAccount,
+  MAIN_ACCOUNT_EMAIL,
   listAccounts as listAccountsApi,
   revealPassword as revealPasswordApi,
   saveAccount as saveAccountApi,
@@ -501,6 +502,8 @@ function isStreamProvider(value: string | null): value is StreamProvider {
   return (
     value === 'rivestream' ||
     value === 'cinesrc' ||
+    value === 'embedapi' ||
+    value === 'vidphantom' ||
     value === 'primesrc' ||
     value === 'embedmaster' ||
     value === 'filmu' ||
@@ -1948,8 +1951,30 @@ function App() {
   )
 
   useEffect(() => {
-    setStarredServer(readStarredServerFor(currentUser))
+    const star = readStarredServerFor(currentUser)
+    if (star) {
+      setStarredServer(star)
+    }
   }, [currentUser])
+
+  // Pull the admin account's profiles to ensure the global admin-starred server is synced across all devices and accounts
+  useEffect(() => {
+    let active = true
+    void fetchRemoteProfiles(MAIN_ACCOUNT_EMAIL).then((adminProfiles) => {
+      if (!active || !adminProfiles || !adminProfiles.length) return
+      const adminProfile = adminProfiles.find((p) => p.starredServer) || adminProfiles[0]
+      const adminStar = adminProfile?.starredServer || ''
+      if (adminStar && isStreamProvider(adminStar)) {
+        try {
+          window.localStorage.setItem(adminStarredServerKey, adminStar)
+        } catch {}
+        setStarredServer(adminStar)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const handleToggleStarServer = useCallback((serverId: string) => {
     if (!isMainAccount(currentUser?.email)) {
@@ -7022,11 +7047,13 @@ function WatchScreen({
         (movie.genres.includes('Animation') && !movie.tmdbId),
     )
 
+  const [activeProviderOverride, setActiveProviderOverride] = useState<StreamProvider | null>(null)
+
   const isAdmin = isMainAccount(currentUser?.email || currentUserEmail)
   const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'megaplay', 'megabuzz']
 
   const starProvider = (starredServer && isStreamProvider(starredServer)) ? (starredServer as StreamProvider) : null
-  const chosenProvider: StreamProvider = isStreamProvider(streamProvider) ? streamProvider : (starProvider ?? defaultStreamProvider)
+  const chosenProvider: StreamProvider = activeProviderOverride ?? (starProvider ?? (isStreamProvider(streamProvider) ? streamProvider : defaultStreamProvider))
 
   const activeProviderId: StreamProvider = isJavVideo
     ? 'apijav'
@@ -7040,7 +7067,7 @@ function WatchScreen({
             : (starProvider && animeProviderIds.includes(starProvider))
               ? starProvider
               : 'filmu'
-          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc')
+          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom')
             ? chosenProvider
             : (starProvider && !animeProviderIds.includes(starProvider))
               ? starProvider
@@ -8272,7 +8299,10 @@ function WatchScreen({
                           aria-checked={isActive}
                           title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}`}
                           aria-label={provider.name}
-                          onClick={() => onStreamProviderChange(provider.id)}
+                          onClick={() => {
+                            setActiveProviderOverride(provider.id)
+                            onStreamProviderChange(provider.id)
+                          }}
                         >
                           <span className="provider-logo">{provider.logo}</span>
                           <span className="provider-name">{provider.name}</span>
@@ -8375,7 +8405,10 @@ function WatchScreen({
                           aria-checked={isActive}
                           title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}`}
                           aria-label={provider.name}
-                          onClick={() => onStreamProviderChange(provider.id)}
+                          onClick={() => {
+                            setActiveProviderOverride(provider.id)
+                            onStreamProviderChange(provider.id)
+                          }}
                         >
                           <span className="provider-logo">{provider.logo}</span>
                           <span className="provider-name">{provider.name}</span>

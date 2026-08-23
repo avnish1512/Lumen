@@ -12,6 +12,8 @@ export type StreamProvider =
   | 'primesrc'
   | 'embedmaster'
   | 'cinesrc'
+  | 'embedapi'
+  | 'vidphantom'
   | 'filmu'
   | 'nhdapi'
   | 'yenime'
@@ -125,6 +127,18 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'CineSrc',
     logo: 'CS',
     description: 'Movies & TV · Fast Stream',
+  },
+  {
+    id: 'embedapi',
+    name: 'EmbedAPI',
+    logo: 'EA',
+    description: 'Movies & TV · Direct',
+  },
+  {
+    id: 'vidphantom',
+    name: 'VidPhantom',
+    logo: 'VP',
+    description: 'Movies & TV · Direct',
   },
   {
     id: 'primesrc',
@@ -486,6 +500,36 @@ function buildCineSrcUrl(movie: Movie) {
   return `https://cinesrc.st/embed/movie/${movie.tmdbId}?color=${color}`
 }
 
+function buildEmbedApiUrl(movie: Movie) {
+  const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
+  if (!identifier) {
+    return ''
+  }
+
+  if (movie.tmdbType === 'tv') {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://watch.embed-api.stream/embed/tv/${identifier}/${season}/${episode}`
+  }
+
+  return `https://watch.embed-api.stream/embed/movie/${identifier}`
+}
+
+function buildVidPhantomUrl(movie: Movie) {
+  const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
+  if (!identifier) {
+    return ''
+  }
+
+  if (movie.tmdbType === 'tv') {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://vidphantom.com/tv/${identifier}/${season}/${episode}`
+  }
+
+  return `https://vidphantom.com/movie/${identifier}`
+}
+
 function buildRivestreamUrl(movie: Movie) {
   const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
   if (!identifier) {
@@ -845,6 +889,14 @@ export function buildStreamUrl(
 
   if (provider === 'cinesrc') {
     return buildCineSrcUrl(movie)
+  }
+
+  if (provider === 'embedapi') {
+    return buildEmbedApiUrl(movie)
+  }
+
+  if (provider === 'vidphantom') {
+    return buildVidPhantomUrl(movie)
   }
 
   if (provider === 'embedmaster') {
