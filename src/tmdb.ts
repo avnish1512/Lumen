@@ -11,6 +11,7 @@ export type TmdbMatch = {
 export type StreamProvider =
   | 'primesrc'
   | 'embedmaster'
+  | 'cinesrc'
   | 'filmu'
   | 'nhdapi'
   | 'yenime'
@@ -118,6 +119,12 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'Rivestream',
     logo: 'RS',
     description: 'Movies & TV · Direct',
+  },
+  {
+    id: 'cinesrc',
+    name: 'CineSrc',
+    logo: 'CS',
+    description: 'Movies & TV · Fast Stream',
   },
   {
     id: 'primesrc',
@@ -461,6 +468,22 @@ function buildEmbedMasterUrl(movie: Movie) {
   }
 
   return `https://embedmaster.link/movie/${identifier}`
+}
+
+function buildCineSrcUrl(movie: Movie) {
+  if (!movie.tmdbId) {
+    return ''
+  }
+
+  const color = `%23${streamTheme}`
+
+  if (movie.tmdbType === 'tv') {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://cinesrc.st/embed/tv/${movie.tmdbId}?s=${season}&e=${episode}&color=${color}&autonext=true&autoskip=true`
+  }
+
+  return `https://cinesrc.st/embed/movie/${movie.tmdbId}?color=${color}`
 }
 
 function buildRivestreamUrl(movie: Movie) {
@@ -818,6 +841,10 @@ export function buildStreamUrl(
 
   if (provider === 'primesrc') {
     return buildPrimeSrcUrl(movie)
+  }
+
+  if (provider === 'cinesrc') {
+    return buildCineSrcUrl(movie)
   }
 
   if (provider === 'embedmaster') {

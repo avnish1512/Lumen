@@ -482,6 +482,7 @@ const searchCategories = [
 function isStreamProvider(value: string | null): value is StreamProvider {
   return (
     value === 'rivestream' ||
+    value === 'cinesrc' ||
     value === 'primesrc' ||
     value === 'embedmaster' ||
     value === 'filmu' ||
@@ -7415,9 +7416,9 @@ function WatchScreen({
     }
   }
 
-  // MegaPlay (VidNest) and EmbedMaster post playback events to the parent window.
+  // MegaPlay (VidNest), EmbedMaster and CineSrc post playback events to the parent window.
   useEffect(() => {
-    if (activeProviderId !== 'megaplay' && activeProviderId !== 'embedmaster') {
+    if (activeProviderId !== 'megaplay' && activeProviderId !== 'embedmaster' && activeProviderId !== 'cinesrc') {
       return
     }
 
@@ -7429,7 +7430,8 @@ function WatchScreen({
         !event.origin.includes('vidnest.fun') &&
         !event.origin.includes('megaplay.buzz') &&
         !event.origin.includes('embedmaster.link') &&
-        !event.origin.includes('embedmaster')
+        !event.origin.includes('embedmaster') &&
+        !event.origin.includes('cinesrc.st')
       ) {
         return
       }
@@ -7449,6 +7451,9 @@ function WatchScreen({
         | null
 
       const isEmbedMasterEvent = (payload as any)?.source === 'embedmaster_player'
+      const isCineSrcEvent =
+        typeof (payload as any)?.type === 'string' &&
+        (payload as any).type.startsWith('cinesrc:')
 
       // Handle full screen requests if posted by player
       if (
@@ -7470,11 +7475,20 @@ function WatchScreen({
         }
       }
 
+      if (isCineSrcEvent && (payload as any)?.type === 'cinesrc:nextepisode') {
+        const data = payload as any
+        if (data.season && data.episode && (Number(data.season) !== season || Number(data.episode) !== episode)) {
+          setSeason(Number(data.season))
+          setEpisode(Number(data.episode))
+        }
+      }
+
       const isPlaybackEvent =
         message?.event === 'time' ||
         message?.event === 'complete' ||
         message?.type === 'watching-log' ||
-        (isEmbedMasterEvent && ((payload as any)?.event === 'play' || (payload as any)?.event === 'time'))
+        (isEmbedMasterEvent && ((payload as any)?.event === 'play' || (payload as any)?.event === 'time')) ||
+        (isCineSrcEvent && ((payload as any)?.type === 'cinesrc:play' || (payload as any)?.type === 'cinesrc:timeupdate'))
 
       if (!started && isPlaybackEvent) {
         started = true
@@ -7487,7 +7501,7 @@ function WatchScreen({
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-  }, [activeProviderId, movie, streamMovie, onStartWatching])
+  }, [activeProviderId, movie, streamMovie, onStartWatching, season, episode])
 
   const openCurrentStream = () => {
     if (!streamUrl) {
