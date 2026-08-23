@@ -7026,9 +7026,7 @@ function WatchScreen({
   const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'megaplay', 'megabuzz']
 
   const starProvider = (starredServer && isStreamProvider(starredServer)) ? (starredServer as StreamProvider) : null
-  const chosenProvider: StreamProvider = isAdmin
-    ? (isStreamProvider(streamProvider) ? streamProvider : (starProvider ?? defaultStreamProvider))
-    : (starProvider ?? defaultStreamProvider)
+  const chosenProvider: StreamProvider = isStreamProvider(streamProvider) ? streamProvider : (starProvider ?? defaultStreamProvider)
 
   const activeProviderId: StreamProvider = isJavVideo
     ? 'apijav'
@@ -8265,23 +8263,16 @@ function WatchScreen({
                     return (
                       <div
                         key={provider.id}
-                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}${!isAdmin ? ' non-admin-locked' : ''}`}
+                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
                       >
                         <button
-                          className={`server-option${isActive ? ' active' : ''}${!isAdmin ? ' server-option-readonly' : ''}`}
+                          className={`server-option${isActive ? ' active' : ''}`}
                           type="button"
                           role="radio"
                           aria-checked={isActive}
-                          disabled={!isAdmin}
-                          title={
-                            isAdmin
-                              ? `${provider.name} — ${provider.description}`
-                              : isActive
-                                ? `${provider.name} (Active Server — Starred by Admin)`
-                                : `${provider.name} (Locked by Admin)`
-                          }
+                          title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}`}
                           aria-label={provider.name}
-                          onClick={isAdmin ? () => onStreamProviderChange(provider.id) : undefined}
+                          onClick={() => onStreamProviderChange(provider.id)}
                         >
                           <span className="provider-logo">{provider.logo}</span>
                           <span className="provider-name">{provider.name}</span>
@@ -8375,23 +8366,16 @@ function WatchScreen({
                     return (
                       <div
                         key={provider.id}
-                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}${!isAdmin ? ' non-admin-locked' : ''}`}
+                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
                       >
                         <button
-                          className={`server-option${isActive ? ' active' : ''}${!isAdmin ? ' server-option-readonly' : ''}`}
+                          className={`server-option${isActive ? ' active' : ''}`}
                           type="button"
                           role="radio"
                           aria-checked={isActive}
-                          disabled={!isAdmin}
-                          title={
-                            isAdmin
-                              ? `${provider.name} — ${provider.description}`
-                              : isActive
-                                ? `${provider.name} (Active Server — Starred by Admin)`
-                                : `${provider.name} (Locked by Admin)`
-                          }
+                          title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}`}
                           aria-label={provider.name}
-                          onClick={isAdmin ? () => onStreamProviderChange(provider.id) : undefined}
+                          onClick={() => onStreamProviderChange(provider.id)}
                         >
                           <span className="provider-logo">{provider.logo}</span>
                           <span className="provider-name">{provider.name}</span>
