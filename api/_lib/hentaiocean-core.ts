@@ -120,6 +120,9 @@ type RawRssEpisode = {
 }
 
 function extractSeriesInfo(rawTitle: string) {
+  if (!rawTitle || typeof rawTitle !== 'string') {
+    return { seriesTitle: '', episodeNum: 1 }
+  }
   // Matches "Title Episode 2", "Title Ep 2", "Title 2", "Title Vol 2", "Title Part 2"
   const match = rawTitle.match(/^(.*?)(?:\s+(?:Episode|Ep\.?|Vol\.?|Part|S\d+E?)\s*|\s+)(\d+)$/i)
   if (match) {
@@ -171,7 +174,7 @@ function parseRssXml(xml: string): HentaiOceanItem[] {
       .replace(/&#39;/g, "'") || `Watch ${cleanTitle} on Hentai Ocean.`
 
     const pubDate = pubDateMatch ? pubDateMatch[1] : ''
-    const yearMatch = pubDate.match(/\d{4}/)
+    const yearMatch = pubDate ? pubDate.match(/\d{4}/) : null
     const year = yearMatch ? yearMatch[0] : '2026'
 
     const thumbUrl = thumbMatch ? thumbMatch[1] : `https://hentaiocean.com/thumbnail/${slug}.webp`

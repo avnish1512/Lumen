@@ -829,28 +829,43 @@ function mergeWatchHistory(a: WatchHistory, b: WatchHistory, removedMap?: Remove
   return merged
 }
 
-function compactRuntime(runtime: string) {
-  const minutesMatch = runtime.match(/(\d+)\s*min/i)
+export function compactRuntime(runtime?: string | null) {
+  if (!runtime || typeof runtime !== 'string') return ''
 
-  if (minutesMatch) {
-    const totalMinutes = Number(minutesMatch[1])
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
+  const hrMatch = runtime.match(/(\d+)\s*(?:h|hr|hours?)\b/i)
+  const minMatch = runtime.match(/(\d+)\s*(?:m|min|mins?|minutes?)\b/i)
 
-    if (hours > 0) {
-      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+  const hours = hrMatch ? parseInt(hrMatch[1], 10) : 0
+  const mins = minMatch ? parseInt(minMatch[1], 10) : 0
+
+  if (hours > 0 || mins > 0) {
+    const totalMinutes = hours * 60 + mins
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    if (h > 0) {
+      return m > 0 ? `${h}h ${m}m` : `${h}h`
     }
-
-    return `${minutes}m`
+    return `${m}m`
   }
 
-  return runtime.replace(' hr ', 'h ').replace(' min', 'm')
+  const digitOnlyMatch = runtime.trim().match(/^(\d+)$/)
+  if (digitOnlyMatch) {
+    const totalMinutes = parseInt(digitOnlyMatch[1], 10)
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    if (h > 0) {
+      return m > 0 ? `${h}h ${m}m` : `${h}h`
+    }
+    return `${m}m`
+  }
+
+  return runtime.replace(/\s*hr\s*/gi, 'h ').replace(/\s*min\s*/gi, 'm').trim()
 }
 
 const hiddenMediaBadges = new Set(['CC', 'SDH'])
 
 function visibleMediaBadges(badges: string[] = []) {
-  return badges.filter((badge) => !hiddenMediaBadges.has(badge.trim().toUpperCase()))
+  return badges.filter((badge) => typeof badge === 'string' && !hiddenMediaBadges.has(badge.trim().toUpperCase()))
 }
 
 function useHeroSwipe(
@@ -969,7 +984,8 @@ function seasonsFor(movie: Movie) {
   }))
 }
 
-function episodeRuntime(movie: Movie, _season: number, _episode: number) {
+export function episodeRuntime(movie?: Movie | null, _season?: number, _episode?: number) {
+  if (!movie) return ''
   // Anime carry a real per-episode duration from AniList; use it directly.
   if (movie.isAnime && typeof movie.episodeRuntimeMinutes === 'number' && movie.episodeRuntimeMinutes > 0) {
     return `${movie.episodeRuntimeMinutes}m`
@@ -977,6 +993,9 @@ function episodeRuntime(movie: Movie, _season: number, _episode: number) {
   // Otherwise, only surface a real minutes value parsed from the title's
   // runtime. Never fabricate a time — an unknown runtime shows nothing rather
   // than a made-up number.
+  if (!movie.runtime || typeof movie.runtime !== 'string') {
+    return ''
+  }
   const minutesMatch = movie.runtime.match(/(\d+)\s*min/i)
   if (minutesMatch) {
     return `${Number(minutesMatch[1])}m`
@@ -1011,9 +1030,9 @@ function formatAnimeEpisodeTitle(number: number, rawTitle?: string): string {
   return `Episode ${number} - ${trimmed}`
 }
 
-function getEpisodeDuration(
-  movie: Movie,
-  episodeNumber: number,
+export function getEpisodeDuration(
+  movie?: Movie | null,
+  episodeNumber?: number,
   rawEpDuration?: string | number,
   fallbackRuntime?: string,
 ): string {
@@ -1046,7 +1065,7 @@ function getEpisodeDuration(
   }
 
   // 2. If fallbackRuntime is provided
-  if (fallbackRuntime) {
+  if (fallbackRuntime && typeof fallbackRuntime === 'string') {
     const trimmed = fallbackRuntime.trim()
     if (trimmed && !trimmed.toLowerCase().includes('series') && !trimmed.toLowerCase().includes('unavailable')) {
       const numMatch = trimmed.match(/^(\d+)\s*(?:m|min)?$/i)
@@ -1063,7 +1082,7 @@ function getEpisodeDuration(
   }
 
   // 3. If movie has episodeRuntimeMinutes
-  if (typeof movie.episodeRuntimeMinutes === 'number' && movie.episodeRuntimeMinutes > 0) {
+  if (typeof movie?.episodeRuntimeMinutes === 'number' && movie.episodeRuntimeMinutes > 0) {
     const mins = movie.episodeRuntimeMinutes
     const hrs = Math.floor(mins / 60)
     const remMins = mins % 60
@@ -1071,7 +1090,7 @@ function getEpisodeDuration(
   }
 
   // 4. If movie.runtime has numeric minutes (e.g. "45 min", "55 min")
-  if (movie.runtime) {
+  if (movie?.runtime && typeof movie.runtime === 'string') {
     const match = movie.runtime.match(/(\d+)\s*min/i)
     if (match) {
       const mins = parseInt(match[1], 10)
@@ -1084,10 +1103,11 @@ function getEpisodeDuration(
   }
 
   // 5. For Anime ONLY: fallback seed offset if no exact time is available
-  if (movie.isAnime) {
+  if (movie?.isAnime) {
     const baseMins = 24
     const seed = (movie.id || 'anime').split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
-    const offset = ((episodeNumber * 19 + seed * 7) % 45) - 25
+    const epNum = typeof episodeNumber === 'number' ? episodeNumber : 1
+    const offset = ((epNum * 19 + seed * 7) % 45) - 25
     const totalSeconds = Math.max(60, baseMins * 60 + offset)
     const m = Math.floor(totalSeconds / 60)
     const s = totalSeconds % 60
@@ -1097,14 +1117,15 @@ function getEpisodeDuration(
   return ''
 }
 
-function episodeSynopsis(movie: Movie, season: number, episode: number) {
-  const cleanSynopsis = movie.synopsis.replace(/\s+/g, ' ').trim()
+function episodeSynopsis(movie?: Movie | null, season?: number, episode?: number) {
+  if (!movie) return ''
+  const cleanSynopsis = (movie.synopsis ?? '').replace(/\s+/g, ' ').trim()
 
   if (cleanSynopsis && cleanSynopsis !== 'N/A') {
     return cleanSynopsis
   }
 
-  return `${movie.title} continues through season ${season}, episode ${episode}.`
+  return `${movie.title || 'Title'} continues through season ${season ?? 1}, episode ${episode ?? 1}.`
 }
 
 function rankRail(movies: Movie[]) {
@@ -5619,10 +5640,14 @@ function DetailScreen({
   // On desktop the anime detail shows every section stacked (no tabs / no
   // secondary icon row); the tab UI + icon row are a mobile-only treatment.
   const [isDesktop, setIsDesktop] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 900px)').matches,
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(min-width: 900px)').matches,
   )
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia('(min-width: 900px)')
     const handler = () => setIsDesktop(mq.matches)
     mq.addEventListener('change', handler)
