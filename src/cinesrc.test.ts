@@ -346,7 +346,7 @@ describe('CineSrc server integration', () => {
     }
 
     const movieUrl = buildStreamUrl(movie, 'nhdapi')
-    expect(movieUrl).toContain('https://nhdapi.com/embed/movie/666243')
+    expect(movieUrl).toContain('https://nhdapi.com/movie/666243')
 
     const tvShow: Movie = {
       ...movie,
@@ -358,7 +358,7 @@ describe('CineSrc server integration', () => {
     }
 
     const tvUrl = buildStreamUrl(tvShow, 'nhdapi')
-    expect(tvUrl).toContain('https://nhdapi.com/embed/tv/94997/2/3')
+    expect(tvUrl).toContain('https://nhdapi.com/tv/94997/2/3')
   })
 
   it('correctly distinguishes admin main account from regular accounts', async () => {

@@ -716,12 +716,12 @@ function buildNhdUrl(movie: Movie): string {
   if (isTv && mediaId) {
     const season = movie.streamSeason ?? 1
     const episode = movie.streamEpisode ?? 1
-    return `https://nhdapi.com/embed/tv/${encodeURIComponent(mediaId)}/${season}/${episode}${keyParam}`
+    return `https://nhdapi.com/tv/${encodeURIComponent(mediaId)}/${season}/${episode}${keyParam}`
   }
 
   // 3. Movie (TMDB / IMDb)
   if (mediaId) {
-    return `https://nhdapi.com/embed/movie/${encodeURIComponent(mediaId)}${keyParam}`
+    return `https://nhdapi.com/movie/${encodeURIComponent(mediaId)}${keyParam}`
   }
 
   return ''
