@@ -6754,7 +6754,12 @@ function DetailPosterRail({
               aria-label={`Open ${item.title}`}
               onClick={() => onOpenDetail(item)}
             >
-              <PosterImage movie={item} fallback={posterImageFor(item)} />
+              <div className="detail-related-poster-wrap">
+                <PosterImage movie={item} fallback={posterImageFor(item)} />
+              </div>
+              <span className="detail-related-title" title={item.title}>
+                {item.title}
+              </span>
             </button>
           ))}
         </div>
