@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { compactRuntime, episodeRuntime, getEpisodeDuration } from './App'
-import type { Movie } from './omdb'
+import { normalizeMovie, type Movie } from './omdb'
 
 describe('runtime parsing safety', () => {
   it('compactRuntime safely handles undefined, null, empty string, and valid runtime formats', () => {
@@ -56,5 +56,28 @@ describe('runtime parsing safety', () => {
     expect(getEpisodeDuration(blankMovie, 1, undefined, undefined)).toBe('')
     expect(getEpisodeDuration(blankMovie, 1, '45 min')).toBe('45m')
     expect(getEpisodeDuration(blankMovie, 1, 60)).toBe('1h')
+  })
+
+  it('normalizeMovie safely handles partial and undefined movie structures from similar recommendations', () => {
+    const rawPartial = {
+      id: '12345',
+      title: 'Similar Title',
+      synopsis: 'A great movie',
+    } as Partial<Movie>
+
+    const normalized = normalizeMovie(rawPartial)
+    expect(normalized.id).toBe('12345')
+    expect(normalized.title).toBe('Similar Title')
+    expect(Array.isArray(normalized.cast)).toBe(true)
+    expect(Array.isArray(normalized.genres)).toBe(true)
+    expect(Array.isArray(normalized.ratings)).toBe(true)
+    expect(Array.isArray(normalized.badges)).toBe(true)
+    expect(normalized.cast.slice(0, 3)).toEqual([])
+    expect(normalized.genres.slice(0, 3)).toEqual(['Movie'])
+    expect(normalized.ratings.length).toBe(0)
+
+    const emptyNormalized = normalizeMovie(undefined)
+    expect(emptyNormalized.title).toBe('Untitled')
+    expect(emptyNormalized.cast.slice(0, 3)).toEqual([])
   })
 })

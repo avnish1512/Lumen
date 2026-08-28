@@ -732,6 +732,68 @@ export function movieFromSearch(item: OmdbSearchItem, rank = 1): Movie {
   }
 }
 
+export function normalizeMovie(movie: Partial<Movie> | null | undefined): Movie {
+  if (!movie) {
+    return {
+      id: '',
+      rank: 1,
+      title: 'Untitled',
+      logoTitle: 'Untitled',
+      label: 'Movie',
+      type: 'Movie',
+      genres: ['Movie'],
+      year: '',
+      runtime: 'Runtime unavailable',
+      rating: 'N/A',
+      maturity: 'NR',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: 'Director unavailable',
+      awards: 'Awards unavailable',
+      boxOffice: 'Box office unavailable',
+      ratings: [],
+      badges: [],
+      isFull: false,
+    }
+  }
+
+  const title = movie.title || 'Untitled'
+  const poster = movie.poster || movie.hero || movie.still || ''
+  const hero = movie.hero || movie.still || poster
+  const still = movie.still || hero || poster
+
+  return {
+    ...movie,
+    id: String(movie.id ?? ''),
+    rank: typeof movie.rank === 'number' ? movie.rank : 1,
+    title,
+    logoTitle: movie.logoTitle || logoTitle(title),
+    label: movie.label || 'Movie',
+    type: movie.type || 'Movie',
+    genres: Array.isArray(movie.genres) ? movie.genres : ['Movie'],
+    year: String(movie.year ?? ''),
+    runtime: movie.runtime || 'Runtime unavailable',
+    rating: String(movie.rating ?? 'N/A'),
+    maturity: movie.maturity || 'NR',
+    progress: typeof movie.progress === 'number' ? movie.progress : 0,
+    hero,
+    poster,
+    still,
+    synopsis: movie.synopsis || '',
+    cast: Array.isArray(movie.cast) ? movie.cast : [],
+    director: movie.director || 'Director unavailable',
+    awards: movie.awards || 'Awards unavailable',
+    boxOffice: movie.boxOffice || 'Box office unavailable',
+    ratings: Array.isArray(movie.ratings) ? movie.ratings : [],
+    badges: Array.isArray(movie.badges) ? movie.badges : [],
+    isFull: Boolean(movie.isFull),
+  }
+}
+
 async function requestOmdb<T>(path: string): Promise<T> {
   const response = await fetch(path)
   const body = (await response.json()) as T & { Response?: string; Error?: string }

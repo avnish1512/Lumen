@@ -356,16 +356,27 @@ async function fetchTmdbRelated(tmdbId: string | number, mediaType: 'movie' | 't
                     id: String(part.id),
                     tmdbId: part.id,
                     title: part.title,
+                    logoTitle: part.title,
                     poster: part.poster_path ? `https://image.tmdb.org/t/p/w500${part.poster_path}` : '',
                     hero: part.backdrop_path ? `https://image.tmdb.org/t/p/original${part.backdrop_path}` : '',
                     still: part.backdrop_path ? `https://image.tmdb.org/t/p/w780${part.backdrop_path}` : '',
                     synopsis: part.overview || '',
                     year: (part.release_date || '').slice(0, 4),
+                    runtime: 'N/A',
                     rating: part.vote_average ? part.vote_average.toFixed(1) : '8.0',
+                    maturity: 'NR',
+                    progress: 0,
                     type: 'Movie',
                     isAnime: false,
                     label: 'Franchise Part',
-                    genres: [],
+                    genres: ['Movie'],
+                    cast: [],
+                    director: 'Director unavailable',
+                    awards: 'N/A',
+                    boxOffice: 'N/A',
+                    ratings: [],
+                    badges: [],
+                    rank: 1,
                   })
                 }
               }
@@ -379,20 +390,32 @@ async function fetchTmdbRelated(tmdbId: string | number, mediaType: 'movie' | 't
         for (const item of data.recommendations.results) {
           if (!seenIds.has(item.id)) {
             seenIds.add(item.id)
+            const title = item.title || item.name || 'Untitled'
             results.push({
               id: String(item.id),
               tmdbId: item.id,
-              title: item.title || item.name,
+              title,
+              logoTitle: title,
               poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '',
               hero: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : '',
               still: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : '',
               synopsis: item.overview || '',
               year: (item.release_date || item.first_air_date || '').slice(0, 4),
+              runtime: 'N/A',
               rating: item.vote_average ? item.vote_average.toFixed(1) : '7.8',
+              maturity: 'NR',
+              progress: 0,
               type: isMovie ? 'Movie' : 'Series',
               isAnime: false,
               label: 'Recommended',
-              genres: [],
+              genres: isMovie ? ['Movie'] : ['Series'],
+              cast: [],
+              director: 'Director unavailable',
+              awards: 'N/A',
+              boxOffice: 'N/A',
+              ratings: [],
+              badges: [],
+              rank: 1,
             })
           }
         }
@@ -403,20 +426,32 @@ async function fetchTmdbRelated(tmdbId: string | number, mediaType: 'movie' | 't
         for (const item of data.similar.results) {
           if (!seenIds.has(item.id)) {
             seenIds.add(item.id)
+            const title = item.title || item.name || 'Untitled'
             results.push({
               id: String(item.id),
               tmdbId: item.id,
-              title: item.title || item.name,
+              title,
+              logoTitle: title,
               poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '',
               hero: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : '',
               still: item.backdrop_path ? `https://image.tmdb.org/t/p/w780${item.backdrop_path}` : '',
               synopsis: item.overview || '',
               year: (item.release_date || item.first_air_date || '').slice(0, 4),
+              runtime: 'N/A',
               rating: item.vote_average ? item.vote_average.toFixed(1) : '7.5',
+              maturity: 'NR',
+              progress: 0,
               type: isMovie ? 'Movie' : 'Series',
               isAnime: false,
               label: 'Similar',
-              genres: [],
+              genres: isMovie ? ['Movie'] : ['Series'],
+              cast: [],
+              director: 'Director unavailable',
+              awards: 'N/A',
+              boxOffice: 'N/A',
+              ratings: [],
+              badges: [],
+              rank: 1,
             })
           }
         }

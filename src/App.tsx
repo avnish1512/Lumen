@@ -72,6 +72,7 @@ import {
   fetchTvShowCollection,
   fetchAnimeCollection,
   searchMovies,
+  normalizeMovie,
   type MediaCollection,
   type Movie,
 } from './omdb'
@@ -895,47 +896,34 @@ function useHeroSwipe(
         x: event.clientX,
         y: event.clientY,
       }
-
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId)
-      } catch {
-        // Some mobile WebViews skip pointer capture during native scrolling.
-      }
     },
     [itemCount],
   )
 
   const onPointerUp = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
-      const start = swipeStartRef.current
+      if (!swipeStartRef.current) {
+        return
+      }
+
+      const deltaX = event.clientX - swipeStartRef.current.x
+      const deltaY = event.clientY - swipeStartRef.current.y
       swipeStartRef.current = null
 
-      if (!start || itemCount < 2) {
+      if (Math.abs(deltaX) < 40 || Math.abs(deltaX) <= Math.abs(deltaY)) {
         return
       }
 
-      const deltaX = event.clientX - start.x
-      const deltaY = event.clientY - start.y
-
-      if (Math.abs(deltaX) < 44 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
-        return
+      if (deltaX < 0) {
+        onIndexChange((activeIndex + 1) % itemCount)
+      } else {
+        onIndexChange((activeIndex - 1 + itemCount) % itemCount)
       }
-
-      const direction = deltaX < 0 ? 1 : -1
-      onIndexChange((activeIndex + direction + itemCount) % itemCount)
     },
     [activeIndex, itemCount, onIndexChange],
   )
 
-  const onPointerCancel = useCallback(() => {
-    swipeStartRef.current = null
-  }, [])
-
-  return {
-    onPointerDown,
-    onPointerUp,
-    onPointerCancel,
-  }
+  return { onPointerDown, onPointerUp }
 }
 
 const seasonEpisodeCounts: Record<string, number[]> = {
@@ -943,7 +931,7 @@ const seasonEpisodeCounts: Record<string, number[]> = {
   tt0903747: [7, 13, 13, 13, 16],
   tt4574334: [8, 9, 8, 9],
   tt1475582: [3, 3, 3, 3],
-  tt0108778: [24, 24, 25, 24, 24, 25, 24, 24, 23, 17],
+  tt0108778: [24, 24, 25, 24, 24, 25, 24, 24, 24, 18],
   tt7366338: [5],
   tt3032476: [10, 10, 10, 10, 10, 13],
   tt1520211: [6, 13, 16, 16, 16, 16, 16, 16, 16, 22, 24],
@@ -952,6 +940,8 @@ const seasonEpisodeCounts: Record<string, number[]> = {
 }
 
 function seasonsFor(movie: Movie) {
+  if (!movie) return [{ season: 1, episodeCount: 1 }]
+
   if (movie.isHentaiOcean) {
     const total = movie.hentaiEpisodes?.length || movie.episodeCount || 1
     return [{ season: 1, episodeCount: total }]
@@ -970,8 +960,8 @@ function seasonsFor(movie: Movie) {
     return [{ season: 1, episodeCount: total }]
   }
 
-  const knownCounts = seasonEpisodeCounts[movie.id]
-  const fallbackSeasonCount = movie.year.includes('-') ? 4 : 2
+  const knownCounts = movie.id ? seasonEpisodeCounts[movie.id] : undefined
+  const fallbackSeasonCount = (movie.year || '').includes('-') ? 4 : 2
   const counts =
     knownCounts ??
     Array.from({ length: fallbackSeasonCount }, (_, index) =>
@@ -1257,7 +1247,14 @@ function continueRuntimeLabel(movie: Movie) {
 }
 
 function isTvShow(movie: Movie) {
-  if (movie.isJav || movie.id.startsWith('jav-') || movie.id.startsWith('phub-') || movie.label === 'PHub' || movie.label === 'JAV') {
+  if (!movie) return false
+  if (
+    movie.isJav ||
+    (movie.id || '').startsWith('jav-') ||
+    (movie.id || '').startsWith('phub-') ||
+    movie.label === 'PHub' ||
+    movie.label === 'JAV'
+  ) {
     return false
   }
 
@@ -1265,7 +1262,7 @@ function isTvShow(movie: Movie) {
     return (
       (movie.hentaiEpisodes?.length ?? 0) > 1 ||
       (movie.episodeCount ?? 0) > 1 ||
-      movie.type.toLowerCase() === 'series'
+      (movie.type || '').toLowerCase() === 'series'
     )
   }
 
@@ -1286,7 +1283,7 @@ function isTvShow(movie: Movie) {
     return true
   }
 
-  return movie.tmdbType === 'tv' || movie.type.toLowerCase() === 'series'
+  return movie.tmdbType === 'tv' || (movie.type || '').toLowerCase() === 'series'
 }
 
 function normalizeMovieIdentity(value: string) {
@@ -3212,56 +3209,58 @@ function App() {
   )
 
   const openDetail = (movie: Movie) => {
+    const safeMovie = normalizeMovie(movie)
     if (screen !== 'detail' && screen !== 'watch') {
       setDetailBackScreen(screen)
     }
 
     if (
-      movie.id.startsWith('jav-') ||
-      movie.label === 'JAV' ||
-      movie.isJav ||
-      movie.hentaiSlug?.startsWith('jav-')
+      safeMovie.id.startsWith('jav-') ||
+      safeMovie.label === 'JAV' ||
+      safeMovie.isJav ||
+      safeMovie.hentaiSlug?.startsWith('jav-')
     ) {
       setActiveLordTab('jav')
     } else if (
-      movie.id.startsWith('phub-') ||
-      movie.label === 'PHub' ||
-      movie.hentaiSlug?.startsWith('phub-')
+      safeMovie.id.startsWith('phub-') ||
+      safeMovie.label === 'PHub' ||
+      safeMovie.hentaiSlug?.startsWith('phub-')
     ) {
       setActiveLordTab('phub')
     }
 
-    setSelectedMovie(movie)
+    setSelectedMovie(safeMovie)
     setScreen('detail')
-    void hydrateMovie(movie)
+    void hydrateMovie(safeMovie)
   }
 
   const openWatch = (movie: Movie) => {
+    const safeMovie = normalizeMovie(movie)
     if (screen !== 'detail' && screen !== 'watch') {
       setDetailBackScreen(screen)
     }
 
     if (
-      movie.id.startsWith('jav-') ||
-      movie.label === 'JAV' ||
-      movie.isJav ||
-      movie.hentaiSlug?.startsWith('jav-')
+      safeMovie.id.startsWith('jav-') ||
+      safeMovie.label === 'JAV' ||
+      safeMovie.isJav ||
+      safeMovie.hentaiSlug?.startsWith('jav-')
     ) {
       setActiveLordTab('jav')
     } else if (
-      movie.id.startsWith('phub-') ||
-      movie.label === 'PHub' ||
-      movie.hentaiSlug?.startsWith('phub-')
+      safeMovie.id.startsWith('phub-') ||
+      safeMovie.label === 'PHub' ||
+      safeMovie.hentaiSlug?.startsWith('phub-')
     ) {
       setActiveLordTab('phub')
     }
 
-    setSelectedMovie(movie)
-    markContinueWatching(movie)
+    setSelectedMovie(safeMovie)
+    markContinueWatching(safeMovie)
     setScreen('watch')
     setStreamError('')
-    void hydrateMovie(movie).then(markContinueWatching)
-    void hydrateStreamingMovie(movie)
+    void hydrateMovie(safeMovie).then(markContinueWatching)
+    void hydrateStreamingMovie(safeMovie)
   }
 
   // --- BFF "watch together" ---
@@ -5923,7 +5922,7 @@ function DetailScreen({
             <p className="detail-meta apple-detail-meta">
               <span className="provider-badge hero-provider">tv</span>
               <span>{movie.type}</span>
-              {movie.genres.slice(0, 3).map((genre) => (
+              {(movie.genres || []).slice(0, 3).map((genre) => (
                 <span key={genre}>{genre}</span>
               ))}
             </p>
@@ -6057,9 +6056,9 @@ function DetailScreen({
           {isLoading && !movie.synopsis && <LoadingStrip label="Loading full details" />}
         </div>
 
-        {!isNetflix && (
+        {!isNetflix && (movie.cast || []).length > 0 && (
           <p className="detail-starring">
-            Starring {movie.cast.slice(0, 3).join(', ')}
+            Starring {(movie.cast || []).slice(0, 3).join(', ')}
           </p>
         )}
       </div>
@@ -6773,7 +6772,11 @@ function DetailPosterRail({
   )
 }
 
-function watchProviderTypeLabel(type: TmdbWatchProvider['type']) {
+function watchProviderTypeLabel(type?: TmdbWatchProvider['type']) {
+  if (!type) {
+    return 'Stream'
+  }
+
   if (type === 'flatrate') {
     return 'Subscription'
   }
@@ -6863,8 +6866,8 @@ function WhereToWatch({
   )
 }
 
-function initialsFor(name: string) {
-  return name
+function initialsFor(name?: string) {
+  return (name || '')
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -6895,12 +6898,12 @@ function CastCrewRail({
     'Story',
     'Crew',
   ]
-  const fallbackMembers = movie.cast.slice(0, 9).map((name, index) => ({
+  const fallbackMembers = (movie.cast || []).slice(0, 9).map((name, index) => ({
     id: `fallback-${name}-${index}`,
     imageUrl: '',
     name,
     role:
-      index === 0 && movie.director !== 'Director unavailable'
+      index === 0 && movie.director && movie.director !== 'Director unavailable'
         ? movie.director
         : roles[index % roles.length],
     type: 'Cast' as const,
@@ -11882,7 +11885,9 @@ function MovieFacts({ movie }: { movie: Movie }) {
       <div className="about-card-row">
         <article className="about-summary-card">
           <h3>{movie.title}</h3>
-          <strong>{movie.genres.slice(0, 3).join(', ').toUpperCase()}</strong>
+          {(movie.genres || []).length > 0 && (
+            <strong>{(movie.genres || []).slice(0, 3).join(', ').toUpperCase()}</strong>
+          )}
           <p>
             {movie.synopsis}
             <span className="more-chip">MORE</span>
@@ -11921,12 +11926,12 @@ function MovieFacts({ movie }: { movie: Movie }) {
           />
         </div>
 
-        {movie.ratings.length > 0 && (
+        {(movie.ratings || []).length > 0 && (
           <div className="detail-info-column">
             <h3>Ratings</h3>
             <FactItem
               label="Ratings"
-              value={movie.ratings
+              value={(movie.ratings || [])
                 .map((rating) => `${rating.Source}: ${rating.Value}`)
                 .join(' / ')}
             />

@@ -674,6 +674,7 @@ export async function fetchAnimeRelationsAndRecommendations(anilistId: number): 
         id: `al-${node.id}`,
         anilistId: node.id,
         title,
+        logoTitle: title,
         poster: node.coverImage?.extraLarge || node.coverImage?.large || '',
         hero: node.bannerImage || node.coverImage?.extraLarge || '',
         still: node.bannerImage || node.coverImage?.extraLarge || '',
@@ -685,6 +686,16 @@ export async function fetchAnimeRelationsAndRecommendations(anilistId: number): 
         rating: node.averageScore ? (node.averageScore / 10).toFixed(1) : '8.5',
         label: formatRelationLabel(edge.relationType),
         duration: node.duration ? `${node.duration}m` : undefined,
+        runtime: node.duration ? `${node.duration}m` : 'Anime',
+        maturity: 'TV-14',
+        progress: 0,
+        cast: [],
+        director: 'Director unavailable',
+        awards: 'N/A',
+        boxOffice: 'N/A',
+        ratings: [],
+        badges: ['Anime'],
+        rank: 1,
       });
     }
 
@@ -700,6 +711,7 @@ export async function fetchAnimeRelationsAndRecommendations(anilistId: number): 
         id: `al-${node.id}`,
         anilistId: node.id,
         title,
+        logoTitle: title,
         poster: node.coverImage?.extraLarge || node.coverImage?.large || '',
         hero: node.bannerImage || node.coverImage?.extraLarge || '',
         still: node.bannerImage || node.coverImage?.extraLarge || '',
@@ -711,6 +723,16 @@ export async function fetchAnimeRelationsAndRecommendations(anilistId: number): 
         rating: node.averageScore ? (node.averageScore / 10).toFixed(1) : '8.2',
         label: 'Recommended',
         duration: node.duration ? `${node.duration}m` : undefined,
+        runtime: node.duration ? `${node.duration}m` : 'Anime',
+        maturity: 'TV-14',
+        progress: 0,
+        cast: [],
+        director: 'Director unavailable',
+        awards: 'N/A',
+        boxOffice: 'N/A',
+        ratings: [],
+        badges: ['Anime'],
+        rank: 1,
       });
     }
 
