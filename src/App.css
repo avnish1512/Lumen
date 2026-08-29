@@ -20226,3 +20226,629 @@ body:has(.add-profile-screen),
   color: #47a8ff;
 }
 
+/* ==========================================================================
+   Downloads Screen & Offline Player Styles
+   ========================================================================== */
+.downloads-screen {
+  padding: 84px 32px 64px;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 100vh;
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .downloads-screen {
+    padding: 70px 16px 88px;
+  }
+}
+
+.downloads-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.downloads-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.downloads-title {
+  font-size: 32px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.downloads-title .title-icon {
+  color: #47a8ff;
+}
+
+.downloads-subtitle {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.downloads-storage-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
+}
+
+.downloads-filter-bar {
+  margin-bottom: 24px;
+}
+
+.downloads-filter-buttons {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.downloads-filter-buttons .filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.downloads-filter-buttons .filter-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.downloads-filter-buttons .filter-btn.active {
+  background: #fff;
+  color: #000;
+  font-weight: 700;
+  border-color: #fff;
+}
+
+/* Active Downloads Queue */
+.downloads-queue-section {
+  margin-bottom: 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.downloads-queue-section .section-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #47a8ff;
+}
+
+.downloads-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.download-queue-card {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.queue-card-poster {
+  width: 72px;
+  height: 96px;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+}
+
+.queue-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.queue-card-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-episode-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 8px;
+}
+
+.status-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(71, 168, 255, 0.2);
+  color: #47a8ff;
+}
+
+.status-tag.paused {
+  background: rgba(255, 149, 0, 0.2);
+  color: #ff9f0a;
+}
+
+.status-tag.error {
+  background: rgba(255, 69, 58, 0.2);
+  color: #ff453a;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #34cfeb, #47a8ff);
+  transition: width 0.3s ease;
+  border-radius: 999px;
+}
+
+.queue-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.queue-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.queue-cancel-btn:hover {
+  color: #ff453a;
+}
+
+/* Completed Downloads Grid */
+.downloads-grid-section .section-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #30d158;
+}
+
+.downloads-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 600px) {
+  .downloads-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+}
+
+.download-media-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.download-media-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.24);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.download-poster-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  background: #111;
+}
+
+.download-poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.download-media-card:hover .download-poster-img {
+  transform: scale(1.04);
+}
+
+.download-play-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.download-media-card:hover .download-play-overlay {
+  opacity: 1;
+}
+
+.play-overlay-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #fff;
+  color: #000;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+.download-badge-offline {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(48, 209, 88, 0.6);
+  color: #30d158;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+}
+
+.download-details {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.download-card-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.download-episode-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.download-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.download-meta-row .size-tag {
+  color: #47a8ff;
+  font-weight: 600;
+}
+
+.download-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.btn-offline-play {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: #fff;
+  color: #000;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.btn-offline-play:hover {
+  opacity: 0.9;
+}
+
+.btn-download-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-download-action:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.btn-download-action.delete-btn:hover {
+  background: rgba(255, 69, 58, 0.2);
+  border-color: rgba(255, 69, 58, 0.5);
+  color: #ff453a;
+}
+
+/* Empty State */
+.downloads-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 72px 20px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.empty-icon-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 20px;
+}
+
+.downloads-empty-state h2 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+
+.downloads-empty-state p {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 24px;
+}
+
+/* Offline Video Player Modal */
+.offline-player-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.offline-player-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(16px);
+}
+
+.offline-player-container {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1000px;
+  background: #0d0d11;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+}
+
+.offline-player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.offline-indicator {
+  font-size: 11px;
+  font-weight: 700;
+  color: #30d158;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.offline-player-title h3 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.offline-player-title p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.offline-player-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.offline-player-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.offline-video-wrapper {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.offline-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.offline-video-error {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #ff453a;
+  padding: 24px;
+  text-align: center;
+}
+
+/* Library Segmented Tab Controls */
+.library-segmented-control {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+
+.segmented-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.segmented-tab:hover {
+  color: #fff;
+}
+
+.segmented-tab.active {
+  background: #fff;
+  color: #000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.tab-counter {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.segmented-tab:not(.active) .tab-counter {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.tab-counter.download-count {
+  background: #47a8ff;
+  color: #fff;
+}
+
+

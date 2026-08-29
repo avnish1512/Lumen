@@ -156,6 +156,8 @@ import { fetchTrailerYoutubeId } from './kinocheck'
 import { WatchRecommenderEntry } from './watch-recommender/WatchRecommender'
 import { SplashScreen } from './SplashScreen'
 import { ErrorBoundary } from './ErrorBoundary'
+import { DownloadsScreen } from './DownloadsScreen'
+import { startDownload, getAllDownloads, subscribeDownloads } from './downloads'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -210,8 +212,8 @@ function LoginBackdrop() {
   )
 }
 
-type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles' | 'drama' | 'livetv' | 'lord' | 'manga'
-type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search' | 'Drama' | 'Live TV' | 'Manga'
+type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search' | 'library' | 'login' | 'profiles' | 'drama' | 'livetv' | 'lord' | 'manga' | 'downloads'
+type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search' | 'Drama' | 'Live TV' | 'Manga' | 'Downloads'
 type SavedMovies = Record<string, Movie>
 
 // 4-digit PIN that unlocks the hidden "Lord" profile. Change this value (or the
@@ -304,6 +306,7 @@ function readActiveScreen(): Screen | null {
       'livetv',
       'lord',
       'manga',
+      'downloads',
     ]
     if (hash && validScreens.includes(hash as Screen)) {
       return hash as Screen
@@ -4271,6 +4274,7 @@ function App() {
             onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
             onDismissInvite={dismissInvite}
             onOpenDetail={openDetail}
+            onPlayMovie={openWatch}
             currentUser={currentUser}
             onProfile={openProfileOrLogin}
             onSelectProfile={switchToProfile}
@@ -4283,6 +4287,50 @@ function App() {
             profiles={profiles}
             onSearch={() => setScreen('search')}
             designMode={designMode}
+          />
+        </ErrorBoundary>
+      )}
+
+      {screen === 'downloads' && (
+        <ErrorBoundary onReset={() => setScreen('home')}>
+          <DownloadsScreen
+            onBack={() => setScreen('library')}
+            onExplore={() => setScreen('home')}
+            designMode={designMode}
+            onPlayMovie={(item) => {
+              const movieObj = normalizeMovie({
+                id: item.movieId,
+                title: item.title,
+                year: item.year || '',
+                poster: item.poster || '',
+                still: item.still || '',
+                hero: item.still || item.poster || '',
+                runtime: item.runtime || '',
+                type: item.mediaType === 'tv' ? 'series' : (item.mediaType === 'anime' ? 'anime' : 'movie'),
+                isAnime: item.mediaType === 'anime',
+                genres: item.mediaType === 'anime' ? ['Anime'] : [],
+                streamSeason: item.season,
+                streamEpisode: item.episode,
+              })
+              openWatch(movieObj)
+            }}
+            onOpenDetail={(item) => {
+              const movieObj = normalizeMovie({
+                id: item.movieId,
+                title: item.title,
+                year: item.year || '',
+                poster: item.poster || '',
+                still: item.still || '',
+                hero: item.still || item.poster || '',
+                runtime: item.runtime || '',
+                type: item.mediaType === 'tv' ? 'series' : (item.mediaType === 'anime' ? 'anime' : 'movie'),
+                isAnime: item.mediaType === 'anime',
+                genres: item.mediaType === 'anime' ? ['Anime'] : [],
+                streamSeason: item.season,
+                streamEpisode: item.episode,
+              })
+              openDetail(movieObj)
+            }}
           />
         </ErrorBoundary>
       )}
@@ -5628,11 +5676,55 @@ function DetailScreen({
   onToggleLike,
   onShare,
   onBff,
-  onOpenPoster,
+  onOpenPoster: _onOpenPoster,
   designMode,
 }: DetailScreenProps) {
   const isNetflix = designMode === 'netflix'
   const similarsRef = useRef<HTMLDivElement | null>(null)
+  const [isDownloaded, setIsDownloaded] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void getAllDownloads().then((items) => {
+      if (active) {
+        setIsDownloaded(items.some((i) => i.movieId === movie.id && i.status === 'completed'))
+      }
+    })
+    const unsub = subscribeDownloads((items) => {
+      if (active) {
+        setIsDownloaded(items.some((i) => i.movieId === movie.id && i.status === 'completed'))
+      }
+    })
+    return () => {
+      active = false
+      unsub()
+    }
+  }, [movie.id])
+
+  const handleDownloadClick = async () => {
+    setIsDownloading(true)
+    try {
+      const streamUrl = buildStreamUrl(movie, 'rivestream')
+      await startDownload(
+        {
+          id: movie.id,
+          movieId: movie.id,
+          title: movie.title,
+          year: movie.year,
+          poster: movie.poster,
+          still: movie.still,
+          runtime: movie.runtime,
+          mediaType: movie.isAnime ? 'anime' : (movie.type === 'series' ? 'tv' : 'movie'),
+        },
+        streamUrl,
+      )
+      setIsDownloaded(true)
+    } finally {
+      setTimeout(() => setIsDownloading(false), 800)
+    }
+  }
+
   const [detailTab, setDetailTab] = useState<'episodes' | 'collection' | 'more'>(
     'episodes',
   )
@@ -5969,10 +6061,17 @@ function DetailScreen({
                 <button
                   className="detail-pill-button netflix-download-btn"
                   type="button"
-                  onClick={onOpenPoster}
+                  onClick={handleDownloadClick}
+                  title={isDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
                 >
-                  <Download />
-                  <span>Download</span>
+                  {isDownloading ? (
+                    <LoaderCircle className="spin" size={16} />
+                  ) : isDownloaded ? (
+                    <Check size={16} />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                  <span>{isDownloading ? 'Downloading...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
                 </button>
                 {isDesktop && (
                   <button
@@ -6031,10 +6130,17 @@ function DetailScreen({
                 <button
                   className="detail-download-button"
                   type="button"
-                  onClick={onOpenPoster}
+                  onClick={handleDownloadClick}
+                  title={isDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
                 >
-                  <Download />
-                  <span>Download</span>
+                  {isDownloading ? (
+                    <LoaderCircle className="spin" size={16} />
+                  ) : isDownloaded ? (
+                    <Check size={16} />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                  <span>{isDownloading ? 'Downloading...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
                 </button>
                 <button
                   className="circle-action"
@@ -7119,6 +7225,57 @@ function WatchScreen({
       ((movie as any).episodes && (movie as any).episodes.length > 0) ||
       isTvShow(movie),
   )
+
+  const [isWatchDownloaded, setIsWatchDownloaded] = useState(false)
+  const [isWatchDownloading, setIsWatchDownloading] = useState(false)
+
+  const currentDownloadKey = movie.streamSeason && movie.streamEpisode
+    ? `${movie.id}-s${movie.streamSeason}e${movie.streamEpisode}`
+    : movie.id
+
+  useEffect(() => {
+    let active = true
+    void getAllDownloads().then((items) => {
+      if (active) {
+        setIsWatchDownloaded(items.some((i) => i.id === currentDownloadKey && i.status === 'completed'))
+      }
+    })
+    const unsub = subscribeDownloads((items) => {
+      if (active) {
+        setIsWatchDownloaded(items.some((i) => i.id === currentDownloadKey && i.status === 'completed'))
+      }
+    })
+    return () => {
+      active = false
+      unsub()
+    }
+  }, [currentDownloadKey])
+
+  const handleWatchDownload = async () => {
+    setIsWatchDownloading(true)
+    try {
+      const activeStreamUrl = buildStreamUrl(movie, activeProviderId)
+      await startDownload(
+        {
+          id: currentDownloadKey,
+          movieId: movie.id,
+          title: movie.title,
+          year: movie.year,
+          season: movie.streamSeason,
+          episode: movie.streamEpisode,
+          episodeTitle: movie.streamSeason && movie.streamEpisode ? `Season ${movie.streamSeason} Episode ${movie.streamEpisode}` : undefined,
+          poster: movie.poster,
+          still: movie.still,
+          runtime: movie.runtime,
+          mediaType: movie.isAnime ? 'anime' : (movie.type === 'series' ? 'tv' : 'movie'),
+        },
+        activeStreamUrl,
+      )
+      setIsWatchDownloaded(true)
+    } finally {
+      setTimeout(() => setIsWatchDownloading(false), 800)
+    }
+  }
 
   const [javRelated, setJavRelated] = useState<Movie[]>([])
 
@@ -8295,6 +8452,22 @@ function WatchScreen({
               <button
                 type="button"
                 className="watch-mylist-btn"
+                onClick={handleWatchDownload}
+                title={isWatchDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
+              >
+                {isWatchDownloading ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : isWatchDownloaded ? (
+                  <Check size={16} />
+                ) : (
+                  <Download size={16} />
+                )}
+                <span>{isWatchDownloading ? 'Downloading...' : isWatchDownloaded ? 'Downloaded' : 'Download'}</span>
+              </button>
+
+              <button
+                type="button"
+                className="watch-mylist-btn"
                 onClick={onSave}
                 title={isSaved ? 'Saved to My List' : 'Add to My List'}
               >
@@ -8536,6 +8709,22 @@ function WatchScreen({
                   <span>Watch</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                className="watch-mylist-btn watch-icon-only-btn"
+                onClick={handleWatchDownload}
+                title={isWatchDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
+                aria-label={isWatchDownloaded ? 'Downloaded' : 'Download'}
+              >
+                {isWatchDownloading ? (
+                  <LoaderCircle className="spin" size={16} />
+                ) : isWatchDownloaded ? (
+                  <Check size={16} />
+                ) : (
+                  <Download size={16} />
+                )}
+              </button>
 
               <button
                 type="button"
@@ -11118,6 +11307,7 @@ type LibraryScreenProps = {
   onAcceptInvite?: (invite: WatchParty) => void
   onDismissInvite?: (invite: WatchParty) => void
   onOpenDetail: (movie: Movie) => void
+  onPlayMovie?: (movie: Movie) => void
   currentUser: UserInfo | null
   onProfile: () => void
   onSelectProfile?: (profileName: string) => void
@@ -11139,6 +11329,7 @@ function LibraryScreen({
   onAcceptInvite,
   onDismissInvite,
   onOpenDetail,
+  onPlayMovie,
   currentUser,
   onProfile,
   onSelectProfile,
@@ -11152,6 +11343,15 @@ function LibraryScreen({
   onSearch,
   designMode = 'apple',
 }: LibraryScreenProps) {
+  const [libraryTab, setLibraryTab] = useState<'saved' | 'downloads'>('saved')
+  const [downloadsCount, setDownloadsCount] = useState(0)
+
+  useEffect(() => {
+    void getAllDownloads().then((list) => setDownloadsCount(list.length))
+    const unsub = subscribeDownloads((list) => setDownloadsCount(list.length))
+    return unsub
+  }, [])
+
   return (
     <section className="screen library-screen">
       <header className="home-header">
@@ -11201,36 +11401,103 @@ function LibraryScreen({
       </header>
 
       <section className="library-content">
-        {!currentUser && (
-          <div className="glass-card library-signin-banner">
-            <div className="banner-text">
-              <h3>Sync Your Library</h3>
-              <p>Sign in to save and sync TV shows, movies, and watch history across all your devices.</p>
-            </div>
-            <button className="primary-play small" type="button" onClick={onProfile}>
-              Sign In
-            </button>
-          </div>
-        )}
+        <div className="library-segmented-control">
+          <button
+            type="button"
+            className={`segmented-tab ${libraryTab === 'saved' ? 'active' : ''}`}
+            onClick={() => setLibraryTab('saved')}
+          >
+            <span>Saved Titles</span>
+            {savedMovies.length > 0 && <span className="tab-counter">{savedMovies.length}</span>}
+          </button>
+          <button
+            type="button"
+            className={`segmented-tab ${libraryTab === 'downloads' ? 'active' : ''}`}
+            onClick={() => setLibraryTab('downloads')}
+          >
+            <Download size={14} />
+            <span>Downloads</span>
+            {downloadsCount > 0 && <span className="tab-counter download-count">{downloadsCount}</span>}
+          </button>
+        </div>
 
-        {savedMovies.length > 0 ? (
-          <>
-            <h2>Saved Movies</h2>
-            <div className="result-grid library-grid">
-              {savedMovies.map((movie) => (
-                <PosterCard
-                  key={movie.id}
-                  movie={movie}
-                  onOpenDetail={onOpenDetail}
-                />
-              ))}
-            </div>
-          </>
+        {libraryTab === 'downloads' ? (
+          <DownloadsScreen
+            designMode={designMode}
+            onExplore={() => setLibraryTab('saved')}
+            onPlayMovie={(item) => {
+              const movieObj = normalizeMovie({
+                id: item.movieId,
+                title: item.title,
+                year: item.year || '',
+                poster: item.poster || '',
+                still: item.still || '',
+                hero: item.still || item.poster || '',
+                runtime: item.runtime || '',
+                type: item.mediaType === 'tv' ? 'series' : (item.mediaType === 'anime' ? 'anime' : 'movie'),
+                isAnime: item.mediaType === 'anime',
+                genres: item.mediaType === 'anime' ? ['Anime'] : [],
+                streamSeason: item.season,
+                streamEpisode: item.episode,
+              })
+              if (onPlayMovie) {
+                onPlayMovie(movieObj)
+              } else {
+                onOpenDetail(movieObj)
+              }
+            }}
+            onOpenDetail={(item) => {
+              const movieObj = normalizeMovie({
+                id: item.movieId,
+                title: item.title,
+                year: item.year || '',
+                poster: item.poster || '',
+                still: item.still || '',
+                hero: item.still || item.poster || '',
+                runtime: item.runtime || '',
+                type: item.mediaType === 'tv' ? 'series' : (item.mediaType === 'anime' ? 'anime' : 'movie'),
+                isAnime: item.mediaType === 'anime',
+                genres: item.mediaType === 'anime' ? ['Anime'] : [],
+                streamSeason: item.season,
+                streamEpisode: item.episode,
+              })
+              onOpenDetail(movieObj)
+            }}
+          />
         ) : (
-          <div className="library-empty-state">
-            <h2>Your Library Is Empty</h2>
-            <p>TV shows and movies you save from the app will appear here.</p>
-          </div>
+          <>
+            {!currentUser && (
+              <div className="glass-card library-signin-banner">
+                <div className="banner-text">
+                  <h3>Sync Your Library</h3>
+                  <p>Sign in to save and sync TV shows, movies, and watch history across all your devices.</p>
+                </div>
+                <button className="primary-play small" type="button" onClick={onProfile}>
+                  Sign In
+                </button>
+              </div>
+            )}
+
+            {savedMovies.length > 0 ? (
+              <>
+                <h2>Saved Movies</h2>
+                <div className="result-grid library-grid">
+                  {savedMovies.map((movie) => (
+                    <PosterCard
+                      key={movie.id}
+                      movie={movie}
+                      onOpenDetail={onOpenDetail}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="library-empty-state">
+                <h2>Your Library Is Empty</h2>
+                <p>TV shows and movies you save from the app will appear here.</p>
+              </div>
+            )}
+          </>
         )}
       </section>
     </section>
