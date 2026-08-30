@@ -14034,6 +14034,8 @@ function hanimeToMovieHelper(video: HanimeVideo): Movie {
   }
 }
 
+const PHUB_PAGE_SIZE = 24
+
 function LordPhubSection({
   searchQuery = '',
   continueMovies = [],
@@ -14057,9 +14059,16 @@ function LordPhubSection({
   const [loading, setLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [orderBy, setOrderBy] = useState<'views' | 'duration'>('views')
+  const [page, setPage] = useState(1)
+  const [apiTotalPages, setApiTotalPages] = useState(1)
+  const [totalVideos, setTotalVideos] = useState(0)
 
-  const [page] = useState(1)
+  useEffect(() => {
+    setPage(1)
+  }, [selectedCategory, orderBy, searchQuery])
+
   const hanimeToMovie = (video: HanimeVideo): Movie => hanimeToMovieHelper(video)
+
   useEffect(() => {
     let active = true
     async function loadApiVideos() {
@@ -14072,9 +14081,21 @@ function LordPhubSection({
         const res = await fetch(url)
         if (!res.ok) return
         const data = await res.json()
-        if (active && data && Array.isArray(data.list) && data.list.length > 0) {
-          const parsed = data.list.map((item: any, idx: number) => normalizeVideoItem(item, idx))
-          setVideos(parsed)
+        if (active && data) {
+          if (data.pagecount) {
+            setApiTotalPages(Math.max(1, Number(data.pagecount) || 1))
+          } else if (data.total && data.limit) {
+            setApiTotalPages(Math.max(1, Math.ceil(Number(data.total) / Number(data.limit))))
+          } else if (Array.isArray(data.list) && data.list.length >= 10) {
+            setApiTotalPages((prev) => Math.max(prev, page + 1))
+          }
+          if (data.total) {
+            setTotalVideos(Number(data.total) || 0)
+          }
+          if (Array.isArray(data.list) && data.list.length > 0) {
+            const parsed = data.list.map((item: any, idx: number) => normalizeVideoItem(item, idx))
+            setVideos(parsed)
+          }
         }
       } catch {
         // Keep initial dataset on error
@@ -14117,35 +14138,66 @@ function LordPhubSection({
     return list
   }, [videos, selectedCategory])
 
+  const activeVideoList = isSearching ? searchResults : filteredVideos
+  const isApiLoaded = totalVideos > 0 && videos.length <= PHUB_PAGE_SIZE
+  const totalPages = isApiLoaded
+    ? apiTotalPages
+    : Math.max(1, Math.ceil(activeVideoList.length / PHUB_PAGE_SIZE))
+
+  const displayVideos = useMemo(() => {
+    if (isApiLoaded) {
+      return activeVideoList
+    }
+    const start = (page - 1) * PHUB_PAGE_SIZE
+    return activeVideoList.slice(start, start + PHUB_PAGE_SIZE)
+  }, [activeVideoList, isApiLoaded, page])
+
+  const handlePrevPage = () => {
+    if (page > 1) {
+      setPage((prev) => prev - 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const handleNextPage = () => {
+    if (page < totalPages) {
+      setPage((prev) => prev + 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
   const heroVideo = videos.length > 0 ? videos[0] : null
   const heroMovie = heroVideo ? hanimeToMovie(heroVideo) : null
+  const totalDisplayCount = totalVideos > 0 ? totalVideos : activeVideoList.length
 
   return (
-    <div className="hanime-container">
+    <div className="jav-container">
       {loading ? (
-        <div className="phub-loading">
+        <div className="jav-loading">
           <LoaderCircle className="spin-icon" size={32} />
-          <p>Loading videos...</p>
+          <p>Loading PHub 4K videos...</p>
         </div>
       ) : isSearching ? (
         searchResults.length === 0 ? (
-          <div className="phub-empty">
-            <Search size={42} />
+          <div className="jav-empty">
+            <Search size={40} />
             <p>No videos found matching "{searchQuery.trim()}".</p>
           </div>
         ) : (
           <div className="phub-search-results">
-            <h2 className="lord-rail-title" style={{ marginBottom: 20 }}>
-              Search Results ({searchResults.length})
-            </h2>
-            <div className="hanime-grid">
-              {searchResults.map((video, idx) => (
+            <div className="jav-meta-header">
+              <h2 className="lord-rail-title">
+                Search Results ({searchResults.length})
+              </h2>
+            </div>
+            <div className="jav-grid">
+              {displayVideos.map((video, idx) => (
                 <div
                   key={`${video.id}-${idx}`}
-                  className="hanime-card"
+                  className="jav-card"
                   onClick={() => onPlay(hanimeToMovie(video))}
                 >
-                  <div className="hanime-poster-area">
+                  <div className="jav-thumb-container">
                     <img
                       src={video.thumb}
                       referrerPolicy="no-referrer"
@@ -14157,26 +14209,67 @@ function LordPhubSection({
                         target.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
                       }}
                     />
-                    <span className="hanime-badge-4k">4K</span>
-                    <span className="hanime-badge-duration">{video.duration}</span>
-                    <div className="hanime-play-overlay">
-                      <div className="hanime-play-btn">
-                        <Play fill="#fff" size={22} />
-                      </div>
+                    <span className="jav-hd-badge">4K</span>
+                    {video.duration && (
+                      <span className="jav-duration-badge">{video.duration}</span>
+                    )}
+                    <div className="jav-play-overlay">
+                      <button
+                        type="button"
+                        className="jav-play-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onPlay(hanimeToMovie(video))
+                        }}
+                        title="Play Video"
+                      >
+                        <Play fill="#fff" size={24} />
+                      </button>
                     </div>
                   </div>
-                  <div className="hanime-card-body">
-                    <h3 className="hanime-card-title">{video.title}</h3>
-                    <span className="hanime-card-tag">{video.category}</span>
+                  <div className="jav-card-body">
+                    <h3 className="jav-card-title" title={video.title}>
+                      {cleanHtmlEntities(video.title)}
+                    </h3>
+                    <div className="jav-card-footer">
+                      {video.category && <span className="jav-studio">{cleanHtmlEntities(video.category)}</span>}
+                      {video.views > 0 && <span className="jav-views">👁 {video.views.toLocaleString()}</span>}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
+
+            {totalPages > 1 && (
+              <div className="jav-pagination">
+                <button
+                  type="button"
+                  className="jav-page-btn"
+                  onClick={handlePrevPage}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft size={18} />
+                  <span>Prev</span>
+                </button>
+                <span className="jav-page-info">
+                  Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="jav-page-btn"
+                  onClick={handleNextPage}
+                  disabled={page >= totalPages}
+                >
+                  <span>Next</span>
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            )}
           </div>
         )
       ) : filteredVideos.length === 0 ? (
-        <div className="phub-empty">
-          <Search size={42} />
+        <div className="jav-empty">
+          <Search size={40} />
           <p>No videos found in this category.</p>
         </div>
       ) : (
@@ -14287,21 +14380,23 @@ function LordPhubSection({
             </div>
           </div>
 
-          <div className="jav-meta-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <h2 className="lord-rail-title" style={{ margin: 0 }}>
-              {selectedCategory === 'All' ? 'All Videos' : selectedCategory}
-              <span className="jav-meta-count">({filteredVideos.length} videos)</span>
+          <div className="jav-meta-header">
+            <h2 className="lord-rail-title">
+              {selectedCategory === 'All' ? 'All PHub 4K Catalog' : `${selectedCategory} PHub`}
+              <span className="jav-meta-count">
+                ({totalDisplayCount.toLocaleString()} titles)
+              </span>
             </h2>
           </div>
 
-          <div className="hanime-grid">
-            {filteredVideos.map((video, idx) => (
+          <div className="jav-grid">
+            {displayVideos.map((video, idx) => (
               <div
                 key={`phub-${video.id}-${idx}`}
-                className="hanime-card"
+                className="jav-card"
                 onClick={() => onPlay(hanimeToMovie(video))}
               >
-                <div className="hanime-poster-area">
+                <div className="jav-thumb-container">
                   <img
                     src={video.thumb}
                     referrerPolicy="no-referrer"
@@ -14313,21 +14408,63 @@ function LordPhubSection({
                       target.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
                     }}
                   />
-                  <span className="hanime-badge-4k">4K</span>
-                  <span className="hanime-badge-duration">{video.duration}</span>
-                  <div className="hanime-play-overlay">
-                    <div className="hanime-play-btn">
-                      <Play fill="#fff" size={22} />
-                    </div>
+                  <span className="jav-hd-badge">4K</span>
+                  {video.duration && (
+                    <span className="jav-duration-badge">{video.duration}</span>
+                  )}
+                  <div className="jav-play-overlay">
+                    <button
+                      type="button"
+                      className="jav-play-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onPlay(hanimeToMovie(video))
+                      }}
+                      title="Play Video"
+                    >
+                      <Play fill="#fff" size={24} />
+                    </button>
                   </div>
                 </div>
-                <div className="hanime-card-body">
-                  <h3 className="hanime-card-title">{video.title}</h3>
-                  <span className="hanime-card-tag">{video.category}</span>
+                <div className="jav-card-body">
+                  <h3 className="jav-card-title" title={video.title}>
+                    {cleanHtmlEntities(video.title)}
+                  </h3>
+                  <div className="jav-card-footer">
+                    {video.category && <span className="jav-studio">{cleanHtmlEntities(video.category)}</span>}
+                    {video.views > 0 && <span className="jav-views">👁 {video.views.toLocaleString()}</span>}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="jav-pagination">
+              <button
+                type="button"
+                className="jav-page-btn"
+                onClick={handlePrevPage}
+                disabled={page <= 1}
+              >
+                <ChevronLeft size={18} />
+                <span>Prev</span>
+              </button>
+              <span className="jav-page-info">
+                Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+              </span>
+              <button
+                type="button"
+                className="jav-page-btn"
+                onClick={handleNextPage}
+                disabled={page >= totalPages}
+              >
+                <span>Next</span>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
