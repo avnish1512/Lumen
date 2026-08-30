@@ -14125,18 +14125,23 @@ function LordPhubSection({
     return filtered.length > 0 ? filtered : videos
   }, [videos, searchQuery])
 
+  const rotatedVideos = useMemo(() => {
+    if (isSearching) return videos
+    return rotateByDailySeed(videos, (getDailySeed() % 17) + 3)
+  }, [videos, isSearching])
+
   const filteredVideos = useMemo(() => {
-    let list = videos
+    let list = rotatedVideos
     if (selectedCategory !== 'All') {
       const catLower = selectedCategory.toLowerCase()
-      list = videos.filter(
+      list = rotatedVideos.filter(
         (v) =>
           v.category.toLowerCase().includes(catLower) ||
           v.title.toLowerCase().includes(catLower),
       )
     }
     return list
-  }, [videos, selectedCategory])
+  }, [rotatedVideos, selectedCategory])
 
   const activeVideoList = isSearching ? searchResults : filteredVideos
   const isApiLoaded = totalVideos > 0 && videos.length <= PHUB_PAGE_SIZE
@@ -14166,7 +14171,7 @@ function LordPhubSection({
     }
   }
 
-  const heroVideo = videos.length > 0 ? videos[0] : null
+  const heroVideo = rotatedVideos.length > 0 ? rotatedVideos[0] : null
   const heroMovie = heroVideo ? hanimeToMovie(heroVideo) : null
   const totalDisplayCount = totalVideos > 0 ? totalVideos : activeVideoList.length
 
@@ -14635,7 +14640,12 @@ function LordJavSection({
     }
   }
 
-  const heroPost = posts.length > 0 ? posts[0] : null
+  const rotatedPosts = useMemo(() => {
+    if (searchQuery.trim()) return posts
+    return rotateByDailySeed(posts, (getDailySeed() % 13) + 5)
+  }, [posts, searchQuery])
+
+  const heroPost = rotatedPosts.length > 0 ? rotatedPosts[0] : null
   const heroMovie = heroPost ? javToMovieHelper(heroPost) : null
 
   return (
@@ -14772,7 +14782,7 @@ function LordJavSection({
           </div>
 
           <div className="jav-grid">
-            {posts.map((post) => {
+            {rotatedPosts.map((post) => {
               const movie = javToMovieHelper(post)
               return (
                 <div key={post.id} className="jav-card" onClick={() => onPlay(movie)}>
