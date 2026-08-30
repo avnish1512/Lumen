@@ -8534,21 +8534,23 @@ function WatchScreen({
             <Metadata movie={movie} />
 
             <div className="watch-actions-row">
-              <button
-                type="button"
-                className="watch-mylist-btn"
-                onClick={handleWatchDownload}
-                title={isWatchDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
-              >
-                {isWatchDownloading ? (
-                  <LoaderCircle className="spin" size={16} />
-                ) : isWatchDownloaded ? (
-                  <Check size={16} />
-                ) : (
-                  <Download size={16} />
-                )}
-                <span>{isWatchDownloading ? 'Downloading...' : isWatchDownloaded ? 'Downloaded' : 'Download'}</span>
-              </button>
+              {!isPhubVideo && !isJavVideo && !isHentai && (
+                <button
+                  type="button"
+                  className="watch-mylist-btn"
+                  onClick={handleWatchDownload}
+                  title={isWatchDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
+                >
+                  {isWatchDownloading ? (
+                    <LoaderCircle className="spin" size={16} />
+                  ) : isWatchDownloaded ? (
+                    <Check size={16} />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                  <span>{isWatchDownloading ? 'Downloading...' : isWatchDownloaded ? 'Downloaded' : 'Download'}</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -8560,18 +8562,20 @@ function WatchScreen({
                 <span>{isSaved ? 'Saved' : 'My List'}</span>
               </button>
 
-              <button
-                type="button"
-                className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
-                onClick={onToggleLike}
-                aria-pressed={isLiked}
-                title={isLiked ? 'Liked' : 'Like'}
-              >
-                <Heart fill={isLiked ? 'currentColor' : 'none'} />
-                <span>{isLiked ? 'Liked' : 'Like'}</span>
-              </button>
+              {!isPhubVideo && !isJavVideo && (
+                <button
+                  type="button"
+                  className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
+                  onClick={onToggleLike}
+                  aria-pressed={isLiked}
+                  title={isLiked ? 'Liked' : 'Like'}
+                >
+                  <Heart fill={isLiked ? 'currentColor' : 'none'} />
+                  <span>{isLiked ? 'Liked' : 'Like'}</span>
+                </button>
+              )}
 
-              {!isPartyGuest && (
+              {!isPhubVideo && !isJavVideo && !isPartyGuest && (
                 <button
                   type="button"
                   className={`watch-mylist-btn watch-sandbox-btn${streamSandboxEnabled ? ' is-sandbox-active' : ''}`}
@@ -8795,21 +8799,23 @@ function WatchScreen({
                 </button>
               )}
 
-              <button
-                type="button"
-                className="watch-mylist-btn watch-icon-only-btn"
-                onClick={handleWatchDownload}
-                title={isWatchDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
-                aria-label={isWatchDownloaded ? 'Downloaded' : 'Download'}
-              >
-                {isWatchDownloading ? (
-                  <LoaderCircle className="spin" size={16} />
-                ) : isWatchDownloaded ? (
-                  <Check size={16} />
-                ) : (
-                  <Download size={16} />
-                )}
-              </button>
+              {!isPhubVideo && !isJavVideo && !isHentai && (
+                <button
+                  type="button"
+                  className="watch-mylist-btn watch-icon-only-btn"
+                  onClick={handleWatchDownload}
+                  title={isWatchDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
+                  aria-label={isWatchDownloaded ? 'Downloaded' : 'Download'}
+                >
+                  {isWatchDownloading ? (
+                    <LoaderCircle className="spin" size={16} />
+                  ) : isWatchDownloaded ? (
+                    <Check size={16} />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -8821,18 +8827,20 @@ function WatchScreen({
                 {isSaved ? <Check /> : <Plus />}
               </button>
 
-              <button
-                type="button"
-                className={`watch-mylist-btn watch-like-btn watch-icon-only-btn${isLiked ? ' is-liked' : ''}`}
-                onClick={onToggleLike}
-                aria-pressed={isLiked}
-                title={isLiked ? 'Liked' : 'Like'}
-                aria-label={isLiked ? 'Liked' : 'Like'}
-              >
-                <Heart fill={isLiked ? 'currentColor' : 'none'} />
-              </button>
+              {!isPhubVideo && !isJavVideo && (
+                <button
+                  type="button"
+                  className={`watch-mylist-btn watch-like-btn watch-icon-only-btn${isLiked ? ' is-liked' : ''}`}
+                  onClick={onToggleLike}
+                  aria-pressed={isLiked}
+                  title={isLiked ? 'Liked' : 'Like'}
+                  aria-label={isLiked ? 'Liked' : 'Like'}
+                >
+                  <Heart fill={isLiked ? 'currentColor' : 'none'} />
+                </button>
+              )}
 
-              {!isPartyGuest && (
+              {!isPhubVideo && !isJavVideo && !isPartyGuest && (
                 <button
                   type="button"
                   className={`watch-mylist-btn watch-sandbox-btn watch-icon-only-btn${streamSandboxEnabled ? ' is-sandbox-active' : ''}`}
