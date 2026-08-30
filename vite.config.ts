@@ -1784,12 +1784,107 @@ function createOmdbApiKeys(env: Record<string, string>) {
   })
 }
 
+function phubDevProxy(apiKey?: string): Plugin {
+  return {
+    name: 'phub-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/phub', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { success: false, error: 'Method not allowed.' })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const endpoint = requestUrl.searchParams.get('endpoint') || '/movies'
+        const page = requestUrl.searchParams.get('page') || '1'
+        const limit = requestUrl.searchParams.get('limit') || '24'
+        const categories = requestUrl.searchParams.get('categories') || ''
+        const search = requestUrl.searchParams.get('search') || ''
+        const pornstars = requestUrl.searchParams.get('pornstars') || ''
+
+        let targetUrl = `https://porn-api.com/api/v1/public${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
+        const params = new URLSearchParams()
+        if (page) params.set('page', page)
+        if (limit) params.set('limit', limit)
+        if (categories) params.set('categories', categories)
+        if (search) params.set('search', search)
+        if (pornstars) params.set('pornstars', pornstars)
+
+        if (params.toString() && !targetUrl.includes('?')) {
+          targetUrl += `?${params.toString()}`
+        }
+
+        try {
+          const upstreamRes = await fetch(targetUrl, {
+            headers: {
+              'X-API-Key': apiKey || '2ceb712d93165c1f69e2ff70948aa09705f7da4610ffb0caec764f224ef1b8f1',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            },
+          })
+          const data = await upstreamRes.json()
+          sendJson(res, upstreamRes.status, data)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Could not reach Porn API.'
+          sendJson(res, 502, { success: false, error: message })
+        }
+      })
+    },
+  }
+}
+
+function epornerDevProxy(): Plugin {
+  return {
+    name: 'eporner-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/eporner', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { success: false, error: 'Method not allowed.' })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const action = requestUrl.searchParams.get('action') || 'search'
+        const query = requestUrl.searchParams.get('query') || 'all'
+        const page = requestUrl.searchParams.get('page') || '1'
+        const perPage = requestUrl.searchParams.get('per_page') || '24'
+        const thumbsize = requestUrl.searchParams.get('thumbsize') || 'big'
+        const order = requestUrl.searchParams.get('order') || 'top-weekly'
+        const gay = requestUrl.searchParams.get('gay') || '0'
+        const lq = requestUrl.searchParams.get('lq') || '1'
+        const id = requestUrl.searchParams.get('id')
+
+        let targetUrl = ''
+        if (action === 'id' && id) {
+          targetUrl = `https://www.eporner.com/api/v2/video/id/?id=${encodeURIComponent(id)}&thumbsize=${encodeURIComponent(thumbsize)}&format=json`
+        } else {
+          targetUrl = `https://www.eporner.com/api/v2/video/search/?query=${encodeURIComponent(query)}&per_page=${encodeURIComponent(perPage)}&page=${encodeURIComponent(page)}&thumbsize=${encodeURIComponent(thumbsize)}&order=${encodeURIComponent(order)}&gay=${encodeURIComponent(gay)}&lq=${encodeURIComponent(lq)}&format=json`
+        }
+
+        try {
+          const upstreamRes = await fetch(targetUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            },
+          })
+          const data = await upstreamRes.json()
+          sendJson(res, upstreamRes.status, data)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Could not reach Eporner API.'
+          sendJson(res, 502, { success: false, error: message })
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
     plugins: [
       react(),
+      phubDevProxy(env.PHUB_API_KEY),
+      epornerDevProxy(),
       omdbDevProxy(createOmdbApiKeys(env)),
       tmdbDevProxy(createTmdbAuthChain(env)),
       tmdbWatchProvidersDevProxy(

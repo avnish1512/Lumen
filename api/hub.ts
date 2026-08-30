@@ -309,6 +309,76 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     return
   }
+  // ---- phub (Porn API proxy for 4K video catalog) ----
+  if (kind === 'phub') {
+    const endpoint = qv(req.query.endpoint) ?? '/movies'
+    const page = qv(req.query.page) ?? '1'
+    const limit = qv(req.query.limit) ?? '24'
+    const categories = qv(req.query.categories)
+    const search = qv(req.query.search)
+    const pornstars = qv(req.query.pornstars)
+    const apiKey = env.PHUB_API_KEY || '2ceb712d93165c1f69e2ff70948aa09705f7da4610ffb0caec764f224ef1b8f1'
+
+    let targetUrl = `https://porn-api.com/api/v1/public${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
+    const params = new URLSearchParams()
+    if (page) params.set('page', page)
+    if (limit) params.set('limit', limit)
+    if (categories) params.set('categories', categories)
+    if (search) params.set('search', search)
+    if (pornstars) params.set('pornstars', pornstars)
+
+    if (params.toString() && !targetUrl.includes('?')) {
+      targetUrl += `?${params.toString()}`
+    }
+
+    try {
+      const upstreamRes = await fetch(targetUrl, {
+        headers: {
+          'X-API-Key': apiKey,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+      })
+      const data = await upstreamRes.json()
+      res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=1200')
+      res.status(upstreamRes.status).json(data)
+    } catch (error) {
+      res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'Could not reach Porn API.' })
+    }
+    return
+  }
+  // ---- eporner (Eporner API v2 proxy for PHub 3) ----
+  if (kind === 'eporner') {
+    const action = qv(req.query.action) ?? 'search'
+    const query = qv(req.query.query) ?? 'all'
+    const page = qv(req.query.page) ?? '1'
+    const perPage = qv(req.query.per_page) ?? '24'
+    const thumbsize = qv(req.query.thumbsize) ?? 'big'
+    const order = qv(req.query.order) ?? 'top-weekly'
+    const gay = qv(req.query.gay) ?? '0'
+    const lq = qv(req.query.lq) ?? '1'
+    const id = qv(req.query.id)
+
+    let targetUrl = ''
+    if (action === 'id' && id) {
+      targetUrl = `https://www.eporner.com/api/v2/video/id/?id=${encodeURIComponent(id)}&thumbsize=${encodeURIComponent(thumbsize)}&format=json`
+    } else {
+      targetUrl = `https://www.eporner.com/api/v2/video/search/?query=${encodeURIComponent(query)}&per_page=${encodeURIComponent(perPage)}&page=${encodeURIComponent(page)}&thumbsize=${encodeURIComponent(thumbsize)}&order=${encodeURIComponent(order)}&gay=${encodeURIComponent(gay)}&lq=${encodeURIComponent(lq)}&format=json`
+    }
+
+    try {
+      const upstreamRes = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+      })
+      const data = await upstreamRes.json()
+      res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=1200')
+      res.status(upstreamRes.status).json(data)
+    } catch (error) {
+      res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'Could not reach Eporner API.' })
+    }
+    return
+  }
 
   const body = parseBody(req)
 

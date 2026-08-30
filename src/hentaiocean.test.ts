@@ -343,7 +343,37 @@ describe('Hentai Ocean integration', () => {
     expect(url).toBe('https://server.apijav.com/?mvapm_embed=123298')
   })
 
-  it('builds stream URL for PHub titles with embed_url cleanly', () => {
+  it('correctly resolves stream URL for porn-api / sex-api embed in PHub titles', () => {
+    const phubMovie: Movie = {
+      id: 'phub-adara-jordin-blonde-yoga-masturbation-joi',
+      rank: 1,
+      label: 'PHub',
+      type: 'PHub Video',
+      genres: ['Amateur', 'MILF'],
+      year: '2026',
+      runtime: '00:10:06',
+      rating: '★ 4.9',
+      maturity: '18+',
+      progress: 0,
+      hero: 'https://porn-api.com/public/images/poster.webp',
+      poster: 'https://porn-api.com/public/images/poster.webp',
+      still: 'https://porn-api.com/public/images/thumb.webp',
+      synopsis: 'Blonde beauty',
+      cast: ['Adara Jordin'],
+      director: 'PHub',
+      awards: 'HD',
+      boxOffice: '34,530 views',
+      ratings: [],
+      embedUrl: 'https://sex-api.com/embed/play/386U_HxPOYceabLx',
+      isHentaiOcean: false,
+      hentaiSlug: 'phub-adara-jordin-blonde-yoga-masturbation-joi',
+    }
+
+    const url = buildStreamUrl(phubMovie)
+    expect(url).toBe('https://sex-api.com/embed/play/386U_HxPOYceabLx')
+  })
+
+  it('correctly resolves stream URL for legacy upload18 embed in PHub titles', () => {
     const phubMovie: Movie = {
       id: 'phub-73341265',
       rank: 1,
@@ -351,7 +381,7 @@ describe('Hentai Ocean integration', () => {
       type: 'Movie',
       genres: ['Teen'],
       year: '2026',
-      runtime: '18:31',
+      runtime: '20:00',
       rating: 'N/A',
       maturity: '18+',
       progress: 0,

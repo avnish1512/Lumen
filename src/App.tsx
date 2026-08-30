@@ -524,7 +524,9 @@ function isStreamProvider(value: string | null): value is StreamProvider {
     value === 'megavid' ||
     value === 'oceanplay' ||
     value === 'apijav' ||
-    value === 'phubplay'
+    value === 'phubplay' ||
+    value === 'upload18' ||
+    value === 'eporner'
   )
 }
 
@@ -1263,6 +1265,272 @@ function isLordAdultMovie(movie?: Movie | null): boolean {
     movie.id?.startsWith('hentaiocean-') ||
     movie.genres?.some((g) => g.toLowerCase() === 'hentai')
   )
+}
+
+export const PORN_API_BASE_URL = 'https://porn-api.com/api/v1/public'
+export const PORN_API_KEY = '2ceb712d93165c1f69e2ff70948aa09705f7da4610ffb0caec764f224ef1b8f1'
+
+export interface PornApiMovieItem {
+  title: string
+  description?: string
+  thumbnail_url?: string
+  poster_url?: string
+  slug: string
+  duration?: string
+  quality?: string
+  views?: number
+  created_at?: string
+  categories?: { name: string; slug: string }[] | string[]
+  pornstars?: { name: string; slug: string }[] | string[]
+  episodes?: {
+    name: string
+    slug: string
+    sources: { server_name: string; embed_url: string; m3u8_url?: string }[]
+  }[]
+}
+
+export async function fetchPornApi(
+  endpoint: string,
+  params: Record<string, string | number> = {},
+): Promise<any> {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.set(k, String(v))
+    }
+  }
+
+  // 1. Try dev/local proxy /api/phub
+  try {
+    const proxyUrl = `/api/phub?endpoint=${encodeURIComponent(endpoint)}&${query.toString()}`
+    const res = await fetch(proxyUrl)
+    if (res.ok) {
+      const json = await res.json()
+      if (json?.data || json?.success || Array.isArray(json)) return json
+    }
+  } catch {}
+
+  // 2. Try Vercel hub proxy /api/hub?kind=phub
+  try {
+    const hubUrl = `/api/hub?kind=phub&endpoint=${encodeURIComponent(endpoint)}&${query.toString()}`
+    const res = await fetch(hubUrl)
+    if (res.ok) {
+      const json = await res.json()
+      if (json?.data || json?.success || Array.isArray(json)) return json
+    }
+  } catch {}
+
+  // 3. Try direct fetch with X-API-Key
+  try {
+    let directUrl = `${PORN_API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
+    if (query.toString()) {
+      directUrl += (directUrl.includes('?') ? '&' : '?') + query.toString()
+    }
+    const res = await fetch(directUrl, {
+      headers: {
+        'X-API-Key': PORN_API_KEY,
+      },
+    })
+    if (res.ok) {
+      const json = await res.json()
+      if (json?.data || json?.success || Array.isArray(json)) return json
+    }
+  } catch {}
+
+  return null
+}
+
+export async function fetchPornApiMovieDetail(slug: string): Promise<PornApiMovieItem | null> {
+  try {
+    const cleanSlug = slug.replace(/^phub-/, '')
+    const json = await fetchPornApi(`/movies/${encodeURIComponent(cleanSlug)}`)
+    return json?.data || json || null
+  } catch (err) {
+    console.error('Failed to fetch Porn API detail', err)
+    return null
+  }
+}
+
+export function pornApiToMovieHelper(item: PornApiMovieItem, embedUrlOverride?: string): Movie {
+  const rawCats = Array.isArray(item.categories) ? item.categories : []
+  const catNames = rawCats
+    .map((c) => (typeof c === 'string' ? c : c?.name))
+    .filter(Boolean) as string[]
+  const genres = catNames.length > 0 ? catNames : ['PHub', '4K Ultra HD']
+
+  const rawStars = Array.isArray(item.pornstars) ? item.pornstars : []
+  const cast = rawStars
+    .map((p) => (typeof p === 'string' ? p : p?.name))
+    .filter((s) => s && s.toLowerCase() !== 'unknown') as string[]
+
+  const year = item.created_at ? new Date(item.created_at).getFullYear().toString() : '2026'
+  const quality = item.quality || '4K'
+
+  let embedUrl = embedUrlOverride || ''
+  if (!embedUrl && item.episodes && item.episodes.length > 0) {
+    const ep = item.episodes[0]
+    embedUrl = ep.sources?.[0]?.embed_url || ep.sources?.[0]?.m3u8_url || ''
+  }
+
+  return {
+    id: `phub-${item.slug}`,
+    rank: 0,
+    title: cleanHtmlEntities(item.title),
+    logoTitle: quality,
+    label: 'PHub',
+    type: 'PHub Video',
+    genres,
+    year,
+    runtime: item.duration && item.duration !== '00:00:00' ? item.duration : quality,
+    rating: item.views ? `★ ${(Math.min(5, 4.5 + (item.views % 50) / 100)).toFixed(1)}` : '★ 4.9',
+    maturity: '18+',
+    progress: 0,
+    hero: item.poster_url || item.thumbnail_url || '',
+    poster: item.poster_url || item.thumbnail_url || '',
+    still: item.thumbnail_url || item.poster_url || '',
+    synopsis: cleanHtmlEntities(item.description || `${genres.join(', ')} · ${item.duration || quality}`),
+    cast: cast.map(cleanHtmlEntities),
+    director: cast[0] ? cleanHtmlEntities(cast[0]) : 'PHub',
+    awards: quality,
+    boxOffice: item.views ? `${item.views.toLocaleString()} views` : '',
+    ratings: [],
+    embedUrl,
+    isHentaiOcean: false,
+    hentaiSlug: `phub-${item.slug}`,
+  }
+}
+
+export function hanimeToMovieHelper(video: HanimeVideo | any): Movie {
+  return {
+    id: `phub-${video.id || video.slug || ''}`,
+    rank: 0,
+    title: cleanHtmlEntities(video.title || ''),
+    logoTitle: video.quality || '4K',
+    label: 'PHub',
+    type: 'PHub Video',
+    genres: video.category ? [video.category] : Array.isArray(video.genres) ? video.genres : ['PHub', '4K Ultra HD'],
+    year: video.year || new Date().getFullYear().toString(),
+    runtime: video.duration || '20:00',
+    rating: video.rating || '★ 4.9',
+    maturity: '18+',
+    progress: 0,
+    hero: video.poster || video.thumb || video.thumbnail_url || video.poster_url || '',
+    poster: video.poster || video.thumb || video.thumbnail_url || video.poster_url || '',
+    still: video.thumb || video.still || video.thumbnail_url || '',
+    synopsis: cleanHtmlEntities(video.description || `${video.category || 'PHub'} · ${video.duration || '4K'}`),
+    cast: Array.isArray(video.actors) ? video.actors.map(cleanHtmlEntities) : Array.isArray(video.cast) ? video.cast.map(cleanHtmlEntities) : [],
+    director: 'PHub',
+    awards: video.quality || '4K',
+    boxOffice: video.views ? `${video.views.toLocaleString()} views` : '',
+    ratings: [],
+    embedUrl: video.embedUrl || '',
+    isHentaiOcean: false,
+    hentaiSlug: video.code || (video.id ? `phub-${video.id}` : `phub-${video.slug}`),
+  }
+}
+
+export type EpornerVideoItem = {
+  id: string
+  title: string
+  keywords?: string
+  views?: number
+  rate?: string
+  url?: string
+  added?: string
+  length_sec?: number
+  length_min?: string
+  embed?: string
+  default_thumb?: { size: string; width: number; height: number; src: string }
+  thumbs?: { size: string; width: number; height: number; src: string }[]
+}
+
+export async function fetchEpornerApi(
+  params: Record<string, string | number> = {},
+): Promise<any> {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.set(k, String(v))
+    }
+  }
+
+  // 1. Try local dev proxy /api/eporner
+  try {
+    const proxyUrl = `/api/eporner?${query.toString()}`
+    const res = await fetch(proxyUrl)
+    if (res.ok) {
+      const json = await res.json()
+      if (json?.videos || Array.isArray(json) || json?.id) return json
+    }
+  } catch {}
+
+  // 2. Try Vercel hub proxy /api/hub?kind=eporner
+  try {
+    const hubUrl = `/api/hub?kind=eporner&${query.toString()}`
+    const res = await fetch(hubUrl)
+    if (res.ok) {
+      const json = await res.json()
+      if (json?.videos || Array.isArray(json) || json?.id) return json
+    }
+  } catch {}
+
+  // 3. Try direct fetch
+  try {
+    const directUrl = `https://www.eporner.com/api/v2/video/search/?${query.toString()}&format=json`
+    const res = await fetch(directUrl)
+    if (res.ok) {
+      const json = await res.json()
+      if (json?.videos || Array.isArray(json) || json?.id) return json
+    }
+  } catch {}
+
+  return null
+}
+
+export async function fetchEpornerVideoDetail(id: string): Promise<EpornerVideoItem | null> {
+  try {
+    const cleanId = id.replace(/^phub3-/, '')
+    const json = await fetchEpornerApi({ action: 'id', id: cleanId, thumbsize: 'big' })
+    if (json?.id) return json
+    if (Array.isArray(json) && json.length > 0) return json[0]
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function epornerToMovieHelper(item: EpornerVideoItem): Movie {
+  const rawKeywords = item.keywords ? item.keywords.split(',').map((k) => k.trim()).filter(Boolean) : []
+  const genres = rawKeywords.length > 0 ? rawKeywords.slice(0, 3) : ['PHub 3', 'HD Video']
+  const thumb = item.default_thumb?.src || item.thumbs?.[0]?.src || ''
+  const cleanId = item.id || ''
+
+  return {
+    id: `phub3-${cleanId}`,
+    rank: 0,
+    title: cleanHtmlEntities(item.title || 'PHub 3 Video'),
+    logoTitle: 'HD',
+    label: 'PHub 3',
+    type: 'PHub 3 Video',
+    genres,
+    year: item.added ? item.added.slice(0, 4) : '2026',
+    runtime: item.length_min || 'HD',
+    rating: item.rate ? `★ ${item.rate}` : '★ 4.8',
+    maturity: '18+',
+    progress: 0,
+    hero: thumb,
+    poster: thumb,
+    still: thumb,
+    synopsis: cleanHtmlEntities(item.title ? `${item.title} · ${genres.join(', ')}` : 'PHub 3 HD Video'),
+    cast: rawKeywords.slice(0, 2).map(cleanHtmlEntities),
+    director: 'Eporner',
+    awards: 'HD 1080p',
+    boxOffice: item.views ? `${item.views.toLocaleString()} views` : '',
+    ratings: [],
+    embedUrl: item.embed || `https://www.eporner.com/embed/${cleanId}/`,
+    isHentaiOcean: false,
+    hentaiSlug: `phub3-${cleanId}`,
+  }
 }
 
 function isTvShow(movie: Movie) {
@@ -2397,10 +2665,12 @@ function App() {
   const [lordRails, setLordRails] = useState<LordRail[]>([])
   const [lordLoading, setLordLoading] = useState(false)
   const [lordBackScreen, setLordBackScreen] = useState<Screen>('home')
-  const [activeLordTab, setActiveLordTab] = useState<'collection' | 'phub' | 'jav'>('collection')
-  const [lordTabQueries, setLordTabQueries] = useState({
+  const [activeLordTab, setActiveLordTab] = useState<LordTab>('collection')
+  const [lordTabQueries, setLordTabQueries] = useState<Record<LordTab, string>>({
     collection: '',
     phub: '',
+    phub2: '',
+    phub3: '',
     jav: '',
   })
 
@@ -3284,11 +3554,22 @@ function App() {
     ) {
       setActiveLordTab('jav')
     } else if (
+      safeMovie.id.startsWith('phub3-') ||
+      safeMovie.label === 'PHub 3' ||
+      safeMovie.hentaiSlug?.startsWith('phub3-') ||
+      safeMovie.embedUrl?.includes('eporner.com')
+    ) {
+      setActiveLordTab('phub3')
+    } else if (
       safeMovie.id.startsWith('phub-') ||
       safeMovie.label === 'PHub' ||
       safeMovie.hentaiSlug?.startsWith('phub-')
     ) {
-      setActiveLordTab('phub')
+      if (safeMovie.embedUrl?.includes('upload18.net') || safeMovie.embedUrl?.includes('xvidapi')) {
+        setActiveLordTab('phub2')
+      } else {
+        setActiveLordTab('phub')
+      }
     }
 
     setSelectedMovie(safeMovie)
@@ -3312,11 +3593,22 @@ function App() {
     ) {
       setActiveLordTab('jav')
     } else if (
+      safeMovie.id.startsWith('phub3-') ||
+      safeMovie.label === 'PHub 3' ||
+      safeMovie.hentaiSlug?.startsWith('phub3-') ||
+      safeMovie.embedUrl?.includes('eporner.com')
+    ) {
+      setActiveLordTab('phub3')
+    } else if (
       safeMovie.id.startsWith('phub-') ||
       safeMovie.label === 'PHub' ||
       safeMovie.hentaiSlug?.startsWith('phub-')
     ) {
-      setActiveLordTab('phub')
+      if (safeMovie.embedUrl?.includes('upload18.net') || safeMovie.embedUrl?.includes('xvidapi')) {
+        setActiveLordTab('phub2')
+      } else {
+        setActiveLordTab('phub')
+      }
     }
 
     setSelectedMovie(safeMovie)
@@ -7233,11 +7525,28 @@ function WatchScreen({
       movie.isJav ||
       movie.hentaiSlug?.startsWith('jav-'),
   )
+  const isPhub3Video = Boolean(
+    movie.id.startsWith('phub3-') ||
+      movie.label === 'PHub 3' ||
+      movie.hentaiSlug?.startsWith('phub3-') ||
+      movie.embedUrl?.includes('eporner.com'),
+  )
   const isPhubVideo = Boolean(
-    movie.id.startsWith('phub-') ||
+    isPhub3Video ||
+      movie.id.startsWith('phub-') ||
       movie.label === 'PHub' ||
       movie.hentaiSlug?.startsWith('phub-'),
   )
+  const isPhub2Video = Boolean(
+    !isPhub3Video &&
+      isPhubVideo && (
+        movie.embedUrl?.includes('upload18.net') ||
+        movie.embedUrl?.includes('xvidapi') ||
+        movie.hentaiSlug?.includes('xvidapi') ||
+        /^\d+$/.test(movie.id.replace(/^phub-/, ''))
+      ),
+  )
+  const isPhub1Video = isPhubVideo && !isPhub2Video && !isPhub3Video
   const isHentai = Boolean(
     !isJavVideo &&
       !isPhubVideo &&
@@ -7285,10 +7594,14 @@ function WatchScreen({
 
   const activeProviderId: StreamProvider = isJavVideo
     ? 'apijav'
-    : isPhubVideo
-      ? 'phubplay'
-      : isHentai
-        ? 'oceanplay'
+    : isPhub3Video
+      ? 'eporner'
+      : isPhub1Video
+        ? 'phubplay'
+        : isPhub2Video
+          ? 'upload18'
+          : isHentai
+            ? 'oceanplay'
         : isAnimeMovie
           ? movie.tmdbId
             ? chosenProvider
@@ -7389,6 +7702,55 @@ function WatchScreen({
     }
   }, [isJavVideo, movie.id, movie.genres])
 
+  const [phubRelated, setPhubRelated] = useState<Movie[]>([])
+  const [resolvedPhubEmbed, setResolvedPhubEmbed] = useState<string | undefined>(movie.embedUrl)
+
+  useEffect(() => {
+    if (movie.embedUrl) {
+      setResolvedPhubEmbed(movie.embedUrl)
+      return
+    }
+    if (!isPhubVideo) return
+    let active = true
+    const slug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+    if (isPhub2Video) {
+      setResolvedPhubEmbed(`https://upload18.net/play/index/xvidapi-${slug}`)
+      return
+    }
+    void fetchPornApiMovieDetail(slug).then((detail) => {
+      if (active && detail) {
+        const url = detail.episodes?.[0]?.sources?.[0]?.embed_url || detail.episodes?.[0]?.sources?.[0]?.m3u8_url
+        if (url) setResolvedPhubEmbed(url)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [isPhubVideo, isPhub2Video, movie.id, movie.embedUrl, movie.hentaiSlug])
+
+  useEffect(() => {
+    if (!isPhubVideo) return
+    let active = true
+    async function loadPhubRelated() {
+      try {
+        const cat = movie.genres?.[0]
+        const catSlug = cat ? cat.toLowerCase().replace(/\s+/g, '-') : 'amateur'
+        const json = await fetchPornApi(`/categories/${encodeURIComponent(catSlug)}/movies`, { page: 1, limit: 12 })
+        if (json) {
+          const payload = json?.data || json
+          const list: PornApiMovieItem[] = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : []
+          if (active && list.length > 0) {
+            setPhubRelated(list.map((item) => pornApiToMovieHelper(item)).filter((m) => m.id !== movie.id))
+          }
+        }
+      } catch {}
+    }
+    void loadPhubRelated()
+    return () => {
+      active = false
+    }
+  }, [isPhubVideo, movie.id, movie.genres])
+
   const [liveRelated, setLiveRelated] = useState<Movie[]>([])
 
   useEffect(() => {
@@ -7422,6 +7784,9 @@ function WatchScreen({
       )
 
     if (isPhubVideo) {
+      if (phubRelated.length > 0) {
+        return phubRelated.slice(0, 5)
+      }
       let pool = similarPhubVideos.map(hanimeToMovieHelper)
       if (pool.length < 15) {
         const fallbackItems = INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper).filter(
@@ -7575,8 +7940,9 @@ function WatchScreen({
       streamEpisode: episode,
       streamSeason: season,
       streamLanguage: language,
+      embedUrl: resolvedPhubEmbed || movie.embedUrl,
     }),
-    [movie, activeWatchAnimeSeason?.anilistId, episode, season, language],
+    [movie, activeWatchAnimeSeason?.anilistId, episode, season, language, resolvedPhubEmbed],
   )
 
   // Persist the current season/episode to continue-watching history whenever
@@ -8361,9 +8727,18 @@ function WatchScreen({
           mozallowfullscreen="true"
           // MegaBuzz and MegaVid require a referer; every other embed is
           // sent with no referer for privacy.
-          referrerPolicy={activeProviderId === 'megabuzz' || activeProviderId === 'megavid' ? 'origin' : 'no-referrer'}
+          referrerPolicy={
+            activeProviderId === 'megabuzz' ||
+            activeProviderId === 'megavid' ||
+            activeProviderId === 'phubplay' ||
+            activeProviderId === 'upload18' ||
+            activeProviderId === 'apijav' ||
+            activeProviderId === 'eporner'
+              ? 'origin'
+              : 'no-referrer'
+          }
           sandbox={
-            streamSandboxEnabled && activeProviderId !== 'embedmaster'
+            streamSandboxEnabled && activeProviderId !== 'embedmaster' && activeProviderId !== 'phubplay' && activeProviderId !== 'eporner'
               ? 'allow-forms allow-presentation allow-same-origin allow-scripts'
               : undefined
           }
@@ -8595,20 +8970,26 @@ function WatchScreen({
                 {(() => {
                   const filteredOptions = isJavVideo
                     ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
-                    : isPhubVideo
-                      ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
-                      : isHentai
-                        ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
-                        : streamProviderOptions.filter((provider) => {
-                            if (
-                              provider.id === 'oceanplay' ||
-                              provider.id === 'apijav' ||
-                              provider.id === 'phubplay'
-                            )
-                              return false
-                            const isAnimeProvider = animeProviderIds.includes(provider.id)
-                            return isAnimeMovie ? (movie.tmdbId ? true : isAnimeProvider) : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
-                          })
+                    : isPhub3Video
+                      ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
+                      : isPhub1Video
+                        ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+                        : isPhub2Video
+                          ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+                          : isHentai
+                            ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                            : streamProviderOptions.filter((provider) => {
+                                if (
+                                  provider.id === 'oceanplay' ||
+                                  provider.id === 'apijav' ||
+                                  provider.id === 'phubplay' ||
+                                  provider.id === 'upload18' ||
+                                  provider.id === 'eporner'
+                                )
+                                  return false
+                                const isAnimeProvider = animeProviderIds.includes(provider.id)
+                                return isAnimeMovie ? (movie.tmdbId ? true : isAnimeProvider) : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
+                              })
 
                   return filteredOptions.map((provider) => {
                     const isActive = provider.id === activeProviderId
@@ -8701,20 +9082,26 @@ function WatchScreen({
                 {(() => {
                   const filteredOptions = isJavVideo
                     ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
-                    : isPhubVideo
-                      ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
-                      : isHentai
-                        ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
-                        : streamProviderOptions.filter((provider) => {
-                            if (
-                              provider.id === 'oceanplay' ||
-                              provider.id === 'apijav' ||
-                              provider.id === 'phubplay'
-                            )
-                              return false
-                            const isAnimeProvider = animeProviderIds.includes(provider.id)
-                            return isAnimeMovie ? (movie.tmdbId ? true : isAnimeProvider) : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
-                          })
+                    : isPhub3Video
+                      ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
+                      : isPhub1Video
+                        ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+                        : isPhub2Video
+                          ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+                          : isHentai
+                            ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                            : streamProviderOptions.filter((provider) => {
+                                if (
+                                  provider.id === 'oceanplay' ||
+                                  provider.id === 'apijav' ||
+                                  provider.id === 'phubplay' ||
+                                  provider.id === 'upload18' ||
+                                  provider.id === 'eporner'
+                                )
+                                  return false
+                                const isAnimeProvider = animeProviderIds.includes(provider.id)
+                                return isAnimeMovie ? (movie.tmdbId ? true : isAnimeProvider) : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
+                              })
 
                   return filteredOptions.map((provider) => {
                     const isActive = provider.id === activeProviderId
@@ -13235,6 +13622,8 @@ function SetLordPinModal({ currentUser, onClose, onSuccess }: SetLordPinModalPro
   )
 }
 
+export type LordTab = 'collection' | 'phub' | 'phub2' | 'phub3' | 'jav'
+
 type LordScreenProps = {
   movies: Movie[]
   rails: LordRail[]
@@ -13245,12 +13634,10 @@ type LordScreenProps = {
   savedJavMovies?: Movie[]
   currentUser?: UserInfo | null
   profiles?: UserProfile[]
-  activeTab?: 'collection' | 'phub' | 'jav'
-  onTabChange?: (tab: 'collection' | 'phub' | 'jav') => void
-  tabQueries?: { collection: string; phub: string; jav: string }
-  onTabQueriesChange?: React.Dispatch<
-    React.SetStateAction<{ collection: string; phub: string; jav: string }>
-  >
+  activeTab?: LordTab
+  onTabChange?: (tab: LordTab) => void
+  tabQueries?: Record<LordTab, string>
+  onTabQueriesChange?: React.Dispatch<React.SetStateAction<Record<LordTab, string>>>
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSelectProfile?: (name: string) => void
@@ -13298,15 +13685,17 @@ function LordScreen({
     }))
   }, [rails])
 
-  const [internalTab, setInternalTab] = useState<'collection' | 'phub' | 'jav'>(activeTabProp)
+  const [internalTab, setInternalTab] = useState<LordTab>(activeTabProp)
   const activeLordTab = activeTabProp || internalTab
-  const setActiveLordTab = (tab: 'collection' | 'phub' | 'jav') => {
+  const setActiveLordTab = (tab: LordTab) => {
     setInternalTab(tab)
     onTabChange?.(tab)
   }
-  const [internalTabQueries, setInternalTabQueries] = useState({
+  const [internalTabQueries, setInternalTabQueries] = useState<Record<LordTab, string>>({
     collection: '',
     phub: '',
+    phub2: '',
+    phub3: '',
     jav: '',
   })
   const tabQueries = tabQueriesProp ?? internalTabQueries
@@ -13381,7 +13770,23 @@ function LordScreen({
               onClick={() => setActiveLordTab('phub')}
             >
               <Code size={15} />
-              <span>PHub</span>
+              <span>PHub 1</span>
+            </button>
+            <button
+              className={`lord-tab-btn ${activeLordTab === 'phub2' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => setActiveLordTab('phub2')}
+            >
+              <Code size={15} />
+              <span>PHub 2</span>
+            </button>
+            <button
+              className={`lord-tab-btn ${activeLordTab === 'phub3' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => setActiveLordTab('phub3')}
+            >
+              <Code size={15} />
+              <span>PHub 3</span>
             </button>
             <button
               className={`lord-tab-btn ${activeLordTab === 'jav' ? 'is-active' : ''}`}
@@ -13425,10 +13830,14 @@ function LordScreen({
                 className="lord-search-input"
                 placeholder={
                   activeLordTab === 'phub'
-                    ? 'Search PHub videos…'
-                    : activeLordTab === 'jav'
-                      ? 'Search JAV codes, titles…'
-                      : 'Titles, genres…'
+                    ? 'Search PHub 1 (4K)…'
+                    : activeLordTab === 'phub2'
+                      ? 'Search PHub 2 videos…'
+                      : activeLordTab === 'phub3'
+                        ? 'Search PHub 3 (Eporner)…'
+                        : activeLordTab === 'jav'
+                          ? 'Search JAV codes, titles…'
+                          : 'Titles, genres…'
                 }
                 value={currentQuery}
                 onChange={(event) => setQuery(event.target.value)}
@@ -13497,7 +13906,35 @@ function LordScreen({
         />
       ) : activeLordTab === 'phub' ? (
         <LordPhubSection
+          key="phub-1"
+          serverMode="pornapi"
           searchQuery={tabQueries.phub}
+          continueMovies={continueMovies}
+          savedMovies={savedPhubMovies}
+          onOpenDetail={onOpenDetail}
+          onPlay={onPlay}
+          onMarkWatched={onMarkWatched}
+          onRemoveContinue={onRemoveContinue}
+          onRemoveWatchlist={onRemoveWatchlist}
+        />
+      ) : activeLordTab === 'phub2' ? (
+        <LordPhubSection
+          key="phub-2"
+          serverMode="xvidapi"
+          searchQuery={tabQueries.phub2}
+          continueMovies={continueMovies}
+          savedMovies={savedPhubMovies}
+          onOpenDetail={onOpenDetail}
+          onPlay={onPlay}
+          onMarkWatched={onMarkWatched}
+          onRemoveContinue={onRemoveContinue}
+          onRemoveWatchlist={onRemoveWatchlist}
+        />
+      ) : activeLordTab === 'phub3' ? (
+        <LordPhubSection
+          key="phub-3"
+          serverMode="eporner"
+          searchQuery={tabQueries.phub3}
           continueMovies={continueMovies}
           savedMovies={savedPhubMovies}
           onOpenDetail={onOpenDetail}
@@ -13524,8 +13961,8 @@ function LordScreen({
                 className="lord-hero-bg"
                 src={hero.hero || hero.still || hero.poster}
                 alt={hero.title}
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement
+                onError={(event) => {
+                  const target = event.target as HTMLImageElement
                   if (hero.poster && target.src !== hero.poster) {
                     target.src = hero.poster
                   }
@@ -13535,16 +13972,19 @@ function LordScreen({
             </div>
             <div className="lord-hero-content">
               <span className="lord-hero-badge">
-                <Crown size={14} /> Lord
+                <Crown size={14} /> Spotlight
               </span>
               <h1 className="lord-hero-title">{hero.title}</h1>
               <p className="lord-hero-meta">
-                {hero.year} · {hero.type}
-                {hero.rating && hero.rating !== 'N/A' ? ` · ★ ${hero.rating}` : ''}
+                {hero.year} · {hero.runtime || '18+'} · {hero.genres?.join(', ') || 'Adult'}
               </p>
               <p className="lord-hero-synopsis">{hero.synopsis}</p>
               <div className="lord-hero-actions">
-                <button className="lord-hero-play" type="button" onClick={() => onPlay(hero)}>
+                <button
+                  className="lord-hero-play"
+                  type="button"
+                  onClick={() => onPlay(hero)}
+                >
                   <Play fill="currentColor" strokeWidth={0} size={20} />
                   <span>Play</span>
                 </button>
@@ -13560,18 +14000,21 @@ function LordScreen({
             </div>
           </div>
 
-          <div className="lord-rails">
-            {savedMovies && savedMovies.length > 0 && (
+          {savedMovies && savedMovies.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
               <LordRailRow
-                key="my-list"
+                key="lord-my-list"
                 rail={{
                   title: 'My List',
                   items: savedMovies,
                 }}
                 onOpenDetail={onOpenDetail}
               />
-            )}
-            {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
+            </div>
+          )}
+
+          {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
+            <div style={{ marginBottom: 24 }}>
               <ContinueWatchingRail
                 title="Continue Watching"
                 movies={continueMovies}
@@ -13579,8 +14022,12 @@ function LordScreen({
                 onMarkWatched={onMarkWatched}
                 onRemoveContinue={onRemoveContinue}
                 onRemoveWatchlist={onRemoveWatchlist}
+                isLordSection={true}
               />
-            )}
+            </div>
+          )}
+
+          <div className="lord-rails-list">
             {rotatedRails.map((rail) => (
               <LordRailRow
                 key={rail.title}
@@ -13609,7 +14056,23 @@ function LordScreen({
             onClick={() => setActiveLordTab('phub')}
           >
             <Code size={16} />
-            <span>PHub</span>
+            <span>PHub 1</span>
+          </button>
+          <button
+            className={`lord-mobile-nav-item${activeLordTab === 'phub2' ? ' is-active' : ''}`}
+            type="button"
+            onClick={() => setActiveLordTab('phub2')}
+          >
+            <Code size={16} />
+            <span>PHub 2</span>
+          </button>
+          <button
+            className={`lord-mobile-nav-item${activeLordTab === 'phub3' ? ' is-active' : ''}`}
+            type="button"
+            onClick={() => setActiveLordTab('phub3')}
+          >
+            <Code size={16} />
+            <span>PHub 3</span>
           </button>
           <button
             className={`lord-mobile-nav-item${activeLordTab === 'jav' ? ' is-active' : ''}`}
@@ -13999,48 +14462,79 @@ function normalizeVideoItem(item: any, index: number): HanimeVideo {
   }
 }
 
-const PHUB_CATEGORIES = [
-  'All',
-  'Teen',
-  'Femdom',
-  'Latina',
-  'Cumshot',
-  'Amateur',
-  'MILF',
-  'Asian Woman',
-  'ASMR',
-  'Japanese',
-  'Lesbian',
+const PHUB1_CATEGORIES: { name: string; slug: string }[] = [
+  { name: 'All', slug: 'all' },
+  { name: 'Amateur', slug: 'amateur' },
+  { name: 'Anal', slug: 'anal' },
+  { name: 'Asian', slug: 'asian' },
+  { name: 'Babe', slug: 'babe' },
+  { name: 'BBW', slug: 'bbw' },
+  { name: 'Big Dick', slug: 'big-dick' },
+  { name: 'Big Tits', slug: 'big-tits' },
+  { name: 'Blowjob', slug: 'blowjob' },
+  { name: 'Brunette', slug: 'brunette' },
+  { name: 'Blonde', slug: 'blonde' },
+  { name: 'Cosplay', slug: 'cosplay' },
+  { name: 'Creampie', slug: 'creampie' },
+  { name: 'Cumshot', slug: 'cumshot' },
+  { name: 'Ebony', slug: 'ebony' },
+  { name: 'Hardcore', slug: 'hardcore' },
+  { name: 'HD', slug: 'hd' },
+  { name: 'Interracial', slug: 'interracial' },
+  { name: 'Japanese', slug: 'japanese' },
+  { name: 'Latina', slug: 'latina' },
+  { name: 'Lesbian', slug: 'lesbian' },
+  { name: 'Masturbation', slug: 'masturbation' },
+  { name: 'Mature', slug: 'mature' },
+  { name: 'MILF', slug: 'milf' },
+  { name: 'POV', slug: 'pov' },
+  { name: 'Redhead', slug: 'redhead' },
+  { name: 'Squirt', slug: 'squirt' },
+  { name: 'Teen (18+)', slug: '18-teen' },
+  { name: 'Threesome', slug: 'threesome' },
+  { name: 'VR', slug: 'vr' },
 ]
 
-function hanimeToMovieHelper(video: HanimeVideo): Movie {
-  return {
-    id: `phub-${video.id}`,
-    rank: 0,
-    title: cleanHtmlEntities(video.title),
-    logoTitle: '',
-    label: 'PHub',
-    type: 'Movie',
-    genres: [video.category],
-    year: new Date().getFullYear().toString(),
-    runtime: video.duration,
-    rating: 'N/A',
-    maturity: '18+',
-    progress: 0,
-    hero: video.poster || video.thumb,
-    poster: video.poster || video.thumb,
-    still: video.thumb,
-    synopsis: cleanHtmlEntities(video.description || `${video.category} · ${video.duration}`),
-    cast: (video.actors || []).map(cleanHtmlEntities),
-    director: '',
-    awards: '',
-    boxOffice: '',
-    ratings: [],
-    embedUrl: video.embedUrl,
-    isHentaiOcean: false,
-    hentaiSlug: video.code || `phub-${video.id}`,
-  }
-}
+const PHUB2_CATEGORIES: { name: string; slug: string }[] = [
+  { name: 'All', slug: 'all' },
+  { name: 'Teen', slug: 'teen' },
+  { name: 'Femdom', slug: 'femdom' },
+  { name: 'Latina', slug: 'latina' },
+  { name: 'Cumshot', slug: 'cumshot' },
+  { name: 'Amateur', slug: 'amateur' },
+  { name: 'MILF', slug: 'milf' },
+  { name: 'Asian Woman', slug: 'asian-woman' },
+  { name: 'ASMR', slug: 'asmr' },
+  { name: 'Japanese', slug: 'japanese' },
+  { name: 'Lesbian', slug: 'lesbian' },
+]
+
+const PHUB3_CATEGORIES: { name: string; slug: string }[] = [
+  { name: 'All', slug: 'all' },
+  { name: 'Teen', slug: 'teen' },
+  { name: 'Amateur', slug: 'amateur' },
+  { name: 'Anal', slug: 'anal' },
+  { name: 'Asian', slug: 'asian' },
+  { name: 'Blowjob', slug: 'blowjob' },
+  { name: 'Brunette', slug: 'brunette' },
+  { name: 'Blonde', slug: 'blonde' },
+  { name: 'Cosplay', slug: 'cosplay' },
+  { name: 'Creampie', slug: 'creampie' },
+  { name: 'Cumshot', slug: 'cumshot' },
+  { name: 'Hardcore', slug: 'hardcore' },
+  { name: 'HD', slug: 'hd-1080p' },
+  { name: 'Japanese', slug: 'japanese' },
+  { name: 'Latina', slug: 'latina' },
+  { name: 'Lesbian', slug: 'lesbian' },
+  { name: 'Masturbation', slug: 'masturbation' },
+  { name: 'Mature', slug: 'mature' },
+  { name: 'MILF', slug: 'milf' },
+  { name: 'POV', slug: 'pov' },
+  { name: 'Redhead', slug: 'redhead' },
+  { name: 'Squirt', slug: 'squirt' },
+  { name: 'Threesome', slug: 'threesome' },
+  { name: 'VR', slug: 'vr' },
+]
 
 const PHUB_PAGE_SIZE = 24
 
@@ -14053,6 +14547,7 @@ function LordPhubSection({
   onMarkWatched,
   onRemoveContinue,
   onRemoveWatchlist,
+  serverMode = 'pornapi',
 }: {
   searchQuery?: string
   continueMovies?: Movie[]
@@ -14062,108 +14557,230 @@ function LordPhubSection({
   onMarkWatched?: (movie: Movie) => void
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
+  serverMode?: 'pornapi' | 'xvidapi' | 'eporner'
 }) {
-  const [videos, setVideos] = useState<HanimeVideo[]>(INITIAL_HANIME_VIDEOS)
-  const [loading, setLoading] = useState(false)
+  const isXvid = serverMode === 'xvidapi'
+  const isEporner = serverMode === 'eporner'
+  const activeCategories = isEporner ? PHUB3_CATEGORIES : isXvid ? PHUB2_CATEGORIES : PHUB1_CATEGORIES
+
+  const [pornMovies, setPornMovies] = useState<PornApiMovieItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState('All')
-  const [orderBy, setOrderBy] = useState<'views' | 'duration'>('views')
+  const [orderBy, setOrderBy] = useState<'views' | 'date' | 'duration'>('views')
   const [page, setPage] = useState(1)
-  const [apiTotalPages, setApiTotalPages] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
   const [totalVideos, setTotalVideos] = useState(0)
 
   useEffect(() => {
     setPage(1)
-  }, [selectedCategory, orderBy, searchQuery])
-
-  const hanimeToMovie = (video: HanimeVideo): Movie => hanimeToMovieHelper(video)
+  }, [serverMode, selectedCategory, orderBy, searchQuery])
 
   useEffect(() => {
     let active = true
-    async function loadApiVideos() {
+    async function loadVideos() {
       setLoading(true)
       try {
-        let url = `https://xvidapi.com/api.php/provide/vod?ac=detail&at=json&pg=${page}`
-        if (searchQuery.trim()) {
-          url += `&wd=${encodeURIComponent(searchQuery.trim())}`
+        if (isEporner) {
+          const q = searchQuery.trim() || (selectedCategory === 'All' ? 'all' : selectedCategory)
+          const order = orderBy === 'views' ? 'most-popular' : orderBy === 'date' ? 'latest' : 'top-weekly'
+          const data = await fetchEpornerApi({
+            query: q,
+            page,
+            per_page: PHUB_PAGE_SIZE,
+            thumbsize: 'big',
+            order,
+            gay: 0,
+            lq: 1,
+          })
+          if (active && data) {
+            if (data.total_pages) {
+              setTotalPages(Math.max(1, Number(data.total_pages) || 1))
+            }
+            if (data.total_count) {
+              setTotalVideos(Number(data.total_count) || 0)
+            }
+            if (Array.isArray(data.videos) && data.videos.length > 0) {
+              const parsed: PornApiMovieItem[] = data.videos.map((item: EpornerVideoItem) => {
+                const thumb = item.default_thumb?.src || item.thumbs?.[0]?.src || ''
+                const rawKeywords = item.keywords ? item.keywords.split(',').map((k) => k.trim()).filter(Boolean) : []
+                return {
+                  title: item.title,
+                  description: item.title,
+                  thumbnail_url: thumb,
+                  poster_url: thumb,
+                  slug: item.id,
+                  duration: item.length_min || 'HD',
+                  quality: 'HD',
+                  views: item.views || 50000,
+                  categories: rawKeywords.slice(0, 3).map((k) => ({ name: k, slug: k.toLowerCase().replace(/\s+/g, '-') })),
+                  episodes: [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Eporner', embed_url: item.embed || `https://www.eporner.com/embed/${item.id}/` }] }],
+                }
+              })
+              setPornMovies(parsed)
+              return
+            }
+          }
         }
-        const res = await fetch(url)
-        if (!res.ok) return
-        const data = await res.json()
-        if (active && data) {
-          if (data.pagecount) {
-            setApiTotalPages(Math.max(1, Number(data.pagecount) || 1))
-          } else if (data.total && data.limit) {
-            setApiTotalPages(Math.max(1, Math.ceil(Number(data.total) / Number(data.limit))))
-          } else if (Array.isArray(data.list) && data.list.length >= 10) {
-            setApiTotalPages((prev) => Math.max(prev, page + 1))
+
+        if (isXvid) {
+          let url = `https://xvidapi.com/api.php/provide/vod?ac=detail&at=json&pg=${page}`
+          if (searchQuery.trim()) {
+            url += `&wd=${encodeURIComponent(searchQuery.trim())}`
           }
-          if (data.total) {
-            setTotalVideos(Number(data.total) || 0)
+          const res = await fetch(url)
+          if (res.ok) {
+            const data = await res.json()
+            if (active && data) {
+              if (data.pagecount) {
+                setTotalPages(Math.max(1, Number(data.pagecount) || 1))
+              }
+              if (data.total) {
+                setTotalVideos(Number(data.total) || 0)
+              }
+              if (Array.isArray(data.list) && data.list.length > 0) {
+                const parsed: PornApiMovieItem[] = data.list.map((item: any, idx: number) => {
+                  const norm = normalizeVideoItem(item, idx)
+                  return {
+                    title: norm.title,
+                    description: norm.description,
+                    thumbnail_url: norm.thumb,
+                    poster_url: norm.poster,
+                    slug: String(norm.code || norm.id),
+                    duration: norm.duration,
+                    quality: 'HD',
+                    views: 50000,
+                    categories: [{ name: norm.category, slug: norm.category.toLowerCase().replace(/\s+/g, '-') }],
+                    pornstars: norm.actors?.map((a: string) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
+                    episodes: norm.embedUrl
+                      ? [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Upload18', embed_url: norm.embedUrl }] }]
+                      : undefined,
+                  }
+                })
+                setPornMovies(parsed)
+                return
+              }
+            }
           }
-          if (Array.isArray(data.list) && data.list.length > 0) {
-            const parsed = data.list.map((item: any, idx: number) => normalizeVideoItem(item, idx))
-            setVideos(parsed)
+        }
+
+        const catObj = activeCategories.find((c) => c.name === selectedCategory)
+        const catSlug = catObj ? catObj.slug : selectedCategory.toLowerCase().replace(/\s+/g, '-')
+
+        let endpoint = '/movies'
+        const params: Record<string, string | number> = {
+          page,
+          limit: PHUB_PAGE_SIZE,
+        }
+
+        if (catSlug && catSlug !== 'all') {
+          endpoint = `/categories/${encodeURIComponent(catSlug)}/movies`
+        }
+
+        if (searchQuery.trim()) {
+          const qSlug = searchQuery.trim().toLowerCase().replace(/\s+/g, '-')
+          endpoint = '/movies/filter'
+          params.categories = qSlug
+        }
+
+        const json = await fetchPornApi(endpoint, params)
+        const payload = json?.data || json
+        const list: PornApiMovieItem[] = Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload)
+            ? payload
+            : []
+
+        if (active) {
+          if (payload?.totalPages) {
+            setTotalPages(Math.max(1, Number(payload.totalPages) || 1))
+          }
+          if (payload?.total) {
+            setTotalVideos(Number(payload.total) || list.length)
+          }
+          if (list.length > 0) {
+            setPornMovies(list)
+          } else if (searchQuery.trim()) {
+            setPornMovies([])
+          } else if (pornMovies.length === 0) {
+            const fallbackPorn = INITIAL_HANIME_VIDEOS.map((v) => ({
+              title: v.title,
+              description: v.description,
+              thumbnail_url: v.thumb,
+              poster_url: v.poster || v.thumb,
+              slug: String(v.id),
+              duration: v.duration,
+              quality: '4K',
+              views: v.views || 45000,
+              categories: [{ name: v.category, slug: v.category.toLowerCase().replace(/\s+/g, '-') }],
+              pornstars: v.actors?.map((a) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
+            }))
+            setPornMovies(fallbackPorn)
+            setTotalVideos(fallbackPorn.length)
+            setTotalPages(1)
           }
         }
       } catch {
-        // Keep initial dataset on error
+        if (active && pornMovies.length === 0) {
+          const fallbackPorn = INITIAL_HANIME_VIDEOS.map((v) => ({
+            title: v.title,
+            description: v.description,
+            thumbnail_url: v.thumb,
+            poster_url: v.poster || v.thumb,
+            slug: String(v.id),
+            duration: v.duration,
+            quality: '4K',
+            views: v.views || 45000,
+            categories: [{ name: v.category, slug: v.category.toLowerCase().replace(/\s+/g, '-') }],
+            pornstars: v.actors?.map((a) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
+          }))
+          setPornMovies(fallbackPorn)
+          setTotalVideos(fallbackPorn.length)
+          setTotalPages(1)
+        }
       } finally {
         if (active) setLoading(false)
       }
     }
-    void loadApiVideos()
+    void loadVideos()
     return () => {
       active = false
     }
-  }, [page, searchQuery])
+  }, [page, serverMode, selectedCategory, orderBy, searchQuery])
 
   const isSearching = Boolean(searchQuery.trim())
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return []
     const q = searchQuery.trim().toLowerCase()
-    const filtered = videos.filter(
+    return pornMovies.filter(
       (v) =>
         v.title.toLowerCase().includes(q) ||
-        v.category.toLowerCase().includes(q) ||
-        (v.actors && v.actors.some((a) => a.toLowerCase().includes(q))) ||
-        (v.code && v.code.toLowerCase().includes(q)) ||
-        (v.description && v.description.toLowerCase().includes(q)),
+        (v.description && v.description.toLowerCase().includes(q)) ||
+        (v.categories &&
+          Array.isArray(v.categories) &&
+          v.categories.some((c) =>
+            typeof c === 'string'
+              ? c.toLowerCase().includes(q)
+              : c?.name?.toLowerCase().includes(q),
+          )) ||
+        (v.pornstars &&
+          Array.isArray(v.pornstars) &&
+          v.pornstars.some((p) =>
+            typeof p === 'string'
+              ? p.toLowerCase().includes(q)
+              : p?.name?.toLowerCase().includes(q),
+          )),
     )
-    return filtered.length > 0 ? filtered : videos
-  }, [videos, searchQuery])
+  }, [pornMovies, searchQuery])
 
   const rotatedVideos = useMemo(() => {
-    if (isSearching) return videos
-    return rotateByDailySeed(videos, (getDailySeed() % 17) + 3)
-  }, [videos, isSearching])
+    if (isSearching) return pornMovies
+    return rotateByDailySeed(pornMovies, (getDailySeed() % 17) + 3)
+  }, [pornMovies, isSearching])
 
-  const filteredVideos = useMemo(() => {
-    let list = rotatedVideos
-    if (selectedCategory !== 'All') {
-      const catLower = selectedCategory.toLowerCase()
-      list = rotatedVideos.filter(
-        (v) =>
-          v.category.toLowerCase().includes(catLower) ||
-          v.title.toLowerCase().includes(catLower),
-      )
-    }
-    return list
-  }, [rotatedVideos, selectedCategory])
-
-  const activeVideoList = isSearching ? searchResults : filteredVideos
-  const isApiLoaded = totalVideos > 0 && videos.length <= PHUB_PAGE_SIZE
-  const totalPages = isApiLoaded
-    ? apiTotalPages
-    : Math.max(1, Math.ceil(activeVideoList.length / PHUB_PAGE_SIZE))
-
-  const displayVideos = useMemo(() => {
-    if (isApiLoaded) {
-      return activeVideoList
-    }
-    const start = (page - 1) * PHUB_PAGE_SIZE
-    return activeVideoList.slice(start, start + PHUB_PAGE_SIZE)
-  }, [activeVideoList, isApiLoaded, page])
+  const displayVideos = isSearching
+    ? (searchResults.length > 0 ? searchResults : pornMovies)
+    : rotatedVideos
 
   const handlePrevPage = () => {
     if (page > 1) {
@@ -14179,115 +14796,85 @@ function LordPhubSection({
     }
   }
 
-  const heroVideo = rotatedVideos.length > 0 ? rotatedVideos[0] : null
-  const heroMovie = heroVideo ? hanimeToMovie(heroVideo) : null
-  const totalDisplayCount = totalVideos > 0 ? totalVideos : activeVideoList.length
+  const handlePlayMovie = async (movie: Movie) => {
+    if (isEporner) {
+      const cleanId = movie.hentaiSlug?.replace(/^phub3-/, '') || movie.id.replace(/^phub3-/, '')
+      const embedUrl = movie.embedUrl || `https://www.eporner.com/embed/${cleanId}/`
+      onPlay({ ...movie, embedUrl })
+      return
+    }
+    if (movie.embedUrl) {
+      onPlay(movie)
+      return
+    }
+    try {
+      const slug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+      const detail = await fetchPornApiMovieDetail(slug)
+      const embedUrl =
+        detail?.episodes?.[0]?.sources?.[0]?.embed_url ||
+        detail?.episodes?.[0]?.sources?.[0]?.m3u8_url
+      if (embedUrl) {
+        onPlay({ ...movie, embedUrl })
+      } else {
+        onPlay(movie)
+      }
+    } catch {
+      onPlay(movie)
+    }
+  }
+
+  const handleOpenDetailMovie = async (movie: Movie) => {
+    if (!onOpenDetail) {
+      void handlePlayMovie(movie)
+      return
+    }
+    if (isEporner) {
+      const cleanId = movie.hentaiSlug?.replace(/^phub3-/, '') || movie.id.replace(/^phub3-/, '')
+      const embedUrl = movie.embedUrl || `https://www.eporner.com/embed/${cleanId}/`
+      onOpenDetail({ ...movie, embedUrl })
+      return
+    }
+    if (movie.embedUrl) {
+      onOpenDetail(movie)
+      return
+    }
+    try {
+      const slug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+      const detail = await fetchPornApiMovieDetail(slug)
+      const embedUrl =
+        detail?.episodes?.[0]?.sources?.[0]?.embed_url ||
+        detail?.episodes?.[0]?.sources?.[0]?.m3u8_url
+      if (embedUrl) {
+        onOpenDetail({ ...movie, embedUrl })
+      } else {
+        onOpenDetail(movie)
+      }
+    } catch {
+      onOpenDetail(movie)
+    }
+  }
+
+  const heroItem = rotatedVideos.length > 0 ? rotatedVideos[0] : null
+  const heroMovie = heroItem ? pornApiToMovieHelper(heroItem) : null
+  const totalDisplayCount = totalVideos > 0 ? totalVideos : displayVideos.length
+  const sectionLabel = isEporner ? 'PHub 3' : isXvid ? 'PHub 2' : 'PHub 1'
+  const sectionBadge = isEporner ? 'PHub 3 · Eporner HD' : isXvid ? 'PHub 2 · Upload18' : 'PHub 1 · 4K'
 
   return (
     <div className="jav-container">
       {loading ? (
         <div className="jav-loading">
           <LoaderCircle className="spin-icon" size={32} />
-          <p>Loading PHub 4K videos...</p>
+          <p>Loading {sectionLabel} videos...</p>
         </div>
-      ) : isSearching ? (
-        searchResults.length === 0 ? (
-          <div className="jav-empty">
-            <Search size={40} />
-            <p>No videos found matching "{searchQuery.trim()}".</p>
-          </div>
-        ) : (
-          <div className="phub-search-results">
-            <div className="jav-meta-header">
-              <h2 className="lord-rail-title">
-                Search Results ({searchResults.length})
-              </h2>
-            </div>
-            <div className="jav-grid">
-              {displayVideos.map((video, idx) => (
-                <div
-                  key={`${video.id}-${idx}`}
-                  className="jav-card"
-                  onClick={() => onPlay(hanimeToMovie(video))}
-                >
-                  <div className="jav-thumb-container">
-                    <img
-                      src={video.thumb}
-                      referrerPolicy="no-referrer"
-                      alt={video.title}
-                      loading="lazy"
-                      onError={(event) => {
-                        const target = event.target as HTMLImageElement
-                        target.onerror = null
-                        target.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
-                      }}
-                    />
-                    <span className="jav-hd-badge">4K</span>
-                    {video.duration && (
-                      <span className="jav-duration-badge">{video.duration}</span>
-                    )}
-                    <div className="jav-play-overlay">
-                      <button
-                        type="button"
-                        className="jav-play-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onPlay(hanimeToMovie(video))
-                        }}
-                        title="Play Video"
-                      >
-                        <Play fill="#fff" size={24} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="jav-card-body">
-                    <h3 className="jav-card-title" title={video.title}>
-                      {cleanHtmlEntities(video.title)}
-                    </h3>
-                    <div className="jav-card-footer">
-                      {video.category && <span className="jav-studio">{cleanHtmlEntities(video.category)}</span>}
-                      {video.views > 0 && <span className="jav-views">👁 {video.views.toLocaleString()}</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {totalPages > 1 && (
-              <div className="jav-pagination">
-                <button
-                  type="button"
-                  className="jav-page-btn"
-                  onClick={handlePrevPage}
-                  disabled={page <= 1}
-                >
-                  <ChevronLeft size={18} />
-                  <span>Prev</span>
-                </button>
-                <span className="jav-page-info">
-                  Page <strong>{page}</strong> of <strong>{totalPages}</strong>
-                </span>
-                <button
-                  type="button"
-                  className="jav-page-btn"
-                  onClick={handleNextPage}
-                  disabled={page >= totalPages}
-                >
-                  <span>Next</span>
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-            )}
-          </div>
-        )
-      ) : filteredVideos.length === 0 ? (
+      ) : isSearching && displayVideos.length === 0 ? (
         <div className="jav-empty">
           <Search size={40} />
-          <p>No videos found in this category.</p>
+          <p>No videos found matching "{searchQuery.trim()}".</p>
         </div>
       ) : (
         <>
-          {heroMovie && (
+          {!isSearching && heroMovie && (
             <div className="lord-hero" style={{ marginBottom: 28 }}>
               <div className="lord-hero-backdrop-wrap">
                 <img
@@ -14305,15 +14892,19 @@ function LordPhubSection({
               </div>
               <div className="lord-hero-content">
                 <span className="lord-hero-badge">
-                  <Play size={14} fill="currentColor" /> PHub 4K
+                  <Play size={14} fill="currentColor" /> {sectionBadge}
                 </span>
                 <h1 className="lord-hero-title">{heroMovie.title}</h1>
                 <p className="lord-hero-meta">
-                  {heroMovie.genres[0] || 'PHub'} · {heroMovie.runtime || '4K Ultra HD'}
+                  {heroMovie.genres[0] || sectionLabel} · {heroMovie.runtime || (isXvid ? 'HD Video' : '4K Ultra HD')}
                 </p>
                 <p className="lord-hero-synopsis">{heroMovie.synopsis}</p>
                 <div className="lord-hero-actions">
-                  <button className="lord-hero-play" type="button" onClick={() => onPlay(heroMovie)}>
+                  <button
+                    className="lord-hero-play"
+                    type="button"
+                    onClick={() => void handlePlayMovie(heroMovie)}
+                  >
                     <Play fill="currentColor" strokeWidth={0} size={20} />
                     <span>Play</span>
                   </button>
@@ -14321,7 +14912,7 @@ function LordPhubSection({
                     <button
                       className="lord-hero-info"
                       type="button"
-                      onClick={() => onOpenDetail(heroMovie)}
+                      onClick={() => void handleOpenDetailMovie(heroMovie)}
                     >
                       <Info size={20} />
                       <span>More Info</span>
@@ -14335,12 +14926,12 @@ function LordPhubSection({
           {savedMovies && savedMovies.length > 0 && (
             <div style={{ marginBottom: 24 }}>
               <LordRailRow
-                key="phub-my-list"
+                key={`${isXvid ? 'phub2' : 'phub1'}-my-list`}
                 rail={{
                   title: 'My List',
                   items: savedMovies,
                 }}
-                onOpenDetail={onOpenDetail || onPlay}
+                onOpenDetail={(m) => void handleOpenDetailMovie(m)}
               />
             </div>
           )}
@@ -14350,7 +14941,7 @@ function LordPhubSection({
               <ContinueWatchingRail
                 title="Continue Watching"
                 movies={continueMovies}
-                onOpenDetail={onPlay}
+                onOpenDetail={(m) => void handlePlayMovie(m)}
                 onMarkWatched={onMarkWatched}
                 onRemoveContinue={onRemoveContinue}
                 onRemoveWatchlist={onRemoveWatchlist}
@@ -14359,17 +14950,17 @@ function LordPhubSection({
             </div>
           )}
 
-          {/* Category Pills & Controls Bar like JAV */}
+          {/* Category Pills & Controls Bar */}
           <div className="jav-controls">
-            <div className="jav-pills" role="tablist" aria-label="PHub categories">
-              {PHUB_CATEGORIES.map((cat) => (
+            <div className="jav-pills" role="tablist" aria-label={`${sectionLabel} categories`}>
+              {activeCategories.map((cat) => (
                 <button
-                  key={cat}
+                  key={cat.slug}
                   type="button"
-                  className={`jav-pill${selectedCategory === cat ? ' is-active' : ''}`}
-                  onClick={() => setSelectedCategory(cat)}
+                  className={`jav-pill${selectedCategory === cat.name ? ' is-active' : ''}`}
+                  onClick={() => setSelectedCategory(cat.name)}
                 >
-                  {cat}
+                  {cat.name}
                 </button>
               ))}
             </div>
@@ -14385,17 +14976,28 @@ function LordPhubSection({
               </button>
               <button
                 type="button"
+                className={`jav-sort-btn${orderBy === 'date' ? ' is-active' : ''}`}
+                onClick={() => setOrderBy('date')}
+              >
+                Latest
+              </button>
+              <button
+                type="button"
                 className={`jav-sort-btn${orderBy === 'duration' ? ' is-active' : ''}`}
                 onClick={() => setOrderBy('duration')}
               >
-                Top 4K
+                {isXvid ? 'Top Rated' : 'Top 4K'}
               </button>
             </div>
           </div>
 
           <div className="jav-meta-header">
             <h2 className="lord-rail-title">
-              {selectedCategory === 'All' ? 'All PHub 4K Catalog' : `${selectedCategory} PHub`}
+              {isSearching
+                ? `Search Results for "${searchQuery.trim()}"`
+                : selectedCategory === 'All'
+                  ? `All ${sectionLabel} Catalog`
+                  : `${selectedCategory} (${sectionLabel})`}
               <span className="jav-meta-count">
                 ({totalDisplayCount.toLocaleString()} titles)
               </span>
@@ -14403,53 +15005,60 @@ function LordPhubSection({
           </div>
 
           <div className="jav-grid">
-            {displayVideos.map((video, idx) => (
-              <div
-                key={`phub-${video.id}-${idx}`}
-                className="jav-card"
-                onClick={() => onPlay(hanimeToMovie(video))}
-              >
-                <div className="jav-thumb-container">
-                  <img
-                    src={video.thumb}
-                    referrerPolicy="no-referrer"
-                    alt={video.title}
-                    loading="lazy"
-                    onError={(event) => {
-                      const target = event.target as HTMLImageElement
-                      target.onerror = null
-                      target.src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
-                    }}
-                  />
-                  <span className="jav-hd-badge">4K</span>
-                  {video.duration && (
-                    <span className="jav-duration-badge">{video.duration}</span>
-                  )}
-                  <div className="jav-play-overlay">
-                    <button
-                      type="button"
-                      className="jav-play-btn"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onPlay(hanimeToMovie(video))
+            {displayVideos.map((video, idx) => {
+              const movie = pornApiToMovieHelper(video)
+              const firstCat = movie.genres[0] || 'PHub'
+              return (
+                <div
+                  key={`phub-${video.slug || idx}`}
+                  className="jav-card"
+                  onClick={() => void handlePlayMovie(movie)}
+                >
+                  <div className="jav-thumb-container">
+                    <img
+                      src={video.thumbnail_url || video.poster_url || ''}
+                      referrerPolicy="no-referrer"
+                      alt={video.title}
+                      loading="lazy"
+                      onError={(event) => {
+                        const target = event.target as HTMLImageElement
+                        target.onerror = null
+                        target.src =
+                          'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
                       }}
-                      title="Play Video"
-                    >
-                      <Play fill="#fff" size={24} />
-                    </button>
+                    />
+                    <span className="jav-hd-badge">{video.quality || '4K'}</span>
+                    {video.duration && (
+                      <span className="jav-duration-badge">{video.duration}</span>
+                    )}
+                    <div className="jav-play-overlay">
+                      <button
+                        type="button"
+                        className="jav-play-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handlePlayMovie(movie)
+                        }}
+                        title="Play Video"
+                      >
+                        <Play fill="#fff" size={24} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="jav-card-body">
+                    <h3 className="jav-card-title" title={video.title}>
+                      {cleanHtmlEntities(video.title)}
+                    </h3>
+                    <div className="jav-card-footer">
+                      <span className="jav-studio">{cleanHtmlEntities(firstCat)}</span>
+                      {video.views ? (
+                        <span className="jav-views">👁 {video.views.toLocaleString()}</span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-                <div className="jav-card-body">
-                  <h3 className="jav-card-title" title={video.title}>
-                    {cleanHtmlEntities(video.title)}
-                  </h3>
-                  <div className="jav-card-footer">
-                    {video.category && <span className="jav-studio">{cleanHtmlEntities(video.category)}</span>}
-                    {video.views > 0 && <span className="jav-views">👁 {video.views.toLocaleString()}</span>}
-                  </div>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Pagination Controls */}

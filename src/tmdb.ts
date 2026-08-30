@@ -30,6 +30,8 @@ export type StreamProvider =
   | 'oceanplay'
   | 'apijav'
   | 'phubplay'
+  | 'upload18'
+  | 'eporner'
 
 export type StreamProviderOption = {
   id: StreamProvider
@@ -242,9 +244,21 @@ export const streamProviderOptions: StreamProviderOption[] = [
   },
   {
     id: 'phubplay',
-    name: 'PHub Stream',
-    logo: 'PH',
-    description: 'PHub Server · Stream',
+    name: 'Sex-API',
+    logo: 'PH1',
+    description: 'PHub 1 · 4K Fast Player',
+  },
+  {
+    id: 'upload18',
+    name: 'Upload18',
+    logo: 'PH2',
+    description: 'PHub 2 · Upload18 Player',
+  },
+  {
+    id: 'eporner',
+    name: 'Eporner',
+    logo: 'EP',
+    description: 'PHub 3 · Eporner Player',
   },
 ]
 
@@ -953,6 +967,43 @@ export function buildStreamUrl(
   movie: Movie,
   provider: StreamProvider = defaultStreamProvider,
 ) {
+  // 1. Explicit PHub 3 / Eporner videos
+  if (
+    movie.label === 'PHub 3' ||
+    movie.id.startsWith('phub3-') ||
+    (movie.hentaiSlug && movie.hentaiSlug.startsWith('phub3-')) ||
+    provider === 'eporner' ||
+    movie.embedUrl?.includes('eporner.com')
+  ) {
+    if (movie.embedUrl) {
+      return movie.embedUrl
+    }
+    const cleanSlug = movie.hentaiSlug?.replace(/^phub3-/, '') || movie.id.replace(/^phub3-/, '')
+    return `https://www.eporner.com/embed/${cleanSlug}/`
+  }
+
+  // 2. Explicit PHub (1 & 2) videos
+  if (movie.label === 'PHub' || movie.id.startsWith('phub-') || (movie.hentaiSlug && movie.hentaiSlug.startsWith('phub-'))) {
+    if (provider === 'upload18' || movie.embedUrl?.includes('upload18.net') || movie.embedUrl?.includes('xvidapi')) {
+      const cleanSlug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+      return `https://upload18.net/play/index/xvidapi-${cleanSlug}`
+    }
+    if (movie.embedUrl) {
+      return movie.embedUrl
+    }
+    const cleanSlug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+    return `https://upload18.net/play/index/xvidapi-${cleanSlug}`
+  }
+
+  // 3. Explicit JAV videos
+  if (movie.isJav || movie.label === 'JAV' || movie.id.startsWith('jav-') || (movie.hentaiSlug && movie.hentaiSlug.startsWith('jav-'))) {
+    if (movie.embedUrl) {
+      return movie.embedUrl
+    }
+    const cleanSlug = movie.hentaiSlug?.replace(/^jav-/, '') || movie.id.replace(/^jav-/, '')
+    return `https://server.apijav.com/?mvapm_embed=${cleanSlug}`
+  }
+
   if (movie.isHentaiOcean || movie.hentaiSlug || movie.embedUrl) {
     let rawUrl = ''
     if (movie.hentaiEpisodes && movie.hentaiEpisodes.length > 0) {
@@ -978,6 +1029,8 @@ export function buildStreamUrl(
       movie.label === 'PHub' ||
       movie.id.startsWith('phub-') ||
       rawUrl.includes('upload18.net') ||
+      rawUrl.includes('sex-api.com') ||
+      rawUrl.includes('porn-api.com') ||
       rawUrl.includes('xvidapi')
     ) {
       return rawUrl
@@ -989,6 +1042,11 @@ export function buildStreamUrl(
     }
     const separator = rawUrl.includes('?') ? '&' : '?'
     return `${rawUrl}${separator}la=${laValue}`
+  }
+
+  if (provider === 'upload18') {
+    const slug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+    return `https://upload18.net/play/index/xvidapi-${slug}`
   }
 
   if (provider === 'vidrift') {
