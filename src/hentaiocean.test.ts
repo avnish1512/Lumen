@@ -372,5 +372,73 @@ describe('Hentai Ocean integration', () => {
     const url = buildStreamUrl(phubMovie)
     expect(url).toBe('https://upload18.net/play/index/xvidapi-73341265')
   })
+
+  it('correctly filters Hentai titles into Lord My List and excludes them from public library', () => {
+    const hentaiMovie: Movie = {
+      id: 'hentaiocean-night-shift',
+      rank: 1,
+      label: 'Hentai Ocean',
+      type: 'Anime',
+      genres: ['Hentai'],
+      year: '2026',
+      runtime: '30 min',
+      rating: '9.0',
+      maturity: '18+',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+      isHentaiOcean: true,
+    }
+
+    const regularMovie: Movie = {
+      id: 'tt1234567',
+      rank: 2,
+      label: 'TMDB',
+      type: 'Movie',
+      genres: ['Action'],
+      year: '2026',
+      runtime: '120 min',
+      rating: '8.5',
+      maturity: 'PG-13',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const savedAll = [hentaiMovie, regularMovie]
+    const isLordAdult = (m: Movie) =>
+      Boolean(
+        m.id.startsWith('jav-') ||
+          m.label === 'JAV' ||
+          m.isJav ||
+          m.hentaiSlug?.startsWith('jav-') ||
+          m.id.startsWith('phub-') ||
+          m.label === 'PHub' ||
+          m.hentaiSlug?.startsWith('phub-') ||
+          m.isHentaiOcean ||
+          m.id.startsWith('hentaiocean-') ||
+          m.genres.some((g) => g.toLowerCase() === 'hentai'),
+      )
+
+    const lordMyList = savedAll.filter((m) => isLordAdult(m))
+    const publicLibrarySaved = savedAll.filter((m) => !isLordAdult(m))
+
+    expect(lordMyList).toEqual([hentaiMovie])
+    expect(publicLibrarySaved).toEqual([regularMovie])
+  })
 })
 

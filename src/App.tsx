@@ -1249,6 +1249,22 @@ function continueRuntimeLabel(movie: Movie) {
   return runtime
 }
 
+function isLordAdultMovie(movie?: Movie | null): boolean {
+  if (!movie) return false
+  return Boolean(
+    movie.id?.startsWith('jav-') ||
+    movie.label === 'JAV' ||
+    movie.isJav ||
+    movie.hentaiSlug?.startsWith('jav-') ||
+    movie.id?.startsWith('phub-') ||
+    movie.label === 'PHub' ||
+    movie.hentaiSlug?.startsWith('phub-') ||
+    movie.isHentaiOcean ||
+    movie.id?.startsWith('hentaiocean-') ||
+    movie.genres?.some((g) => g.toLowerCase() === 'hentai')
+  )
+}
+
 function isTvShow(movie: Movie) {
   if (!movie) return false
   if (
@@ -2240,6 +2256,42 @@ function App() {
         })),
     [watchHistory],
   )
+  const savedLordList = useMemo(
+    () =>
+      Object.values(savedMovies).filter(
+        (m) =>
+          isLordAdultMovie(m) &&
+          !m.id.startsWith('phub-') &&
+          m.label !== 'PHub' &&
+          !m.hentaiSlug?.startsWith('phub-') &&
+          !m.id.startsWith('jav-') &&
+          m.label !== 'JAV' &&
+          !m.isJav &&
+          !m.hentaiSlug?.startsWith('jav-'),
+      ),
+    [savedMovies],
+  )
+  const savedPhubList = useMemo(
+    () =>
+      Object.values(savedMovies).filter(
+        (m) =>
+          m.id.startsWith('phub-') ||
+          m.label === 'PHub' ||
+          m.hentaiSlug?.startsWith('phub-'),
+      ),
+    [savedMovies],
+  )
+  const savedJavList = useMemo(
+    () =>
+      Object.values(savedMovies).filter(
+        (m) =>
+          m.id.startsWith('jav-') ||
+          m.label === 'JAV' ||
+          m.isJav ||
+          m.hentaiSlug?.startsWith('jav-'),
+      ),
+    [savedMovies],
+  )
   const searchCategoryTiles = useMemo(
     () =>
       buildSearchCategoryTiles(searchCategories, [
@@ -2351,22 +2403,6 @@ function App() {
     phub: '',
     jav: '',
   })
-
-  const isLordAdultMovie = (movie?: Movie | null) => {
-    if (!movie) return false
-    return Boolean(
-      movie.id?.startsWith('jav-') ||
-      movie.label === 'JAV' ||
-      movie.isJav ||
-      movie.hentaiSlug?.startsWith('jav-') ||
-      movie.id?.startsWith('phub-') ||
-      movie.label === 'PHub' ||
-      movie.hentaiSlug?.startsWith('phub-') ||
-      movie.isHentaiOcean ||
-      movie.id?.startsWith('hentaiocean-') ||
-      movie.genres?.some((g) => g.toLowerCase() === 'hentai')
-    )
-  }
 
   const isHentaiSelectedMovie = Boolean(
     selectedMovie &&
@@ -4295,8 +4331,8 @@ function App() {
       {screen === 'library' && (
         <ErrorBoundary onReset={() => setScreen('home')}>
           <LibraryScreen
-            savedMovies={savedList}
-            likedMovies={likedList}
+            savedMovies={savedList.filter((m) => !isLordAdultMovie(m))}
+            likedMovies={likedList.filter((m) => !isLordAdultMovie(m))}
             invites={incomingInvites}
             onAcceptInvite={(invite) => void acceptInviteAndWatch(invite)}
             onDismissInvite={dismissInvite}
@@ -4446,6 +4482,9 @@ function App() {
             rails={lordRails}
             loading={lordLoading}
             continueMovies={continueWatchingLord}
+            savedMovies={savedLordList}
+            savedPhubMovies={savedPhubList}
+            savedJavMovies={savedJavList}
             activeTab={activeLordTab}
             onTabChange={setActiveLordTab}
             tabQueries={lordTabQueries}
@@ -6117,7 +6156,7 @@ function DetailScreen({
                     <span>{isDownloading ? 'Downloading...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
                   </button>
                 )}
-                {!isHentaiMovie && isDesktop && (
+                {isDesktop && (
                   <button
                     className="circle-action"
                     type="button"
@@ -6134,17 +6173,15 @@ function DetailScreen({
                       <Bell />
                       <span>Remind Me</span>
                     </button>
-                    {!isHentaiMovie && (
-                      <button
-                        type="button"
-                        className={`netflix-icon-action${isSaved ? ' active' : ''}`}
-                        onClick={onSave}
-                        title={isSaved ? 'Saved' : 'Add to My List'}
-                      >
-                        {isSaved ? <Check /> : <Plus />}
-                        <span>My List</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className={`netflix-icon-action${isSaved ? ' active' : ''}`}
+                      onClick={onSave}
+                      title={isSaved ? 'Saved' : 'Add to My List'}
+                    >
+                      {isSaved ? <Check /> : <Plus />}
+                      <span>My List</span>
+                    </button>
                     <button
                       type="button"
                       className="netflix-icon-action"
@@ -6190,16 +6227,14 @@ function DetailScreen({
                     <span>{isDownloading ? 'Downloading...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
                   </button>
                 )}
-                {!isHentaiMovie && (
-                  <button
-                    className="circle-action"
-                    type="button"
-                    onClick={onSave}
-                    title={isSaved ? 'Saved' : 'Add to library'}
-                  >
-                    {isSaved ? <Check /> : <Plus />}
-                  </button>
-                )}
+                <button
+                  className="circle-action"
+                  type="button"
+                  onClick={onSave}
+                  title={isSaved ? 'Saved' : 'Add to library'}
+                >
+                  {isSaved ? <Check /> : <Plus />}
+                </button>
               </>
             )}
           </div>
@@ -13197,6 +13232,9 @@ type LordScreenProps = {
   rails: LordRail[]
   loading: boolean
   continueMovies?: Movie[]
+  savedMovies?: Movie[]
+  savedPhubMovies?: Movie[]
+  savedJavMovies?: Movie[]
   currentUser?: UserInfo | null
   profiles?: UserProfile[]
   activeTab?: 'collection' | 'phub' | 'jav'
@@ -13221,6 +13259,9 @@ function LordScreen({
   rails = [],
   loading = false,
   continueMovies = [],
+  savedMovies = [],
+  savedPhubMovies = [],
+  savedJavMovies = [],
   currentUser: _currentUser,
   profiles: _profiles = [],
   activeTab: activeTabProp = 'collection',
@@ -13440,6 +13481,7 @@ function LordScreen({
         <LordJavSection
           searchQuery={tabQueries.jav}
           continueMovies={continueMovies}
+          savedMovies={savedJavMovies}
           onPlay={onPlay}
           onMarkWatched={onMarkWatched}
           onRemoveContinue={onRemoveContinue}
@@ -13449,6 +13491,7 @@ function LordScreen({
         <LordPhubSection
           searchQuery={tabQueries.phub}
           continueMovies={continueMovies}
+          savedMovies={savedPhubMovies}
           onOpenDetail={onOpenDetail}
           onPlay={onPlay}
           onMarkWatched={onMarkWatched}
@@ -13510,6 +13553,16 @@ function LordScreen({
           </div>
 
           <div className="lord-rails">
+            {savedMovies && savedMovies.length > 0 && (
+              <LordRailRow
+                key="my-list"
+                rail={{
+                  title: 'My List',
+                  items: savedMovies,
+                }}
+                onOpenDetail={onOpenDetail}
+              />
+            )}
             {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
               <ContinueWatchingRail
                 title="Continue Watching"
@@ -13984,6 +14037,7 @@ function hanimeToMovieHelper(video: HanimeVideo): Movie {
 function LordPhubSection({
   searchQuery = '',
   continueMovies = [],
+  savedMovies = [],
   onOpenDetail,
   onPlay,
   onMarkWatched,
@@ -13992,6 +14046,7 @@ function LordPhubSection({
 }: {
   searchQuery?: string
   continueMovies?: Movie[]
+  savedMovies?: Movie[]
   onOpenDetail?: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onMarkWatched?: (movie: Movie) => void
@@ -14171,6 +14226,19 @@ function LordPhubSection({
             </div>
           )}
 
+          {savedMovies && savedMovies.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <LordRailRow
+                key="phub-my-list"
+                rail={{
+                  title: 'My List',
+                  items: savedMovies,
+                }}
+                onOpenDetail={onOpenDetail || onPlay}
+              />
+            </div>
+          )}
+
           {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
             <div style={{ marginBottom: 24 }}>
               <ContinueWatchingRail
@@ -14344,6 +14412,7 @@ const JAV_CATEGORIES = [
 function LordJavSection({
   searchQuery = '',
   continueMovies = [],
+  savedMovies = [],
   onPlay,
   onMarkWatched,
   onRemoveContinue,
@@ -14351,6 +14420,7 @@ function LordJavSection({
 }: {
   searchQuery?: string
   continueMovies?: Movie[]
+  savedMovies?: Movie[]
   onPlay: (movie: Movie) => void
   onMarkWatched?: (movie: Movie) => void
   onRemoveContinue?: (movie: Movie) => void
@@ -14465,6 +14535,19 @@ function LordJavSection({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {savedMovies && savedMovies.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <LordRailRow
+            key="jav-my-list"
+            rail={{
+              title: 'My List',
+              items: savedMovies,
+            }}
+            onOpenDetail={onPlay}
+          />
         </div>
       )}
 
