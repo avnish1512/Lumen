@@ -346,6 +346,8 @@ describe('Hentai Ocean integration', () => {
   it('correctly resolves stream URL for porn-api / sex-api embed in PHub titles', () => {
     const phubMovie: Movie = {
       id: 'phub-adara-jordin-blonde-yoga-masturbation-joi',
+      title: 'Adara Jordin Blonde Yoga',
+      logoTitle: 'Adara Jordin Blonde Yoga',
       rank: 1,
       label: 'PHub',
       type: 'PHub Video',
@@ -376,6 +378,8 @@ describe('Hentai Ocean integration', () => {
   it('correctly resolves stream URL for legacy upload18 embed in PHub titles', () => {
     const phubMovie: Movie = {
       id: 'phub-73341265',
+      title: '18 Year Old Latina Beauty',
+      logoTitle: '18 Year Old Latina Beauty',
       rank: 1,
       label: 'PHub',
       type: 'Movie',
@@ -406,6 +410,8 @@ describe('Hentai Ocean integration', () => {
   it('correctly filters Hentai titles into Lord My List and excludes them from public library', () => {
     const hentaiMovie: Movie = {
       id: 'hentaiocean-night-shift',
+      title: 'Night Shift Nurses',
+      logoTitle: 'Night Shift Nurses',
       rank: 1,
       label: 'Hentai Ocean',
       type: 'Anime',
@@ -429,6 +435,8 @@ describe('Hentai Ocean integration', () => {
 
     const regularMovie: Movie = {
       id: 'tt1234567',
+      title: 'Action Movie',
+      logoTitle: 'Action Movie',
       rank: 2,
       label: 'TMDB',
       type: 'Movie',

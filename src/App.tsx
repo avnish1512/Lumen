@@ -12283,6 +12283,7 @@ type ContinueWatchingRailProps = MovieRailProps & {
   onRemoveWatchlist?: (movie: Movie) => void
   isJavSection?: boolean
   isPhubSection?: boolean
+  isLordSection?: boolean
 }
 
 type ContinueMenuState = {
@@ -12299,11 +12300,15 @@ function ContinueWatchingRail({
   onRemoveContinue,
   isJavSection = false,
   isPhubSection = false,
+  isLordSection = false,
 }: ContinueWatchingRailProps) {
   const rowRef = useRef<HTMLDivElement | null>(null)
   const [menuState, setMenuState] = useState<ContinueMenuState | null>(null)
 
   const displayMovies = useMemo(() => {
+    if (isLordSection) {
+      return movies
+    }
     const isJav = (m: Movie) =>
       Boolean(
         m.isJav ||
@@ -12324,7 +12329,7 @@ function ContinueWatchingRail({
       return movies.filter(isPhub)
     }
     return movies.filter((m) => !isJav(m) && !isPhub(m))
-  }, [movies, isJavSection, isPhubSection])
+  }, [movies, isJavSection, isPhubSection, isLordSection])
 
   useEffect(() => {
     if (!menuState) {
@@ -14314,6 +14319,7 @@ export type HanimeVideo = {
   actors: string[]
   description: string
   code: string
+  views?: number
 }
 
 const INITIAL_HANIME_VIDEOS: HanimeVideo[] = [
