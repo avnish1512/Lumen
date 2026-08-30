@@ -366,11 +366,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 4000)
       const upstreamRes = await fetch(targetUrl, {
+        signal: controller.signal,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         },
       })
+      clearTimeout(timeoutId)
       const data = await upstreamRes.json()
       res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=1200')
       res.status(upstreamRes.status).json(data)

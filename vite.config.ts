@@ -1861,11 +1861,15 @@ function epornerDevProxy(): Plugin {
         }
 
         try {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 2500)
           const upstreamRes = await fetch(targetUrl, {
+            signal: controller.signal,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
             },
           })
+          clearTimeout(timeoutId)
           const data = await upstreamRes.json()
           sendJson(res, upstreamRes.status, data)
         } catch (error) {

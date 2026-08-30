@@ -65,6 +65,7 @@ import {
   SkipBack,
   SkipForward,
   Shield,
+  Sparkles,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -1268,7 +1269,9 @@ function isLordAdultMovie(movie?: Movie | null): boolean {
 }
 
 export const PORN_API_BASE_URL = 'https://porn-api.com/api/v1/public'
-export const PORN_API_KEY = '2ceb712d93165c1f69e2ff70948aa09705f7da4610ffb0caec764f224ef1b8f1'
+export const PORN_API_KEY =
+  (import.meta as any).env?.VITE_PHUB_API_KEY ||
+  '2ceb712d93165c1f69e2ff70948aa09705f7da4610ffb0caec764f224ef1b8f1'
 
 export interface PornApiMovieItem {
   title: string
@@ -1444,6 +1447,141 @@ export type EpornerVideoItem = {
   thumbs?: { size: string; width: number; height: number; src: string }[]
 }
 
+export const EPORNER_INITIAL_VIDEOS: EpornerVideoItem[] = [
+  {
+    id: 'IsabYDAiqXa',
+    title: 'Young Teen Heather Night In Passionate HD Session',
+    keywords: 'Teen, Petite, Young, Deep Throat, Heather Night, Small Tits, Small Ass, brunette, creampie, hd sex, teens, big dick, hardcore',
+    views: 260221,
+    rate: '4.13',
+    url: 'https://www.eporner.com/hd-porn/IsabYDAiqXa/Young-Teen-Heather/',
+    added: '2025-01-21 11:42:47',
+    length_sec: 2539,
+    length_min: '42:19',
+    embed: 'https://www.eporner.com/embed/IsabYDAiqXa/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/3/30/305/3054537/5_360.jpg' },
+  },
+  {
+    id: '6Rp28FNqFuO',
+    title: 'Sexy Japanese Model Maki Horiguchi In Private Room',
+    keywords: 'Asian, Japanese, Brunette, Teens, Petite, Young, Blowjob, Creampie',
+    views: 2734059,
+    rate: '4.18',
+    url: 'https://www.eporner.com/hd-porn/6Rp28FNqFuO/Fucking-Sexy-Japanese-Girl-Maki-Horiguchi/',
+    added: '2025-02-15 04:59:54',
+    length_sec: 3736,
+    length_min: '62:16',
+    embed: 'https://www.eporner.com/embed/6Rp28FNqFuO/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/2/22/226/226165/15_360.jpg' },
+  },
+  {
+    id: 'sTlL3Cc3Dps',
+    title: 'Mother And Daughter Nude On Webcam Chat',
+    keywords: 'Teen, Nude, Webcam, Mother, Daughter, blonde, striptease, MILF, Amateur',
+    views: 244545,
+    rate: '3.78',
+    url: 'https://www.eporner.com/hd-porn/sTlL3Cc3Dps/Mother-And-Daughter-Nude-On-Webcam/',
+    added: '2025-01-01 01:00:00',
+    length_sec: 201,
+    length_min: '3:21',
+    embed: 'https://www.eporner.com/embed/sTlL3Cc3Dps/',
+    default_thumb: { size: 'big', width: 480, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/2/20/202/202084/14_360.jpg' },
+  },
+  {
+    id: 'mlWiwfpKUNi',
+    title: 'Almost Caught Cheating With Slutty Teen Next Door',
+    keywords: 'Big Ass, Big Tits, Teen, Creampie, Cheating, Amateur, POV, Brunette, Masturbation',
+    views: 307121,
+    rate: '4.11',
+    url: 'https://www.eporner.com/hd-porn/mlWiwfpKUNi/Almost-Caught-Cheating-On-Girlfriend-With-Slutty-Teen/',
+    added: '2025-01-03 21:53:42',
+    length_sec: 1479,
+    length_min: '24:39',
+    embed: 'https://www.eporner.com/embed/mlWiwfpKUNi/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/3/30/300/3003679/14_360.jpg' },
+  },
+  {
+    id: 'qDpoWf0nVy2',
+    title: 'Amateur Japanese Getting Private Lessons POV',
+    keywords: 'Amateur, Asian, Japanese, Blowjob, Cumshot, Handjob, Teen, Threesome, Bukkake',
+    views: 78020,
+    rate: '3.71',
+    url: 'https://www.eporner.com/hd-porn/qDpoWf0nVy2/Amateur-Japanese-Getting-Lessons-How-To-Fuck-mp4/',
+    added: '2025-01-17 23:08:55',
+    length_sec: 3519,
+    length_min: '58:39',
+    embed: 'https://www.eporner.com/embed/qDpoWf0nVy2/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/3/32/321/3214723/14_360.jpg' },
+  },
+  {
+    id: 'qKhpDTneqHV',
+    title: 'Tiny Blonde Teen With Big Tits Rides Hard POV',
+    keywords: 'Blonde, Teens, Big Tits, POV, Hardcore, Amateur, Blowjob, Cumshot',
+    views: 73691,
+    rate: '4.22',
+    url: 'https://www.eporner.com/hd-porn/qKhpDTneqHV/Tiny-Teen-With-Big-Tits-Likes-To-Ride-And-Cum-On-My-Cock-Chessie-Rae-Chessie-Rae/',
+    added: '2025-01-26 15:22:17',
+    length_sec: 341,
+    length_min: '5:41',
+    embed: 'https://www.eporner.com/embed/qKhpDTneqHV/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/3/31/315/3155808/4_360.jpg' },
+  },
+  {
+    id: 'TWl2JbIvfwk',
+    title: 'Redhead Teen Passionate Room Session 1080p',
+    keywords: 'Redhead, Teens, POV, Small Tits, Petite, Hardcore, Big Dick, Blowjob, Cumshot',
+    views: 60890,
+    rate: '4.41',
+    url: 'https://www.eporner.com/hd-porn/TWl2JbIvfwk/Redhead-Teen-Fucked-In-Front-Of-Camera/',
+    added: '2025-01-15 20:57:33',
+    length_sec: 1491,
+    length_min: '24:51',
+    embed: 'https://www.eporner.com/embed/TWl2JbIvfwk/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/3/32/320/3209696/8_360.jpg' },
+  },
+  {
+    id: 'AKwLUeObRO5',
+    title: 'Wet Petite Teen Doggystyle POV - 4K 60FPS Ultra HD',
+    keywords: 'Teen, Young Teen, Amateur, POV, Petite, 4K, 60fps, Hardcore, Anal',
+    views: 293402,
+    rate: '4.13',
+    url: 'https://www.eporner.com/hd-porn/AKwLUeObRO5/Wet-Teen-Pussy-Fucked-Doggystyle-POV-4K-60FPS/',
+    added: '2025-01-02 18:10:05',
+    length_sec: 296,
+    length_min: '4:56',
+    embed: 'https://www.eporner.com/embed/AKwLUeObRO5/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/2/21/218/2185025/6_360.jpg' },
+  },
+  {
+    id: 'FBvahfn434W',
+    title: 'Cute Brunette Cutie First Time In Studio',
+    keywords: 'Teens, Brunette, Teen, Young, Amateur, Hardcore, Creampie, Cosplay',
+    views: 426710,
+    rate: '3.95',
+    url: 'https://www.eporner.com/hd-porn/FBvahfn434W/She-Is-Not-A-Virgin-Anymore-/',
+    added: '2025-01-09 03:16:03',
+    length_sec: 808,
+    length_min: '13:28',
+    embed: 'https://www.eporner.com/embed/FBvahfn434W/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/3/34/347/347301/15_360.jpg' },
+  },
+  {
+    id: 'ENlFAcdAtW1',
+    title: 'Fiery Redhead Hardcore Action In Hotel Room',
+    keywords: 'Cumshot, Hardcore, Redhead, Teens, Blowjob, Big Dick, Squirt, VR',
+    views: 49360,
+    rate: '3.67',
+    url: 'https://www.eporner.com/hd-porn/ENlFAcdAtW1/Hot-Action-With-Fiery-Redhead-Teen/',
+    added: '2025-01-14 21:49:30',
+    length_sec: 1799,
+    length_min: '29:59',
+    embed: 'https://www.eporner.com/embed/ENlFAcdAtW1/',
+    default_thumb: { size: 'big', width: 640, height: 360, src: 'https://static-ca-cdn.eporner.com/thumbs/static4/3/32/320/3200988/10_360.jpg' },
+  },
+]
+
+const epornerApiCache = new Map<string, any>()
+
 export async function fetchEpornerApi(
   params: Record<string, string | number> = {},
 ): Promise<any> {
@@ -1454,33 +1592,41 @@ export async function fetchEpornerApi(
     }
   }
 
-  // 1. Try local dev proxy /api/eporner
-  try {
-    const proxyUrl = `/api/eporner?${query.toString()}`
-    const res = await fetch(proxyUrl)
-    if (res.ok) {
-      const json = await res.json()
-      if (json?.videos || Array.isArray(json) || json?.id) return json
-    }
-  } catch {}
+  const cacheKey = query.toString() || 'all'
+  if (epornerApiCache.has(cacheKey)) {
+    return epornerApiCache.get(cacheKey)
+  }
 
-  // 2. Try Vercel hub proxy /api/hub?kind=eporner
-  try {
-    const hubUrl = `/api/hub?kind=eporner&${query.toString()}`
-    const res = await fetch(hubUrl)
-    if (res.ok) {
-      const json = await res.json()
-      if (json?.videos || Array.isArray(json) || json?.id) return json
+  const fetchJsonWithTimeout = async (url: string, timeoutMs = 2000): Promise<any> => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const res = await fetch(url, { signal: controller.signal })
+      clearTimeout(timer)
+      if (!res.ok) throw new Error('Status not ok')
+      const data = await res.json()
+      if (data?.videos || Array.isArray(data) || data?.id) {
+        return data
+      }
+      throw new Error('Invalid payload')
+    } catch (err) {
+      clearTimeout(timer)
+      throw err
     }
-  } catch {}
+  }
 
-  // 3. Try direct fetch
+  const qs = query.toString()
+  const candidateUrls = [
+    `/api/eporner?${qs}`,
+    `/api/hub?kind=eporner&${qs}`,
+    `https://www.eporner.com/api/v2/video/search/?${qs}&format=json`,
+  ]
+
   try {
-    const directUrl = `https://www.eporner.com/api/v2/video/search/?${query.toString()}&format=json`
-    const res = await fetch(directUrl)
-    if (res.ok) {
-      const json = await res.json()
-      if (json?.videos || Array.isArray(json) || json?.id) return json
+    const result = await Promise.any(candidateUrls.map((url) => fetchJsonWithTimeout(url, 2200)))
+    if (result) {
+      epornerApiCache.set(cacheKey, result)
+      return result
     }
   } catch {}
 
@@ -14563,22 +14709,69 @@ function LordPhubSection({
   const isEporner = serverMode === 'eporner'
   const activeCategories = isEporner ? PHUB3_CATEGORIES : isXvid ? PHUB2_CATEGORIES : PHUB1_CATEGORIES
 
-  const [pornMovies, setPornMovies] = useState<PornApiMovieItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const getInitialMovies = useCallback((): PornApiMovieItem[] => {
+    if (isEporner) {
+      return EPORNER_INITIAL_VIDEOS.map((item) => {
+        const thumb = item.default_thumb?.src || item.thumbs?.[0]?.src || ''
+        const rawKeywords = item.keywords ? item.keywords.split(',').map((k) => k.trim()).filter(Boolean) : []
+        return {
+          title: item.title,
+          description: item.title,
+          thumbnail_url: thumb,
+          poster_url: thumb,
+          slug: item.id,
+          duration: item.length_min || 'HD',
+          quality: 'HD',
+          views: item.views || 50000,
+          categories: rawKeywords.slice(0, 3).map((k) => ({ name: k, slug: k.toLowerCase().replace(/\s+/g, '-') })),
+          episodes: [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Eporner', embed_url: item.embed || `https://www.eporner.com/embed/${item.id}/` }] }],
+        }
+      })
+    }
+    return []
+  }, [isEporner])
+
+  const [pornMovies, setPornMovies] = useState<PornApiMovieItem[]>(() => {
+    if (serverMode === 'eporner') {
+      return EPORNER_INITIAL_VIDEOS.map((item) => {
+        const thumb = item.default_thumb?.src || item.thumbs?.[0]?.src || ''
+        const rawKeywords = item.keywords ? item.keywords.split(',').map((k) => k.trim()).filter(Boolean) : []
+        return {
+          title: item.title,
+          description: item.title,
+          thumbnail_url: thumb,
+          poster_url: thumb,
+          slug: item.id,
+          duration: item.length_min || 'HD',
+          quality: 'HD',
+          views: item.views || 50000,
+          categories: rawKeywords.slice(0, 3).map((k) => ({ name: k, slug: k.toLowerCase().replace(/\s+/g, '-') })),
+          episodes: [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Eporner', embed_url: item.embed || `https://www.eporner.com/embed/${item.id}/` }] }],
+        }
+      })
+    }
+    return []
+  })
+  const [loading, setLoading] = useState(serverMode !== 'eporner')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [orderBy, setOrderBy] = useState<'views' | 'date' | 'duration'>('views')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
-  const [totalVideos, setTotalVideos] = useState(0)
+  const [totalVideos, setTotalVideos] = useState(serverMode === 'eporner' ? EPORNER_INITIAL_VIDEOS.length : 0)
 
   useEffect(() => {
     setPage(1)
-  }, [serverMode, selectedCategory, orderBy, searchQuery])
+    if (serverMode === 'eporner') {
+      setPornMovies(getInitialMovies())
+    }
+  }, [serverMode, selectedCategory, orderBy, searchQuery, getInitialMovies])
 
   useEffect(() => {
     let active = true
     async function loadVideos() {
-      setLoading(true)
+      if (pornMovies.length === 0) {
+        setLoading(true)
+      }
       try {
         if (isEporner) {
           const q = searchQuery.trim() || (selectedCategory === 'All' ? 'all' : selectedCategory)
@@ -14702,6 +14895,38 @@ function LordPhubSection({
           } else if (searchQuery.trim()) {
             setPornMovies([])
           } else if (pornMovies.length === 0) {
+            if (isEporner) {
+              const fallbackEporner = getInitialMovies()
+              setPornMovies(fallbackEporner)
+              setTotalVideos(fallbackEporner.length)
+              setTotalPages(1)
+            } else {
+              const fallbackPorn = INITIAL_HANIME_VIDEOS.map((v) => ({
+                title: v.title,
+                description: v.description,
+                thumbnail_url: v.thumb,
+                poster_url: v.poster || v.thumb,
+                slug: String(v.id),
+                duration: v.duration,
+                quality: '4K',
+                views: v.views || 45000,
+                categories: [{ name: v.category, slug: v.category.toLowerCase().replace(/\s+/g, '-') }],
+                pornstars: v.actors?.map((a) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
+              }))
+              setPornMovies(fallbackPorn)
+              setTotalVideos(fallbackPorn.length)
+              setTotalPages(1)
+            }
+          }
+        }
+      } catch {
+        if (active && pornMovies.length === 0) {
+          if (isEporner) {
+            const fallbackEporner = getInitialMovies()
+            setPornMovies(fallbackEporner)
+            setTotalVideos(fallbackEporner.length)
+            setTotalPages(1)
+          } else {
             const fallbackPorn = INITIAL_HANIME_VIDEOS.map((v) => ({
               title: v.title,
               description: v.description,
@@ -14719,24 +14944,6 @@ function LordPhubSection({
             setTotalPages(1)
           }
         }
-      } catch {
-        if (active && pornMovies.length === 0) {
-          const fallbackPorn = INITIAL_HANIME_VIDEOS.map((v) => ({
-            title: v.title,
-            description: v.description,
-            thumbnail_url: v.thumb,
-            poster_url: v.poster || v.thumb,
-            slug: String(v.id),
-            duration: v.duration,
-            quality: '4K',
-            views: v.views || 45000,
-            categories: [{ name: v.category, slug: v.category.toLowerCase().replace(/\s+/g, '-') }],
-            pornstars: v.actors?.map((a) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
-          }))
-          setPornMovies(fallbackPorn)
-          setTotalVideos(fallbackPorn.length)
-          setTotalPages(1)
-        }
       } finally {
         if (active) setLoading(false)
       }
@@ -14745,7 +14952,7 @@ function LordPhubSection({
     return () => {
       active = false
     }
-  }, [page, serverMode, selectedCategory, orderBy, searchQuery])
+  }, [page, serverMode, selectedCategory, orderBy, searchQuery, isEporner, isXvid, activeCategories, getInitialMovies])
 
   const isSearching = Boolean(searchQuery.trim())
 
@@ -14858,7 +15065,11 @@ function LordPhubSection({
   const heroMovie = heroItem ? pornApiToMovieHelper(heroItem) : null
   const totalDisplayCount = totalVideos > 0 ? totalVideos : displayVideos.length
   const sectionLabel = isEporner ? 'PHub 3' : isXvid ? 'PHub 2' : 'PHub 1'
-  const sectionBadge = isEporner ? 'PHub 3 · Eporner HD' : isXvid ? 'PHub 2 · Upload18' : 'PHub 1 · 4K'
+  const sectionBadge = isEporner
+    ? 'PHub 3 · Eporner HD'
+    : isXvid
+      ? 'PHub 2 · Upload18'
+      : 'PHub 1 · Under Development'
 
   return (
     <div className="jav-container">
@@ -14874,6 +15085,18 @@ function LordPhubSection({
         </div>
       ) : (
         <>
+          {serverMode === 'pornapi' && (
+            <div className="phub1-dev-notice" role="status">
+              <div className="phub1-dev-badge">
+                <Sparkles size={13} />
+                <span>Under Development</span>
+              </div>
+              <p className="phub1-dev-text">
+                <strong>PHub 1</strong> is currently under development while high-speed 4K streaming is being optimized. You can browse titles below, or switch to <strong>PHub 2</strong>, <strong>PHub 3</strong>, or <strong>JAV</strong> for full instant playback.
+              </p>
+            </div>
+          )}
+
           {!isSearching && heroMovie && (
             <div className="lord-hero" style={{ marginBottom: 28 }}>
               <div className="lord-hero-backdrop-wrap">
