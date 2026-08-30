@@ -972,7 +972,14 @@ export function buildStreamUrl(
       rawUrl = `https://hentaiocean.com/embed/${slug}?la=1`
     }
 
-    if (movie.isJav || rawUrl.includes('apijav.com')) {
+    if (
+      movie.isJav ||
+      rawUrl.includes('apijav.com') ||
+      movie.label === 'PHub' ||
+      movie.id.startsWith('phub-') ||
+      rawUrl.includes('upload18.net') ||
+      rawUrl.includes('xvidapi')
+    ) {
       return rawUrl
     }
 

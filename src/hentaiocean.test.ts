@@ -342,5 +342,35 @@ describe('Hentai Ocean integration', () => {
     const url = buildStreamUrl(javMovie)
     expect(url).toBe('https://server.apijav.com/?mvapm_embed=123298')
   })
+
+  it('builds stream URL for PHub titles with embed_url cleanly', () => {
+    const phubMovie: Movie = {
+      id: 'phub-73341265',
+      rank: 1,
+      label: 'PHub',
+      type: 'Movie',
+      genres: ['Teen'],
+      year: '2026',
+      runtime: '18:31',
+      rating: 'N/A',
+      maturity: '18+',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+      embedUrl: 'https://upload18.net/play/index/xvidapi-73341265',
+      isHentaiOcean: false,
+      hentaiSlug: '73341265',
+    }
+
+    const url = buildStreamUrl(phubMovie)
+    expect(url).toBe('https://upload18.net/play/index/xvidapi-73341265')
+  })
 })
 

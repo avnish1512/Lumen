@@ -2346,6 +2346,27 @@ function App() {
   const [lordLoading, setLordLoading] = useState(false)
   const [lordBackScreen, setLordBackScreen] = useState<Screen>('home')
   const [activeLordTab, setActiveLordTab] = useState<'collection' | 'phub' | 'jav'>('collection')
+  const [lordTabQueries, setLordTabQueries] = useState({
+    collection: '',
+    phub: '',
+    jav: '',
+  })
+
+  const isLordAdultMovie = (movie?: Movie | null) => {
+    if (!movie) return false
+    return Boolean(
+      movie.id?.startsWith('jav-') ||
+      movie.label === 'JAV' ||
+      movie.isJav ||
+      movie.hentaiSlug?.startsWith('jav-') ||
+      movie.id?.startsWith('phub-') ||
+      movie.label === 'PHub' ||
+      movie.hentaiSlug?.startsWith('phub-') ||
+      movie.isHentaiOcean ||
+      movie.id?.startsWith('hentaiocean-') ||
+      movie.genres?.some((g) => g.toLowerCase() === 'hentai')
+    )
+  }
 
   const isHentaiSelectedMovie = Boolean(
     selectedMovie &&
@@ -3215,6 +3236,8 @@ function App() {
     const safeMovie = normalizeMovie(movie)
     if (screen !== 'detail' && screen !== 'watch') {
       setDetailBackScreen(screen)
+    } else if (isLordAdultMovie(safeMovie) && detailBackScreen !== 'lord') {
+      setDetailBackScreen('lord')
     }
 
     if (
@@ -3241,6 +3264,8 @@ function App() {
     const safeMovie = normalizeMovie(movie)
     if (screen !== 'detail' && screen !== 'watch') {
       setDetailBackScreen(screen)
+    } else if (isLordAdultMovie(safeMovie) && detailBackScreen !== 'lord') {
+      setDetailBackScreen('lord')
     }
 
     if (
@@ -4146,7 +4171,15 @@ function App() {
             )}
             isLoading={detailLoading}
             error={detailError}
-            onBack={() => setScreen(detailBackScreen)}
+            onBack={() => {
+              if (detailBackScreen === 'lord' || isLordAdultMovie(selectedMovie)) {
+                setScreen('lord')
+              } else if (detailBackScreen) {
+                setScreen(detailBackScreen)
+              } else {
+                setScreen('home')
+              }
+            }}
             onOpenDetail={openDetail}
             onPlay={(provider) => {
               if (provider) {
@@ -4199,13 +4232,7 @@ function App() {
             streamProvider={streamProvider}
             streamSandboxEnabled={streamSandboxEnabled}
             onBack={() => {
-              if (
-                detailBackScreen === 'lord' ||
-                (selectedMovie &&
-                  (selectedMovie.id.startsWith('phub-') ||
-                    selectedMovie.label === 'PHub' ||
-                    selectedMovie.hentaiSlug?.startsWith('phub-')))
-              ) {
+              if (detailBackScreen === 'lord' || isLordAdultMovie(selectedMovie)) {
                 setScreen('lord')
               } else if (detailBackScreen) {
                 setScreen(detailBackScreen)
@@ -4421,6 +4448,8 @@ function App() {
             continueMovies={continueWatchingLord}
             activeTab={activeLordTab}
             onTabChange={setActiveLordTab}
+            tabQueries={lordTabQueries}
+            onTabQueriesChange={setLordTabQueries}
             onOpenDetail={openDetail}
             onPlay={openWatch}
             onSelectProfile={switchToProfile}
@@ -13151,6 +13180,10 @@ type LordScreenProps = {
   profiles?: UserProfile[]
   activeTab?: 'collection' | 'phub' | 'jav'
   onTabChange?: (tab: 'collection' | 'phub' | 'jav') => void
+  tabQueries?: { collection: string; phub: string; jav: string }
+  onTabQueriesChange?: React.Dispatch<
+    React.SetStateAction<{ collection: string; phub: string; jav: string }>
+  >
   onOpenDetail: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSelectProfile?: (name: string) => void
@@ -13171,6 +13204,8 @@ function LordScreen({
   profiles: _profiles = [],
   activeTab: activeTabProp = 'collection',
   onTabChange,
+  tabQueries: tabQueriesProp,
+  onTabQueriesChange,
   onOpenDetail,
   onPlay,
   onSelectProfile: _onSelectProfile,
@@ -13199,11 +13234,13 @@ function LordScreen({
     setInternalTab(tab)
     onTabChange?.(tab)
   }
-  const [tabQueries, setTabQueries] = useState({
+  const [internalTabQueries, setInternalTabQueries] = useState({
     collection: '',
     phub: '',
     jav: '',
   })
+  const tabQueries = tabQueriesProp ?? internalTabQueries
+  const setTabQueries = onTabQueriesChange ?? setInternalTabQueries
   const [searchFocused, setSearchFocused] = useState(false)
 
   const currentQuery = tabQueries[activeLordTab]
@@ -13980,9 +14017,15 @@ function LordPhubSection({
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return []
     const q = searchQuery.trim().toLowerCase()
-    return videos.filter(
-      (v) => v.title.toLowerCase().includes(q) || v.category.toLowerCase().includes(q),
+    const filtered = videos.filter(
+      (v) =>
+        v.title.toLowerCase().includes(q) ||
+        v.category.toLowerCase().includes(q) ||
+        (v.actors && v.actors.some((a) => a.toLowerCase().includes(q))) ||
+        (v.code && v.code.toLowerCase().includes(q)) ||
+        (v.description && v.description.toLowerCase().includes(q)),
     )
+    return filtered.length > 0 ? filtered : videos
   }, [videos, searchQuery])
 
   const filteredVideos = useMemo(() => {
