@@ -1871,7 +1871,140 @@ function extractFranchisePrefix(title: string): string {
 async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
   if (!movie) return []
 
-  // 1. Anime: fetch exact relations (Sequels, Prequels, Next Seasons, Side Stories) & Recommendations from AniList
+  const isJav = Boolean(
+    movie.isJav ||
+      movie.id.startsWith('jav-') ||
+      movie.label === 'JAV' ||
+      movie.hentaiSlug?.startsWith('jav-'),
+  )
+  const isPhub3 = Boolean(
+    movie.id.startsWith('phub3-') ||
+      movie.label === 'PHub 3' ||
+      movie.hentaiSlug?.startsWith('phub3-') ||
+      movie.embedUrl?.includes('eporner.com'),
+  )
+  const isPhub2 = Boolean(
+    !isPhub3 &&
+      (movie.embedUrl?.includes('upload18.net') ||
+        movie.embedUrl?.includes('xvidapi') ||
+        movie.hentaiSlug?.includes('xvidapi') ||
+        (movie.label === 'PHub' && /^\d+$/.test(movie.id.replace(/^phub-/, '')))),
+  )
+  const isPhub1 = Boolean(
+    !isPhub3 &&
+      !isPhub2 &&
+      (movie.id.startsWith('phub-') ||
+        movie.label === 'PHub' ||
+        movie.hentaiSlug?.startsWith('phub-')),
+  )
+
+  // 1. PHub 3 (Eporner API)
+  if (isPhub3) {
+    try {
+      const actor = movie.cast?.[0]?.trim()
+      const genre = movie.genres?.[0]?.trim()
+      const titleWords = (movie.title || '')
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 2 && !['the', 'and', 'with', 'from', 'for', 'hd', 'video'].includes(w.toLowerCase()))
+        .slice(0, 2)
+        .join(' ')
+      const query = actor || (genre && genre !== 'PHub 3' && genre !== 'HD Video' ? genre : '') || titleWords || 'all'
+      const data = await fetchEpornerApi({
+        query,
+        per_page: 12,
+        order: 'most-popular',
+        thumbsize: 'big',
+      })
+      if (data && Array.isArray(data.videos) && data.videos.length > 0) {
+        return data.videos
+          .map(epornerToMovieHelper)
+          .filter((m: Movie) => m.id !== movie.id)
+      }
+    } catch {}
+    const currentKeywords = (movie.genres || []).map((g) => g.toLowerCase())
+    return EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
+      .filter((m) => m.id !== movie.id)
+      .sort((a, b) => {
+        const aMatches = (a.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
+        const bMatches = (b.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
+        return bMatches - aMatches
+      })
+  }
+
+  // 2. PHub 2 (XVidAPI / Upload18)
+  if (isPhub2) {
+    try {
+      const actor = movie.cast?.[0]?.trim()
+      const genre = movie.genres?.[0]?.trim()
+      const titleWords = (movie.title || '')
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 2 && !['the', 'and', 'with', 'from', 'for', 'hd', 'video'].includes(w.toLowerCase()))
+        .slice(0, 2)
+        .join(' ')
+      const query = actor || (genre && genre !== 'PHub' && genre !== 'PHub 2' && genre !== '4K' ? genre : '') || titleWords || 'teen'
+      const res = await fetch(`https://xvidapi.com/api.php/provide/vod?ac=detail&at=json&wd=${encodeURIComponent(query)}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.list) && data.list.length > 0) {
+          return data.list
+            .map((item: any, idx: number) => hanimeToMovieHelper(normalizeVideoItem(item, idx)))
+            .filter((m: Movie) => m.id !== movie.id)
+        }
+      }
+    } catch {}
+    const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+    return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
+      .filter((m) => m.id !== movie.id)
+      .sort((a, b) => {
+        const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+        const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+        return bMatches - aMatches
+      })
+  }
+
+  // 3. PHub 1 (Porn API 4K)
+  if (isPhub1) {
+    try {
+      const actor = movie.cast?.[0]?.trim()
+      const genre = movie.genres?.[0]?.trim()
+      const catSlug = actor ? actor.toLowerCase().replace(/\s+/g, '-') : genre ? genre.toLowerCase().replace(/\s+/g, '-') : 'amateur'
+      let json = await fetchPornApi(`/categories/${encodeURIComponent(catSlug)}/movies`, { page: 1, limit: 12 })
+      if (!json?.data && !Array.isArray(json)) {
+        json = await fetchPornApi('/movies/filter', { categories: catSlug, page: 1, limit: 12 })
+      }
+      const payload = json?.data || json
+      const list: PornApiMovieItem[] = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : []
+      if (list.length > 0) {
+        return list
+          .map((item) => pornApiToMovieHelper(item))
+          .filter((m) => m.id !== movie.id)
+      }
+    } catch {}
+  }
+
+  // 4. JAV (apiJAV)
+  if (isJav) {
+    try {
+      const cat = movie.genres?.[0]
+      let url = 'https://server.apijav.com/wp-json/myvideo/v1/posts?per_page=12&orderby=views&order=DESC'
+      if (cat && cat !== 'All' && cat !== 'JAV') {
+        url += `&category=${encodeURIComponent(cat)}`
+      }
+      const res = await fetch(url)
+      if (res.ok) {
+        const data: JavPost[] = await res.json()
+        if (Array.isArray(data) && data.length > 0) {
+          return data
+            .map(javToMovieHelper)
+            .filter((m) => m.id !== movie.id)
+        }
+      }
+    } catch {}
+  }
+
+  // 5. Anime: fetch exact relations (Sequels, Prequels, Next Seasons, Side Stories) & Recommendations from AniList
   if (movie.isAnime || movie.anilistId || movie.id.startsWith('al-')) {
     const anilistId = movie.anilistId || (movie.id.startsWith('al-') ? Number(movie.id.replace('al-', '')) : undefined)
     if (anilistId) {
@@ -1886,7 +2019,7 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
     }
   }
 
-  // 2. Movie or TV Show: fetch TMDB collection parts, sequels, recommendations, and similar
+  // 6. Movie or TV Show: fetch TMDB collection parts, sequels, recommendations, and similar
   const tmdbId = movie.tmdbId
   const imdbId = movie.id.startsWith('tt') ? movie.id : undefined
   const isTv = movie.type === 'Series' || movie.tmdbType === 'tv' || isTvShow(movie)
@@ -6275,7 +6408,7 @@ function DetailScreen({
     return () => {
       active = false
     }
-  }, [movie.id, movie.anilistId, movie.tmdbId])
+  }, [movie.id, movie.title, movie.genres, movie.cast, movie.anilistId, movie.tmdbId])
 
   const relatedItems = useMemo(() => {
     const isAdultMovie = (m: Movie) =>
@@ -6284,23 +6417,27 @@ function DetailScreen({
           m.isHentaiOcean ||
           m.id.startsWith('jav-') ||
           m.id.startsWith('phub-') ||
+          m.id.startsWith('phub3-') ||
           m.label === 'JAV' ||
           m.label === 'PHub' ||
+          m.label === 'PHub 3' ||
           m.genres.some((g) => g.toLowerCase() === 'hentai'),
       )
 
+    const isTargetAdult = isAdultMovie(movie)
+
     const cleanRelated = (relatedMovies || []).filter(
-      (m) => m.id !== movie.id && !isAdultMovie(m),
+      (m) => m.id !== movie.id && (isTargetAdult ? isAdultMovie(m) : !isAdultMovie(m)),
     )
 
     const franchiseKey = extractFranchisePrefix(movie.title)
     const seenIds = new Set<string>([String(movie.id)])
     const combined: Movie[] = []
 
-    // 1. Live relations from AniList / TMDB (Sequels, Prequels, Next Seasons, Franchise Collection parts, Recommendations)
+    // 1. Live relations from AniList / TMDB / PHub 1 / PHub 2 / PHub 3 / JAV
     for (const item of liveRelated) {
       const idKey = String(item.id)
-      if (!seenIds.has(idKey) && !isAdultMovie(item)) {
+      if (!seenIds.has(idKey) && (isTargetAdult ? isAdultMovie(item) : !isAdultMovie(item))) {
         seenIds.add(idKey)
         combined.push(item)
       }
@@ -7699,23 +7836,6 @@ function WatchScreen({
       (movie.isHentaiOcean ||
         movie.genres.some((g) => g.toLowerCase() === 'hentai')),
   )
-
-  const similarPhubVideos = useMemo(() => {
-    if (!isPhubVideo) return []
-    const currentId = String(movie.id).replace('phub-', '')
-    const cat = (movie.genres && movie.genres[0]) || 'Teen'
-    const catLower = cat.toLowerCase()
-
-    const matched = INITIAL_HANIME_VIDEOS.filter(
-      (v) =>
-        String(v.id) !== currentId &&
-        (v.category.toLowerCase().includes(catLower) ||
-          v.title.toLowerCase().includes(catLower)),
-    )
-    const fallback = INITIAL_HANIME_VIDEOS.filter((v) => String(v.id) !== currentId)
-    const pool = matched.length >= 3 ? matched : fallback
-    return pool.slice(0, 10)
-  }, [isPhubVideo, movie.id, movie.genres])
   const isTmdbTitle = !isHentai && !isJavVideo && !isPhubVideo && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
   const isAnimeMovie =
     !isTmdbTitle &&
@@ -7901,11 +8021,6 @@ function WatchScreen({
 
   useEffect(() => {
     let active = true
-    if (isJavVideo || isPhubVideo) {
-      setLiveRelated([])
-      return
-    }
-
     void fetchRelatedTitlesForMovie(movie).then((items) => {
       if (active && items.length > 0) {
         setLiveRelated(items)
@@ -7915,7 +8030,7 @@ function WatchScreen({
     return () => {
       active = false
     }
-  }, [movie.id, movie.anilistId, movie.tmdbId, isJavVideo, isPhubVideo])
+  }, [movie.id, movie.title, movie.genres, movie.cast, movie.anilistId, movie.tmdbId, isJavVideo, isPhubVideo, isPhub2Video, isPhub3Video])
 
   const relatedList = useMemo(() => {
     const isAdultMovie = (m: Movie) =>
@@ -7924,27 +8039,51 @@ function WatchScreen({
           m.isHentaiOcean ||
           m.id.startsWith('jav-') ||
           m.id.startsWith('phub-') ||
+          m.id.startsWith('phub3-') ||
           m.label === 'JAV' ||
           m.label === 'PHub' ||
+          m.label === 'PHub 3' ||
           m.genres.some((g) => g.toLowerCase() === 'hentai'),
       )
 
-    if (isPhubVideo) {
+    // 1. Live related videos from provider / AniList / TMDB
+    if (liveRelated.length > 0) {
+      return liveRelated.slice(0, 8)
+    }
+
+    // 2. Provider-specific fallbacks matching current video's category/genre
+    if (isPhub3Video) {
+      const currentKeywords = (movie.genres || []).map((g) => g.toLowerCase())
+      return EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
+        .filter((m) => m.id !== movie.id)
+        .sort((a, b) => {
+          const aMatches = (a.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
+          const bMatches = (b.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
+          return bMatches - aMatches
+        })
+        .slice(0, 8)
+    }
+
+    if (isPhub2Video) {
+      const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+      return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
+        .filter((m) => m.id !== movie.id)
+        .sort((a, b) => {
+          const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+          const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+          return bMatches - aMatches
+        })
+        .slice(0, 8)
+    }
+
+    if (isPhub1Video) {
       if (phubRelated.length > 0) {
-        return phubRelated.slice(0, 5)
+        return phubRelated.slice(0, 8)
       }
-      let pool = similarPhubVideos.map(hanimeToMovieHelper)
-      if (pool.length < 15) {
-        const fallbackItems = INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper).filter(
-          (m) => m.id !== movie.id && !pool.some((p) => String(p.id) === String(m.id)),
-        )
-        pool = [...pool, ...fallbackItems]
-      }
-      return pool.slice(0, 5)
     }
 
     if (isJavVideo && javRelated.length > 0) {
-      return javRelated.slice(0, 5)
+      return javRelated.slice(0, 8)
     }
 
     const cleanRelated = (relatedMovies || []).filter(
@@ -7955,16 +8094,7 @@ function WatchScreen({
     const seenIds = new Set<string>([String(movie.id)])
     const combined: Movie[] = []
 
-    // 1. Live relations from AniList / TMDB (Sequels, Prequels, Next Seasons, Franchise Collection parts, Recommendations)
-    for (const item of liveRelated) {
-      const idKey = String(item.id)
-      if (!seenIds.has(idKey) && !isAdultMovie(item)) {
-        seenIds.add(idKey)
-        combined.push(item)
-      }
-    }
-
-    // 2. Franchise titles from local pool that share the same franchise base name
+    // 3. Franchise titles from local pool that share the same franchise base name
     if (franchiseKey && franchiseKey.length >= 3) {
       for (const item of cleanRelated) {
         const otherKey = extractFranchisePrefix(item.title)
@@ -7984,7 +8114,7 @@ function WatchScreen({
       }
     }
 
-    // 3. Fallback recommendations sorted by genre similarity
+    // 4. Fallback recommendations sorted by genre similarity
     const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
     const sortedFallback = [...cleanRelated]
       .filter((m) => !seenIds.has(String(m.id)))
@@ -8002,8 +8132,8 @@ function WatchScreen({
       }
     }
 
-    return combined.slice(0, 5)
-  }, [isPhubVideo, similarPhubVideos, isJavVideo, javRelated, movie.id, movie.title, movie.genres, liveRelated, relatedMovies])
+    return combined.slice(0, 8)
+  }, [liveRelated, isPhub3Video, isPhub2Video, isPhub1Video, phubRelated, isJavVideo, javRelated, movie.id, movie.title, movie.genres, relatedMovies])
 
   const renderYouTubeRelatedSidebar = () => {
     if (relatedList.length === 0) return null
