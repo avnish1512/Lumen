@@ -5713,7 +5713,20 @@ function DetailScreen({
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
 
+  const isHentaiMovie = Boolean(
+    movie.isHentaiOcean ||
+      movie.hentaiSlug ||
+      movie.id.startsWith('hentaiocean-') ||
+      movie.id.startsWith('phub-') ||
+      movie.id.startsWith('jav-') ||
+      movie.label === 'JAV' ||
+      movie.label === 'PHub' ||
+      movie.isJav ||
+      (movie.genres || []).some((g) => g.toLowerCase() === 'hentai'),
+  )
+
   useEffect(() => {
+    if (isHentaiMovie) return
     let active = true
     void getAllDownloads().then((items) => {
       if (active) {
@@ -5729,7 +5742,7 @@ function DetailScreen({
       active = false
       unsub()
     }
-  }, [movie.id])
+  }, [movie.id, isHentaiMovie])
 
   const handleDownloadClick = async () => {
     setIsDownloading(true)
@@ -6087,22 +6100,24 @@ function DetailScreen({
                   <Play fill="currentColor" strokeWidth={0} />
                   <span>Play</span>
                 </button>
-                <button
-                  className="detail-pill-button netflix-download-btn"
-                  type="button"
-                  onClick={handleDownloadClick}
-                  title={isDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
-                >
-                  {isDownloading ? (
-                    <LoaderCircle className="spin" size={16} />
-                  ) : isDownloaded ? (
-                    <Check size={16} />
-                  ) : (
-                    <Download size={16} />
-                  )}
-                  <span>{isDownloading ? 'Downloading...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
-                </button>
-                {isDesktop && (
+                {!isHentaiMovie && (
+                  <button
+                    className="detail-pill-button netflix-download-btn"
+                    type="button"
+                    onClick={handleDownloadClick}
+                    title={isDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
+                  >
+                    {isDownloading ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : isDownloaded ? (
+                      <Check size={16} />
+                    ) : (
+                      <Download size={16} />
+                    )}
+                    <span>{isDownloading ? 'Downloading...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
+                  </button>
+                )}
+                {!isHentaiMovie && isDesktop && (
                   <button
                     className="circle-action"
                     type="button"
@@ -6119,15 +6134,17 @@ function DetailScreen({
                       <Bell />
                       <span>Remind Me</span>
                     </button>
-                    <button
-                      type="button"
-                      className={`netflix-icon-action${isSaved ? ' active' : ''}`}
-                      onClick={onSave}
-                      title={isSaved ? 'Saved' : 'Add to My List'}
-                    >
-                      {isSaved ? <Check /> : <Plus />}
-                      <span>My List</span>
-                    </button>
+                    {!isHentaiMovie && (
+                      <button
+                        type="button"
+                        className={`netflix-icon-action${isSaved ? ' active' : ''}`}
+                        onClick={onSave}
+                        title={isSaved ? 'Saved' : 'Add to My List'}
+                      >
+                        {isSaved ? <Check /> : <Plus />}
+                        <span>My List</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="netflix-icon-action"
@@ -6156,29 +6173,33 @@ function DetailScreen({
                     {compactRuntime(movie.runtime)}
                   </strong>
                 </button>
-                <button
-                  className="detail-download-button"
-                  type="button"
-                  onClick={handleDownloadClick}
-                  title={isDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
-                >
-                  {isDownloading ? (
-                    <LoaderCircle className="spin" size={16} />
-                  ) : isDownloaded ? (
-                    <Check size={16} />
-                  ) : (
-                    <Download size={16} />
-                  )}
-                  <span>{isDownloading ? 'Downloading...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
-                </button>
-                <button
-                  className="circle-action"
-                  type="button"
-                  onClick={onSave}
-                  title={isSaved ? 'Saved' : 'Add to library'}
-                >
-                  {isSaved ? <Check /> : <Plus />}
-                </button>
+                {!isHentaiMovie && (
+                  <button
+                    className="detail-download-button"
+                    type="button"
+                    onClick={handleDownloadClick}
+                    title={isDownloaded ? 'Downloaded to Lumen' : 'Download for offline watching'}
+                  >
+                    {isDownloading ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : isDownloaded ? (
+                      <Check size={16} />
+                    ) : (
+                      <Download size={16} />
+                    )}
+                    <span>{isDownloading ? 'Downloading...' : isDownloaded ? 'Downloaded' : 'Download'}</span>
+                  </button>
+                )}
+                {!isHentaiMovie && (
+                  <button
+                    className="circle-action"
+                    type="button"
+                    onClick={onSave}
+                    title={isSaved ? 'Saved' : 'Add to library'}
+                  >
+                    {isSaved ? <Check /> : <Plus />}
+                  </button>
+                )}
               </>
             )}
           </div>
