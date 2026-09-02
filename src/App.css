@@ -16439,144 +16439,445 @@ body:has(.add-profile-screen),
   text-transform: capitalize;
 }
 
-/* ===== Lord (PIN-locked) profile ===== */
+/* ===== Lord Profile - OTP Verification v3 Modal (from otp verification.mp4) ===== */
+:root {
+  --ice: #dceaff;
+  --ok: #2ee6a8;
+  --bad: #ff4d6a;
+  --bg: #0b0c10;
+  --card-bg: #111317;
+  --slot-bg: #181b21;
+  --border-muted: rgba(255, 255, 255, 0.08);
+}
+
 .lord-pin-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
-.lord-pin-card {
+/* Window Frame */
+.window-frame {
+  width: 100%;
+  max-width: 580px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-muted);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.75);
   position: relative;
-  width: min(360px, 90vw);
-  padding: 32px 28px 28px;
-  border-radius: 22px;
-  background: rgba(28, 28, 30, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
-  text-align: center;
-  color: #fff;
+  animation: lordPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.lord-pin-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  display: inline-flex;
-  padding: 6px;
-  border: 0;
+@keyframes lordPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: #14171d;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.window-dots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.dot {
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.75);
-  cursor: pointer;
+  display: inline-block;
+  border: none;
 }
 
-.lord-pin-icon {
-  display: inline-flex;
+.dot--red {
+  background: #ff5f56;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.dot--red:hover {
+  transform: scale(1.15);
+  opacity: 0.85;
+}
+
+.dot--yellow {
+  background: #ffbd2e;
+}
+
+.dot--green {
+  background: #27c93f;
+}
+
+.window-title {
+  color: #9ca3af;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.window-host {
+  color: #6b7280;
+}
+
+/* Card */
+.lord-otp-card {
+  padding: 44px 32px 32px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.card__meta {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.card__title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 36px;
+  letter-spacing: -0.5px;
+}
+
+.verify-heading {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f3f4f6;
+  margin-bottom: 6px;
+}
+
+.verify-sub {
+  font-size: 13.5px;
+  color: #9ca3af;
+  margin-bottom: 32px;
+}
+
+/* OTP Slots Container & Orbit */
+.slots-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 120px;
+  margin-bottom: 24px;
+}
+
+.orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+
+.orbit.is-active {
+  opacity: 1;
+}
+
+.orbit__ring {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Dotted on purpose: a solid ring at this size reads as a loading spinner */
+.orbit__path {
+  fill: none;
+  stroke: rgba(220, 234, 255, 0.28);
+  stroke-dasharray: 2 8;
+  stroke-width: 1.5;
+  transition: stroke 0.3s cubic-bezier(0.32, 0.72, 0, 1), filter 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.orbit.is-active .orbit__path {
+  stroke: var(--ice);
+  filter: drop-shadow(0 0 6px var(--ice));
+}
+
+/* Central Hub */
+.orbit__hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ice);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+              width 0.4s ease, height 0.4s ease,
+              border-radius 0.4s ease, background 0.4s ease,
+              box-shadow 0.4s ease;
+  z-index: 10;
+}
+
+.orbit__hub.is-verified {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: rgba(46, 230, 168, 0.12);
+  border: 1.5px solid var(--ok);
+  box-shadow: 0 0 30px rgba(46, 230, 168, 0.35);
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.hub__check {
+  width: 28px;
+  height: 28px;
+  stroke: var(--ok);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.3s ease 0.15s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s;
+}
+
+.orbit__hub.is-verified .hub__check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Slot Labels & Inputs */
+.slots {
+  display: flex;
+  gap: 14px;
+  z-index: 2;
+}
+
+.slot {
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 58px;
-  height: 58px;
-  margin-bottom: 12px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  height: 66px;
+  background: var(--slot-bg);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  cursor: text;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
 }
 
-.lord-pin-card h2 {
-  margin: 0 0 4px;
-  font-size: 22px;
-  font-weight: 600;
+.slot:focus-within {
+  border-color: var(--ice);
+  box-shadow: 0 0 16px rgba(220, 234, 255, 0.15);
 }
 
-.lord-pin-card p {
-  margin: 0 0 20px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+.slot.is-filled {
+  border-color: rgba(220, 234, 255, 0.4);
 }
 
-.lord-pin-dots {
-  display: flex;
-  justify-content: center;
-  gap: 18px;
-  margin-bottom: 26px;
-}
-
-.lord-pin-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.lord-pin-dot.is-filled {
-  background: #fff;
-  border-color: #fff;
-}
-
-.lord-pin-dots.is-error {
+.slots.is-error {
   animation: lord-shake 0.4s ease;
 }
 
-.lord-pin-dots.is-error .lord-pin-dot {
-  border-color: #ff453a;
-  background: #ff453a;
+.slots.is-error .slot {
+  border-color: var(--bad) !important;
+  background: rgba(255, 77, 106, 0.12) !important;
+  box-shadow: 0 0 16px rgba(255, 77, 106, 0.3) !important;
+}
+
+.slot input {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 600;
+  color: #ffffff;
+  outline: none;
+  font-family: inherit;
+  caret-color: var(--ice);
+}
+
+/* Resend Text */
+.resend-text {
+  font-size: 13px;
+  color: #9ca3af;
+  margin-bottom: 24px;
+}
+
+.resend-text a {
+  color: #9ca3af;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.resend-text a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+/* iOS Autofill Suggestion */
+.autofill-banner {
+  display: flex;
+  align-items: center;
+  background: #191c24;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 10px 14px;
+  margin: 0 auto 16px;
+  max-width: 380px;
+  text-align: left;
+  box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  box-sizing: border-box;
+}
+
+.autofill-banner.is-hidden {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+.banner-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  margin-right: 12px;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.banner-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.banner-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.banner-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+
+.banner-code {
+  font-size: 13px;
+  color: #e5e7eb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-fill {
+  background: #ffffff;
+  color: #000000;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-fill:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+}
+
+.helper-note {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 @keyframes lord-shake {
-
   0%,
   100% {
     transform: translateX(0);
   }
 
-  25% {
+  20%,
+  60% {
     transform: translateX(-8px);
   }
 
-  75% {
+  40%,
+  80% {
     transform: translateX(8px);
   }
 }
 
-.lord-pin-pad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  max-width: 260px;
-  margin: 0 auto;
-}
+/* Mobile Responsiveness for OTP Window */
+@media (max-width: 600px) {
+  .lord-otp-card {
+    padding: 32px 18px 24px;
+  }
 
-.lord-pin-key {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 64px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  font-size: 26px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
-}
+  .card__title {
+    font-size: 22px;
+    margin-bottom: 24px;
+  }
 
-.lord-pin-key:active {
-  background: rgba(255, 255, 255, 0.22);
-  transform: scale(0.96);
-}
+  .verify-heading {
+    font-size: 18px;
+  }
 
-.lord-pin-key-empty {
-  background: transparent;
-  pointer-events: none;
+  .verify-sub {
+    font-size: 12.5px;
+    margin-bottom: 24px;
+  }
+
+  .slots {
+    gap: 10px;
+  }
+
+  .slot {
+    width: clamp(48px, 14vw, 58px);
+    height: clamp(56px, 16vw, 66px);
+  }
+
+  .slot input {
+    font-size: clamp(22px, 6.5vw, 26px);
+  }
+
+  .autofill-banner {
+    padding: 8px 12px;
+  }
 }
 
 .lord-pin-key-action {
