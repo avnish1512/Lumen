@@ -19400,39 +19400,46 @@ font-size: 11px;
   margin-left: 10px;
 }
 
-/* JAV Card Grid - Larger video box sizes */
+/* JAV & PHub Card Grid - Larger cinematic video box sizes */
 .jav-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 28px;
-  margin-bottom: 40px;
+  grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+  gap: 32px;
+  margin-bottom: 48px;
 }
 
-@media (min-width: 1300px) {
+@media (min-width: 900px) and (max-width: 1399px) {
+  .jav-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+  }
+}
+
+@media (min-width: 1400px) {
   .jav-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 32px;
   }
 }
 
-@media (min-width: 1750px) {
+@media (min-width: 1920px) {
   .jav-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 36px;
   }
 }
 
 @media (max-width: 899px) {
   .jav-grid {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 18px;
+    grid-template-columns: 1fr;
+    gap: 24px;
   }
 }
 
 .jav-card {
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -19441,9 +19448,9 @@ font-size: 11px;
 }
 
 .jav-card:hover {
-  transform: translateY(-6px);
-  border-color: rgba(244, 63, 94, 0.4);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5), 0 0 15px rgba(244, 63, 94, 0.15);
+  transform: translateY(-8px);
+  border-color: rgba(244, 63, 94, 0.45);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(244, 63, 94, 0.2);
 }
 
 .jav-thumb-container {
@@ -19467,46 +19474,46 @@ font-size: 11px;
 
 .jav-code-badge {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  background: rgba(0, 0, 0, 0.85);
-  border: 1px solid rgba(244, 63, 94, 0.5);
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.88);
+  border: 1px solid rgba(244, 63, 94, 0.55);
   color: #f43f5e;
   font-family: 'Fira Code', 'Consolas', monospace;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: 5px 12px;
+  border-radius: 7px;
   letter-spacing: 0.5px;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
   z-index: 2;
 }
 
 .jav-hd-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 10px;
+  right: 10px;
   background: linear-gradient(135deg, #e11d48, #9333ea);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 5px;
   letter-spacing: 0.5px;
   z-index: 2;
 }
 
 .jav-duration-badge {
   position: absolute;
-  bottom: 8px;
-  right: 8px;
-  background: rgba(0, 0, 0, 0.8);
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.85);
   color: #f1f5f9;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
-  backdrop-filter: blur(4px);
+  padding: 3px 8px;
+  border-radius: 5px;
+  backdrop-filter: blur(6px);
   z-index: 2;
 }
 
@@ -19517,7 +19524,7 @@ font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 14px;
   opacity: 0;
   transition: opacity 0.25s ease;
   z-index: 3;
@@ -19528,8 +19535,8 @@ font-size: 11px;
 }
 
 .jav-play-btn {
-  width: 52px;
-  height: 52px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   background: #f43f5e;
   border: none;
@@ -19538,7 +19545,7 @@ font-size: 11px;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.6);
+  box-shadow: 0 4px 18px rgba(244, 63, 94, 0.65);
   transition: transform 0.2s ease, background 0.2s ease;
 }
 
@@ -19548,8 +19555,8 @@ font-size: 11px;
 }
 
 .jav-info-btn {
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -19568,33 +19575,33 @@ font-size: 11px;
 }
 
 .jav-card-body {
-  padding: 16px 18px;
+  padding: 18px 22px;
   display: flex;
   flex-direction: column;
   flex: 1;
 }
 
 .jav-card-title {
-  font-size: 16px;
+  font-size: 17.5px;
   font-weight: 600;
   color: #f8fafc;
   margin: 0 0 12px;
-  line-height: 1.4;
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  height: 46px;
+  min-height: 48px;
 }
 
 .jav-card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 13px;
   color: #94a3b8;
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -19614,14 +19621,14 @@ font-size: 11px;
 .jav-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
+  gap: 5px;
+  margin-top: 10px;
 }
 
 .jav-tag {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 5px;
   background: rgba(255, 255, 255, 0.06);
   color: #94a3b8;
 }
@@ -19737,13 +19744,19 @@ font-size: 11px;
   }
 
   .jav-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 12px;
+    grid-template-columns: 1fr !important;
+    gap: 22px !important;
   }
 
   .jav-card-title {
-    font-size: 12px;
-    height: 34px;
+    font-size: 16px !important;
+    line-height: 1.4 !important;
+    height: auto !important;
+    min-height: 44px !important;
+  }
+
+  .jav-card-body {
+    padding: 16px 18px !important;
   }
 }
 
