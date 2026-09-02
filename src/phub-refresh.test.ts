@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fetchGlobalPhubSeed, updateGlobalPhubSeed } from './profiles-api'
 
 describe('PHub Admin Refresh and Seed Sync', () => {
-  const originalFetch = global.fetch
+  const originalFetch = globalThis.fetch
 
   beforeEach(() => {
     localStorage.clear()
@@ -10,7 +10,7 @@ describe('PHub Admin Refresh and Seed Sync', () => {
   })
 
   afterEach(() => {
-    global.fetch = originalFetch
+    globalThis.fetch = originalFetch
     vi.restoreAllMocks()
   })
 
@@ -19,7 +19,7 @@ describe('PHub Admin Refresh and Seed Sync', () => {
     const nonAdminEmail = 'user@example.com'
 
     // Mock fetch for updateGlobalPhubSeed
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true, seed: 998877 }),
     } as Response)
@@ -27,13 +27,13 @@ describe('PHub Admin Refresh and Seed Sync', () => {
     // Non-admin should be rejected immediately without calling API
     const nonAdminResult = await updateGlobalPhubSeed(nonAdminEmail, 12345)
     expect(nonAdminResult.ok).toBe(false)
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(globalThis.fetch).not.toHaveBeenCalled()
 
     // Admin should proceed with API call
     const adminResult = await updateGlobalPhubSeed(adminEmail, 998877)
     expect(adminResult.ok).toBe(true)
     expect(adminResult.seed).toBe(998877)
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/phub-refresh',
       expect.objectContaining({
         method: 'POST',
@@ -47,18 +47,18 @@ describe('PHub Admin Refresh and Seed Sync', () => {
   })
 
   it('correctly retrieves global PHub seed from server', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true, seed: 445566 }),
     } as Response)
 
     const seed = await fetchGlobalPhubSeed()
     expect(seed).toBe(445566)
-    expect(global.fetch).toHaveBeenCalledWith('/api/phub-refresh')
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/phub-refresh')
   })
 
   it('handles server errors gracefully when fetching global PHub seed', async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
 
     const seed = await fetchGlobalPhubSeed()
     expect(seed).toBeNull()
