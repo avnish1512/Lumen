@@ -17201,32 +17201,56 @@ body:has(.add-profile-screen),
 }
 
 /* Rails */
-.lord-rails {
-  padding: 8px 32px 64px;
+.lord-rails,
+.lord-rails-list {
   display: flex;
   flex-direction: column;
   gap: 28px;
-  margin-top: -60px;
-  position: relative;
-  z-index: 2;
   width: 100%;
   box-sizing: border-box;
 }
 
-.lord-rails .continue-rail {
-  padding: 0 !important;
-  background: transparent !important;
+.lord-rail {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 24px;
 }
 
-.lord-rails .continue-row {
-  padding-left: 0 !important;
+.lord-rails .continue-rail,
+.lord-screen .continue-rail {
+  padding: 0 !important;
+  background: transparent !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.lord-screen .continue-rail .rail-header,
+.lord-screen .continue-rail .rail-heading {
+  padding-left: clamp(16px, 2.5vw, 32px) !important;
+  padding-right: clamp(16px, 2.5vw, 32px) !important;
+}
+
+.lord-rails .continue-row,
+.lord-screen .continue-rail .continue-row {
+  padding-left: clamp(16px, 2.5vw, 32px) !important;
+  padding-right: clamp(16px, 2.5vw, 32px) !important;
   margin-left: 0 !important;
+}
+
+.lord-screen .continue-rail .rail-arrow-prev {
+  left: clamp(4px, 1.5vw, 16px) !important;
+}
+
+.lord-screen .continue-rail .rail-arrow-next {
+  right: clamp(4px, 1.5vw, 16px) !important;
 }
 
 .lord-rail-title {
   margin: 0 0 12px;
   font-size: 20px;
   font-weight: 700;
+  padding-left: clamp(16px, 2.5vw, 32px);
+  padding-right: clamp(16px, 2.5vw, 32px);
 }
 
 .lord-rail-viewport {
@@ -17248,11 +17272,11 @@ body:has(.add-profile-screen),
 }
 
 .lord-rail-viewport .lord-rail-arrow.rail-arrow-prev {
-  left: -12px;
+  left: clamp(4px, 1.5vw, 16px);
 }
 
 .lord-rail-viewport .lord-rail-arrow.rail-arrow-next {
-  right: -12px;
+  right: clamp(4px, 1.5vw, 16px);
 }
 
 .lord-rail-row {
@@ -17260,11 +17284,14 @@ body:has(.add-profile-screen),
   gap: 18px;
   overflow-x: auto;
   padding-bottom: 12px;
+  padding-left: clamp(16px, 2.5vw, 32px);
+  padding-right: clamp(16px, 2.5vw, 32px);
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x pan-y;
   overscroll-behavior-x: contain;
+  box-sizing: border-box;
 }
 
 .lord-rail-row::-webkit-scrollbar {
