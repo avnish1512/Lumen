@@ -16645,7 +16645,8 @@ body:has(.add-profile-screen),
 }
 
 .lord-incognito-btn,
-.lord-clear-btn {
+.lord-clear-btn,
+.lord-refresh-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -16702,7 +16703,8 @@ body:has(.add-profile-screen),
   }
 
   .lord-incognito-btn,
-  .lord-clear-btn {
+  .lord-clear-btn,
+  .lord-refresh-btn {
     width: 42px;
     height: 42px;
     min-width: 42px;
@@ -16717,12 +16719,14 @@ body:has(.add-profile-screen),
   }
 
   .lord-incognito-btn span,
-  .lord-clear-btn span {
+  .lord-clear-btn span,
+  .lord-refresh-btn span {
     display: none !important;
   }
 
   .lord-incognito-btn svg,
-  .lord-clear-btn svg {
+  .lord-clear-btn svg,
+  .lord-refresh-btn svg {
     width: 22px;
     height: 22px;
     margin: 0;
@@ -16805,13 +16809,15 @@ body:has(.add-profile-screen),
 }
 
 .lord-incognito-btn:hover,
-.lord-clear-btn:hover:not(:disabled) {
+.lord-clear-btn:hover:not(:disabled),
+.lord-refresh-btn:hover:not(:disabled) {
   background: rgba(229, 9, 20, 0.85);
   border-color: rgba(229, 9, 20, 0.9);
   transform: scale(1.03);
 }
 
-.lord-clear-btn:disabled {
+.lord-clear-btn:disabled,
+.lord-refresh-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -20597,6 +20603,8 @@ font-size: 11px;
   margin-top: 4px;
   margin-bottom: 0;
 }
+
+
 
 .downloads-storage-pill {
   display: inline-flex;
