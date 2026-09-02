@@ -110,6 +110,8 @@ import {
   saveRemoteLordPin,
   fetchRemoteWatchHistory,
   saveRemoteWatchHistory,
+  fetchGlobalPhubSeed,
+  updateGlobalPhubSeed,
 } from './profiles-api'
 import {
   acceptInvite,
@@ -5056,6 +5058,7 @@ function App() {
             savedMovies={savedLordList}
             savedPhubMovies={savedPhubList}
             savedJavMovies={savedJavList}
+            currentUser={currentUser}
             activeTab={activeLordTab}
             onTabChange={setActiveLordTab}
             tabQueries={lordTabQueries}
@@ -13938,7 +13941,7 @@ function LordScreen({
   savedMovies = [],
   savedPhubMovies = [],
   savedJavMovies = [],
-  currentUser: _currentUser,
+  currentUser,
   profiles: _profiles = [],
   activeTab: activeTabProp = 'collection',
   onTabChange,
@@ -14192,6 +14195,7 @@ function LordScreen({
           searchQuery={tabQueries.phub}
           continueMovies={continueMovies}
           savedMovies={savedPhubMovies}
+          currentUser={currentUser}
           onOpenDetail={onOpenDetail}
           onPlay={onPlay}
           onMarkWatched={onMarkWatched}
@@ -14205,6 +14209,7 @@ function LordScreen({
           searchQuery={tabQueries.phub2}
           continueMovies={continueMovies}
           savedMovies={savedPhubMovies}
+          currentUser={currentUser}
           onOpenDetail={onOpenDetail}
           onPlay={onPlay}
           onMarkWatched={onMarkWatched}
@@ -14218,6 +14223,7 @@ function LordScreen({
           searchQuery={tabQueries.phub3}
           continueMovies={continueMovies}
           savedMovies={savedPhubMovies}
+          currentUser={currentUser}
           onOpenDetail={onOpenDetail}
           onPlay={onPlay}
           onMarkWatched={onMarkWatched}
@@ -14824,6 +14830,7 @@ function LordPhubSection({
   searchQuery = '',
   continueMovies = [],
   savedMovies = [],
+  currentUser,
   onOpenDetail,
   onPlay,
   onMarkWatched,
@@ -14834,6 +14841,7 @@ function LordPhubSection({
   searchQuery?: string
   continueMovies?: Movie[]
   savedMovies?: Movie[]
+  currentUser?: UserInfo | null
   onOpenDetail?: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onMarkWatched?: (movie: Movie) => void
@@ -14844,6 +14852,64 @@ function LordPhubSection({
   const isXvid = serverMode === 'xvidapi'
   const isEporner = serverMode === 'eporner'
   const activeCategories = isEporner ? PHUB3_CATEGORIES : isXvid ? PHUB2_CATEGORIES : PHUB1_CATEGORIES
+
+  const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
+  const [phubSeed, setPhubSeed] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('lumen_phub_seed')
+      return stored ? Number(stored) || 0 : 0
+    } catch {
+      return 0
+    }
+  })
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null)
+
+  // Synchronize global PHub refresh seed across all users on mount and window focus
+  useEffect(() => {
+    let active = true
+    async function syncSeed() {
+      const remoteSeed = await fetchGlobalPhubSeed()
+      if (active && typeof remoteSeed === 'number' && remoteSeed > 0) {
+        setPhubSeed(remoteSeed)
+        try {
+          localStorage.setItem('lumen_phub_seed', String(remoteSeed))
+        } catch {}
+      }
+    }
+    void syncSeed()
+
+    const onFocus = () => {
+      void syncSeed()
+    }
+    window.addEventListener('focus', onFocus)
+    const interval = setInterval(syncSeed, 30_000)
+
+    return () => {
+      active = false
+      window.removeEventListener('focus', onFocus)
+      clearInterval(interval)
+    }
+  }, [])
+
+  const handleAdminRefresh = async () => {
+    if (!isAdmin || isRefreshing) return
+    setIsRefreshing(true)
+    setRefreshNotice(null)
+    try {
+      const newSeed = (Date.now() % 1000000) + Math.floor(Math.random() * 1000) + 1
+      const res = await updateGlobalPhubSeed('avnishpc00@gmail.com', newSeed)
+      const finalSeed = res.ok && typeof res.seed === 'number' ? res.seed : newSeed
+      setPhubSeed(finalSeed)
+      try {
+        localStorage.setItem('lumen_phub_seed', String(finalSeed))
+      } catch {}
+      setRefreshNotice('PHub hero & home section videos refreshed for all users!')
+      setTimeout(() => setRefreshNotice(null), 4000)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const getInitialMovies = useCallback((): PornApiMovieItem[] => {
     if (isEporner) {
@@ -15118,8 +15184,9 @@ function LordPhubSection({
 
   const rotatedVideos = useMemo(() => {
     if (isSearching) return pornMovies
-    return rotateByDailySeed(pornMovies, (getDailySeed() % 17) + 3)
-  }, [pornMovies, isSearching])
+    const totalOffset = (getDailySeed() % 17) + 3 + (phubSeed % 97)
+    return rotateByDailySeed(pornMovies, totalOffset)
+  }, [pornMovies, isSearching, phubSeed])
 
   const displayVideos = isSearching
     ? (searchResults.length > 0 ? searchResults : pornMovies)
@@ -15347,8 +15414,30 @@ function LordPhubSection({
               >
                 {isXvid ? 'Top Rated' : 'Top 4K'}
               </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  className={`phub-admin-refresh-btn${isRefreshing ? ' is-refreshing' : ''}`}
+                  onClick={() => void handleAdminRefresh()}
+                  disabled={isRefreshing}
+                  title="Admin: Refresh Hero & Section videos for all users"
+                  aria-label="Refresh PHub videos for all users"
+                >
+                  <RefreshCcw size={13} className={isRefreshing ? 'spin-icon' : ''} />
+                  <span>{isRefreshing ? 'Refreshing…' : 'Refresh Videos'}</span>
+                  <span className="phub-admin-tag">Admin</span>
+                </button>
+              )}
             </div>
           </div>
+
+          {refreshNotice && (
+            <div className="phub-refresh-toast" role="status">
+              <Sparkles size={14} />
+              <span>{refreshNotice}</span>
+            </div>
+          )}
 
           <div className="jav-meta-header">
             <h2 className="lord-rail-title">

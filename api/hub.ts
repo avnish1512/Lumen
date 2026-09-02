@@ -60,6 +60,7 @@ import {
 
 const inMemoryProfilesMap = new Map<string, StoredProfile[]>()
 let globalLordPin = '1408'
+let globalPhubRefreshSeed = 0
 
 type QueryValue = string | string[] | undefined
 
@@ -534,6 +535,61 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(200).json({ ok: true })
     } catch (error) {
       res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Lord PIN error.' })
+    }
+    return
+  }
+
+  // ---- phub-refresh ----
+  if (kind === 'phub-refresh' || kind === 'phub-seed') {
+    res.setHeader('Cache-Control', 'no-store')
+    try {
+      if (req.method === 'GET') {
+        let seed = globalPhubRefreshSeed
+        if (config) {
+          try {
+            const remoteSeed = await fetchAccountProfiles(config, 'global_phub_refresh')
+            if (remoteSeed && remoteSeed.length > 0 && remoteSeed[0].name) {
+              const parsed = Number(remoteSeed[0].name)
+              if (!Number.isNaN(parsed)) {
+                seed = parsed
+                globalPhubRefreshSeed = parsed
+              }
+            }
+          } catch {}
+        }
+        res.status(200).json({ ok: true, seed, updatedAt: new Date().toISOString() })
+        return
+      }
+
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const bodyAdminEmail = String(body.adminEmail ?? '').trim().toLowerCase()
+        const isAuthorizedEmail = bodyAdminEmail === 'avnishpc00@gmail.com' || bodyAdminEmail === adminEmailFromEnv(env)
+        const isAuthorizedKey = await adminAuthorized(env, config, req, body)
+
+        if (!isAuthorizedEmail && !isAuthorizedKey) {
+          res.status(403).json({ ok: false, error: 'Only admin avnishpc00@gmail.com can refresh PHub videos.' })
+          return
+        }
+
+        let newSeed = typeof body.seed === 'number' ? body.seed : Number(body.seed)
+        if (Number.isNaN(newSeed) || !newSeed) {
+          newSeed = (Date.now() % 1000000) + Math.floor(Math.random() * 1000) + 1
+        }
+
+        globalPhubRefreshSeed = newSeed
+        if (config) {
+          try {
+            await saveAccountProfiles(config, 'global_phub_refresh', [
+              { name: String(newSeed), avatarColor: String(Date.now()) },
+            ])
+          } catch {}
+        }
+        res.status(200).json({ ok: true, seed: newSeed, updatedAt: new Date().toISOString() })
+        return
+      }
+      res.status(405).json({ ok: false, error: 'Method not allowed.' })
+    } catch (error) {
+      res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'PHub refresh error.' })
     }
     return
   }

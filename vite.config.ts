@@ -1548,6 +1548,69 @@ function profilesDevProxy(env: Record<string, string | undefined>): Plugin {
           sendJson(res, 500, { ok: false, error: 'Error processing Lord PIN.' })
         }
       })
+
+      let devPhubRefreshSeed = 0
+      server.middlewares.use('/api/phub-refresh', async (req: IncomingMessage, res) => {
+        const config = supabaseConfigFromEnv(env)
+        try {
+          if (req.method === 'GET') {
+            let seed = devPhubRefreshSeed
+            if (config) {
+              try {
+                const remoteSeed = await fetchAccountProfiles(config, 'global_phub_refresh')
+                if (remoteSeed && remoteSeed.length > 0 && remoteSeed[0].name) {
+                  const parsed = Number(remoteSeed[0].name)
+                  if (!Number.isNaN(parsed)) {
+                    seed = parsed
+                    devPhubRefreshSeed = parsed
+                  }
+                }
+              } catch {
+                // ignore fetch failure
+              }
+            }
+            sendJson(res, 200, { ok: true, seed, updatedAt: new Date().toISOString() })
+            return
+          }
+          if (req.method === 'POST' || req.method === 'PUT') {
+            const chunks: Buffer[] = []
+            for await (const chunk of req) {
+              chunks.push(chunk as Buffer)
+            }
+            const raw = Buffer.concat(chunks).toString('utf8')
+            const body = raw ? (JSON.parse(raw) as { adminEmail?: string; seed?: number; adminKey?: string }) : {}
+            const bodyAdminEmail = String(body.adminEmail ?? '').trim().toLowerCase()
+            const isAuthorizedEmail = bodyAdminEmail === 'avnishpc00@gmail.com' || bodyAdminEmail === adminEmailFromEnv(env)
+            const isAuthorizedKey = await devAdminAuthorized(env, req, body)
+
+            if (!isAuthorizedEmail && !isAuthorizedKey) {
+              sendJson(res, 403, { ok: false, error: 'Only admin avnishpc00@gmail.com can refresh PHub videos.' })
+              return
+            }
+
+            let newSeed = typeof body.seed === 'number' ? body.seed : Number(body.seed)
+            if (Number.isNaN(newSeed) || !newSeed) {
+              newSeed = (Date.now() % 1000000) + Math.floor(Math.random() * 1000) + 1
+            }
+
+            devPhubRefreshSeed = newSeed
+            if (config) {
+              try {
+                await saveAccountProfiles(config, 'global_phub_refresh', [
+                  { name: String(newSeed), avatarColor: String(Date.now()) },
+                ])
+              } catch {
+                // ignore save failure
+              }
+            }
+            sendJson(res, 200, { ok: true, seed: newSeed, updatedAt: new Date().toISOString() })
+            return
+          }
+          sendJson(res, 405, { ok: false, error: 'Method not allowed.' })
+        } catch {
+          sendJson(res, 500, { ok: false, error: 'Error processing PHub refresh.' })
+        }
+      })
     },
   }
 }

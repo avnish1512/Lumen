@@ -136,3 +136,54 @@ export async function saveRemoteLordPin(
     return false
   }
 }
+
+// Fetch the synchronized global PHub refresh seed across all users.
+export async function fetchGlobalPhubSeed(): Promise<number | null> {
+  try {
+    const response = await fetch('/api/phub-refresh')
+    if (!response.ok) return null
+    const body = (await response.json()) as { ok?: boolean; seed?: number | string }
+    if (typeof body.seed === 'number') return body.seed
+    if (typeof body.seed === 'string') {
+      const parsed = Number(body.seed)
+      if (!Number.isNaN(parsed)) return parsed
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// Update the global PHub refresh seed (restricted to admin avnishpc00@gmail.com).
+export async function updateGlobalPhubSeed(
+  adminEmail: string,
+  newSeed?: number,
+): Promise<{ ok: boolean; seed?: number }> {
+  if (!adminEmail || adminEmail.toLowerCase() !== 'avnishpc00@gmail.com') {
+    return { ok: false }
+  }
+
+  try {
+    const adminKey = (() => {
+      try {
+        return sessionStorage.getItem('lumen_admin_key') ?? ''
+      } catch {
+        return ''
+      }
+    })()
+    const targetSeed = newSeed ?? (Date.now() % 1000000) + Math.floor(Math.random() * 1000) + 1
+    const response = await fetch('/api/phub-refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+      body: JSON.stringify({ adminEmail, seed: targetSeed, adminKey }),
+    })
+    const body = (await response.json()) as { ok?: boolean; seed?: number }
+    if (response.ok && body.ok) {
+      return { ok: true, seed: body.seed ?? targetSeed }
+    }
+    return { ok: false }
+  } catch {
+    return { ok: false }
+  }
+}
+

@@ -19239,6 +19239,79 @@ font-size: 11px;
   border-color: rgba(244, 63, 94, 0.4);
 }
 
+/* PHub Admin Refresh Button */
+.phub-admin-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.2) 0%, rgba(190, 18, 60, 0.3) 100%);
+  color: #fecdd3;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 10px rgba(225, 29, 72, 0.2);
+  user-select: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  margin-left: 6px;
+}
+
+.phub-admin-refresh-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.45) 0%, rgba(190, 18, 60, 0.55) 100%);
+  border-color: rgba(244, 63, 94, 0.85);
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(225, 29, 72, 0.45);
+  transform: translateY(-1px);
+}
+
+.phub-admin-refresh-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(225, 29, 72, 0.3);
+}
+
+.phub-admin-refresh-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.phub-admin-refresh-btn.is-refreshing .spin-icon {
+  animation: spin 0.8s linear infinite;
+}
+
+.phub-admin-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 4px;
+  background: #e11d48;
+  color: #ffffff;
+  margin-left: 2px;
+}
+
+/* PHub Refresh Toast Notification */
+.phub-refresh-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+  border: 1px solid rgba(244, 63, 94, 0.5);
+  box-shadow: 0 8px 24px rgba(225, 29, 72, 0.25);
+  color: #fbcfe8;
+  font-size: 13px;
+  font-weight: 500;
+  animation: fadeIn 0.3s ease-out;
+}
+
 .jav-meta-header {
   margin-bottom: 20px;
 }
