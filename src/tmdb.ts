@@ -983,15 +983,21 @@ export function buildStreamUrl(
   }
 
   // 2. Explicit PHub (1 & 2) videos
-  if (movie.label === 'PHub' || movie.id.startsWith('phub-') || (movie.hentaiSlug && movie.hentaiSlug.startsWith('phub-'))) {
-    if (provider === 'upload18' || movie.embedUrl?.includes('upload18.net') || movie.embedUrl?.includes('xvidapi')) {
-      const cleanSlug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+  if (
+    movie.label === 'PHub' ||
+    movie.label === 'PHub 2' ||
+    movie.id.startsWith('phub-') ||
+    movie.id.startsWith('phub2-') ||
+    (movie.hentaiSlug && (movie.hentaiSlug.startsWith('phub-') || movie.hentaiSlug.startsWith('phub2-')))
+  ) {
+    if (provider === 'upload18' || movie.embedUrl?.includes('upload18.net') || movie.embedUrl?.includes('xvidapi') || movie.label === 'PHub 2' || movie.id.startsWith('phub2-')) {
+      const cleanSlug = movie.hentaiSlug?.replace(/^phub2-|^phub-/, '') || movie.id.replace(/^phub2-|^phub-/, '')
       return `https://upload18.net/play/index/xvidapi-${cleanSlug}`
     }
     if (movie.embedUrl) {
       return movie.embedUrl
     }
-    const cleanSlug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+    const cleanSlug = movie.hentaiSlug?.replace(/^phub2-|^phub-/, '') || movie.id.replace(/^phub2-|^phub-/, '')
     return `https://upload18.net/play/index/xvidapi-${cleanSlug}`
   }
 
@@ -1027,7 +1033,11 @@ export function buildStreamUrl(
       movie.isJav ||
       rawUrl.includes('apijav.com') ||
       movie.label === 'PHub' ||
+      movie.label === 'PHub 2' ||
+      movie.label === 'PHub 3' ||
       movie.id.startsWith('phub-') ||
+      movie.id.startsWith('phub2-') ||
+      movie.id.startsWith('phub3-') ||
       rawUrl.includes('upload18.net') ||
       rawUrl.includes('sex-api.com') ||
       rawUrl.includes('porn-api.com') ||

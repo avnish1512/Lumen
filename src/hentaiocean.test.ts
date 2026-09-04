@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildStreamUrl, streamProviderOptions } from './tmdb'
 import type { Movie } from './omdb'
+import { isPhubMovie, isPhub1Movie, isPhub2Movie, isPhub3Movie, isJavMovie, isHentaiMovie, isLordAdultMovie } from './App'
 
 describe('Hentai Ocean integration', () => {
   it('builds embed player URL for Hentai Ocean titles with explicit embedUrl', () => {
@@ -478,5 +479,348 @@ describe('Hentai Ocean integration', () => {
     expect(lordMyList).toEqual([hentaiMovie])
     expect(publicLibrarySaved).toEqual([regularMovie])
   })
+
+  it('correctly isolates continue watching history so Lord content only appears on Lord page', () => {
+    const normalMovie: Movie = {
+      id: 'tt1375666',
+      title: 'Inception',
+      genres: ['Action', 'Sci-Fi'],
+      rank: 1,
+      logoTitle: 'Inception',
+      label: 'Movie',
+      type: 'Movie',
+      year: '2010',
+      runtime: '148 min',
+      rating: '8.8',
+      maturity: 'PG-13',
+      progress: 45,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const hentaiMovie: Movie = {
+      id: 'hentaiocean-test-1',
+      isHentaiOcean: true,
+      title: 'Test Hentai',
+      genres: ['Hentai', 'Adult'],
+      rank: 2,
+      logoTitle: 'Test Hentai',
+      label: 'Hentai',
+      type: 'Anime',
+      year: '2026',
+      runtime: '24 min',
+      rating: '9.0',
+      maturity: '18+',
+      progress: 30,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const phubMovie: Movie = {
+      id: 'phub-blonde-yoga-joi',
+      title: 'PHub Video 1',
+      label: 'PHub',
+      type: 'PHub Video',
+      genres: ['PHub', '4K Ultra HD'],
+      rank: 3,
+      logoTitle: '4K',
+      year: '2026',
+      runtime: '15 min',
+      rating: '★ 4.9',
+      maturity: '18+',
+      progress: 20,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const javMovie: Movie = {
+      id: 'jav-998877',
+      isJav: true,
+      title: 'JAV Video 1',
+      label: 'JAV',
+      type: 'JAV Video',
+      genres: ['JAV', 'Uncensored'],
+      rank: 4,
+      logoTitle: 'JAV',
+      year: '2026',
+      runtime: '120 min',
+      rating: '★ 4.8',
+      maturity: '18+',
+      progress: 50,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    expect(isLordAdultMovie(normalMovie)).toBe(false)
+    expect(isLordAdultMovie(hentaiMovie)).toBe(true)
+    expect(isLordAdultMovie(phubMovie)).toBe(true)
+    expect(isLordAdultMovie(javMovie)).toBe(true)
+
+    expect(isPhubMovie(phubMovie)).toBe(true)
+    expect(isPhubMovie(javMovie)).toBe(false)
+    expect(isPhubMovie(normalMovie)).toBe(false)
+
+    expect(isJavMovie(javMovie)).toBe(true)
+    expect(isJavMovie(phubMovie)).toBe(false)
+    expect(isJavMovie(normalMovie)).toBe(false)
+
+    expect(isHentaiMovie(hentaiMovie)).toBe(true)
+    expect(isHentaiMovie(phubMovie)).toBe(false)
+    expect(isHentaiMovie(javMovie)).toBe(false)
+
+    const history = [
+      { movie: normalMovie, progress: 45, updatedAt: 100 },
+      { movie: hentaiMovie, progress: 30, updatedAt: 200 },
+      { movie: phubMovie, progress: 20, updatedAt: 300 },
+      { movie: javMovie, progress: 50, updatedAt: 400 },
+    ]
+
+    // Public continue watching (Apple TV / Netflix clone)
+    const publicContinueWatching = history
+      .filter((entry) => entry.progress < 100 && !isLordAdultMovie(entry.movie))
+      .map((entry) => entry.movie)
+
+    expect(publicContinueWatching).toHaveLength(1)
+    expect(publicContinueWatching[0].title).toBe('Inception')
+
+    // PHub continue watching
+    const phubContinueWatching = history
+      .filter((entry) => entry.progress < 100 && isPhubMovie(entry.movie))
+      .map((entry) => entry.movie)
+
+    expect(phubContinueWatching).toHaveLength(1)
+    expect(phubContinueWatching[0].title).toBe('PHub Video 1')
+
+    // JAV continue watching
+    const javContinueWatching = history
+      .filter((entry) => entry.progress < 100 && isJavMovie(entry.movie))
+      .map((entry) => entry.movie)
+
+    expect(javContinueWatching).toHaveLength(1)
+    expect(javContinueWatching[0].title).toBe('JAV Video 1')
+
+    // Lord collection (Hentai) continue watching
+    const lordContinueWatching = history
+      .filter((entry) => entry.progress < 100 && isHentaiMovie(entry.movie))
+      .map((entry) => entry.movie)
+
+    expect(lordContinueWatching).toHaveLength(1)
+    expect(lordContinueWatching[0].title).toBe('Test Hentai')
+  })
+
+  it('strictly isolates Continue Watching between PHub 1, PHub 2, PHub 3, JAV, and Hentai', () => {
+    const phub1Movie: Movie = {
+      id: 'phub-video-1',
+      title: 'PHub 1 Video',
+      label: 'PHub',
+      type: 'PHub Video',
+      genres: ['PHub'],
+      rank: 1,
+      logoTitle: '4K',
+      year: '2026',
+      runtime: '15 min',
+      rating: '4.8',
+      maturity: '18+',
+      progress: 40,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const phub2Movie: Movie = {
+      id: 'phub2-video-2',
+      title: 'PHub 2 Video',
+      label: 'PHub 2',
+      type: 'PHub Video',
+      genres: ['PHub'],
+      rank: 2,
+      logoTitle: 'HD',
+      year: '2026',
+      runtime: '20 min',
+      rating: '4.7',
+      maturity: '18+',
+      progress: 60,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+      embedUrl: 'https://upload18.net/play/index/xvidapi-video-2',
+    }
+
+    const phub3Movie: Movie = {
+      id: 'phub3-video-3',
+      title: 'PHub 3 Video',
+      label: 'PHub 3',
+      type: 'PHub Video',
+      genres: ['PHub'],
+      rank: 3,
+      logoTitle: 'HD',
+      year: '2026',
+      runtime: '25 min',
+      rating: '4.9',
+      maturity: '18+',
+      progress: 75,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+      embedUrl: 'https://www.eporner.com/embed/video-3/',
+    }
+
+    const javMovie: Movie = {
+      id: 'jav-video-4',
+      title: 'JAV Video',
+      label: 'JAV',
+      isJav: true,
+      genres: ['JAV'],
+      rank: 4,
+      logoTitle: 'JAV',
+      type: 'JAV Video',
+      year: '2026',
+      runtime: '120 min',
+      rating: '5.0',
+      maturity: '18+',
+      progress: 50,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const hentaiMovie: Movie = {
+      id: 'hentaiocean-video-5',
+      title: 'Hentai Video',
+      label: 'Hentai Ocean',
+      isHentaiOcean: true,
+      genres: ['Hentai'],
+      rank: 5,
+      logoTitle: 'Hentai',
+      type: 'Anime',
+      year: '2026',
+      runtime: '30 min',
+      rating: '9.2',
+      maturity: '18+',
+      progress: 80,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    // Helper checks
+    expect(isPhub1Movie(phub1Movie)).toBe(true)
+    expect(isPhub1Movie(phub2Movie)).toBe(false)
+    expect(isPhub1Movie(phub3Movie)).toBe(false)
+    expect(isPhub1Movie(javMovie)).toBe(false)
+    expect(isPhub1Movie(hentaiMovie)).toBe(false)
+
+    expect(isPhub2Movie(phub2Movie)).toBe(true)
+    expect(isPhub2Movie(phub1Movie)).toBe(false)
+    expect(isPhub2Movie(phub3Movie)).toBe(false)
+    expect(isPhub2Movie(javMovie)).toBe(false)
+
+    expect(isPhub3Movie(phub3Movie)).toBe(true)
+    expect(isPhub3Movie(phub1Movie)).toBe(false)
+    expect(isPhub3Movie(phub2Movie)).toBe(false)
+    expect(isPhub3Movie(javMovie)).toBe(false)
+
+    expect(isJavMovie(javMovie)).toBe(true)
+    expect(isJavMovie(phub1Movie)).toBe(false)
+    expect(isJavMovie(phub2Movie)).toBe(false)
+    expect(isJavMovie(phub3Movie)).toBe(false)
+
+    expect(isHentaiMovie(hentaiMovie)).toBe(true)
+    expect(isHentaiMovie(phub1Movie)).toBe(false)
+    expect(isHentaiMovie(phub2Movie)).toBe(false)
+    expect(isHentaiMovie(phub3Movie)).toBe(false)
+    expect(isHentaiMovie(javMovie)).toBe(false)
+
+    const allHistory = [
+      { movie: phub1Movie, progress: 40, updatedAt: 1 },
+      { movie: phub2Movie, progress: 60, updatedAt: 2 },
+      { movie: phub3Movie, progress: 75, updatedAt: 3 },
+      { movie: javMovie, progress: 50, updatedAt: 4 },
+      { movie: hentaiMovie, progress: 80, updatedAt: 5 },
+    ]
+
+    // Verify PHub 1 only contains PHub 1
+    const phub1List = allHistory.filter((e) => isPhub1Movie(e.movie)).map((e) => e.movie)
+    expect(phub1List).toEqual([phub1Movie])
+
+    // Verify PHub 2 only contains PHub 2
+    const phub2List = allHistory.filter((e) => isPhub2Movie(e.movie)).map((e) => e.movie)
+    expect(phub2List).toEqual([phub2Movie])
+
+    // Verify PHub 3 only contains PHub 3
+    const phub3List = allHistory.filter((e) => isPhub3Movie(e.movie)).map((e) => e.movie)
+    expect(phub3List).toEqual([phub3Movie])
+
+    // Verify JAV only contains JAV
+    const javList = allHistory.filter((e) => isJavMovie(e.movie)).map((e) => e.movie)
+    expect(javList).toEqual([javMovie])
+
+    // Verify Hentai only contains Hentai
+    const hentaiList = allHistory.filter((e) => isHentaiMovie(e.movie)).map((e) => e.movie)
+    expect(hentaiList).toEqual([hentaiMovie])
+
+    // Verify none leak to public (Apple TV / Netflix)
+    const publicList = allHistory.filter((e) => !isLordAdultMovie(e.movie)).map((e) => e.movie)
+    expect(publicList).toHaveLength(0)
+  })
 })
+
 

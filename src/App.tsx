@@ -1252,20 +1252,70 @@ function continueRuntimeLabel(movie: Movie) {
   return runtime
 }
 
-function isLordAdultMovie(movie?: Movie | null): boolean {
-  if (!movie) return false
+export function isPhub3Movie(m?: Movie | null): boolean {
+  if (!m) return false
   return Boolean(
-    movie.id?.startsWith('jav-') ||
-    movie.label === 'JAV' ||
-    movie.isJav ||
-    movie.hentaiSlug?.startsWith('jav-') ||
-    movie.id?.startsWith('phub-') ||
-    movie.label === 'PHub' ||
-    movie.hentaiSlug?.startsWith('phub-') ||
-    movie.isHentaiOcean ||
-    movie.id?.startsWith('hentaiocean-') ||
-    movie.genres?.some((g) => g.toLowerCase() === 'hentai')
+    m.id?.startsWith('phub3-') ||
+    m.label === 'PHub 3' ||
+    m.hentaiSlug?.startsWith('phub3-') ||
+    m.embedUrl?.includes('eporner.com')
   )
+}
+
+export function isPhub2Movie(m?: Movie | null): boolean {
+  if (!m) return false
+  if (isPhub3Movie(m)) return false
+  return Boolean(
+    m.id?.startsWith('phub2-') ||
+    m.label === 'PHub 2' ||
+    m.hentaiSlug?.startsWith('phub2-') ||
+    m.embedUrl?.includes('upload18.net') ||
+    m.embedUrl?.includes('xvidapi')
+  )
+}
+
+export function isPhub1Movie(m?: Movie | null): boolean {
+  if (!m) return false
+  if (isPhub3Movie(m) || isPhub2Movie(m)) return false
+  return Boolean(
+    m.id?.startsWith('phub-') ||
+    m.label === 'PHub' ||
+    m.type === 'PHub Video' ||
+    m.hentaiSlug?.startsWith('phub-')
+  )
+}
+
+export function isPhubMovie(m?: Movie | null): boolean {
+  if (!m) return false
+  return isPhub1Movie(m) || isPhub2Movie(m) || isPhub3Movie(m)
+}
+
+export function isJavMovie(m?: Movie | null): boolean {
+  if (!m) return false
+  return Boolean(
+    m.id?.startsWith('jav-') ||
+    m.label === 'JAV' ||
+    m.isJav ||
+    m.hentaiSlug?.startsWith('jav-')
+  )
+}
+
+export function isHentaiMovie(m?: Movie | null): boolean {
+  if (!m) return false
+  return (
+    !isPhubMovie(m) &&
+    !isJavMovie(m) &&
+    Boolean(
+      m.isHentaiOcean ||
+      m.id?.startsWith('hentaiocean-') ||
+      m.genres?.some((g) => g.toLowerCase() === 'hentai')
+    )
+  )
+}
+
+export function isLordAdultMovie(movie?: Movie | null): boolean {
+  if (!movie) return false
+  return isJavMovie(movie) || isPhubMovie(movie) || isHentaiMovie(movie)
 }
 
 export const PORN_API_BASE_URL = 'https://porn-api.com/api/v1/public'
@@ -1345,7 +1395,7 @@ export async function fetchPornApi(
 
 export async function fetchPornApiMovieDetail(slug: string): Promise<PornApiMovieItem | null> {
   try {
-    const cleanSlug = slug.replace(/^phub-/, '')
+    const cleanSlug = slug.replace(/^phub3-|^phub2-|^phub-/, '')
     const json = await fetchPornApi(`/movies/${encodeURIComponent(cleanSlug)}`)
     return json?.data || json || null
   } catch (err) {
@@ -1354,7 +1404,7 @@ export async function fetchPornApiMovieDetail(slug: string): Promise<PornApiMovi
   }
 }
 
-export function pornApiToMovieHelper(item: PornApiMovieItem, embedUrlOverride?: string): Movie {
+export function pornApiToMovieHelper(item: PornApiMovieItem, embedUrlOverride?: string, serverMode?: 'pornapi' | 'xvidapi' | 'eporner'): Movie {
   const rawCats = Array.isArray(item.categories) ? item.categories : []
   const catNames = rawCats
     .map((c) => (typeof c === 'string' ? c : c?.name))
@@ -1375,12 +1425,19 @@ export function pornApiToMovieHelper(item: PornApiMovieItem, embedUrlOverride?: 
     embedUrl = ep.sources?.[0]?.embed_url || ep.sources?.[0]?.m3u8_url || ''
   }
 
+  const isEporner = serverMode === 'eporner' || embedUrl.includes('eporner.com') || item.episodes?.[0]?.sources?.[0]?.server_name === 'Eporner'
+  const isXvid = serverMode === 'xvidapi' || embedUrl.includes('upload18.net') || embedUrl.includes('xvidapi') || item.episodes?.[0]?.sources?.[0]?.server_name === 'Upload18'
+
+  const idPrefix = isEporner ? 'phub3-' : isXvid ? 'phub2-' : 'phub-'
+  const label = isEporner ? 'PHub 3' : isXvid ? 'PHub 2' : 'PHub'
+  const cleanSlug = item.slug ? item.slug.replace(/^phub3-|^phub2-|^phub-/, '') : 'video'
+
   return {
-    id: `phub-${item.slug}`,
+    id: `${idPrefix}${cleanSlug}`,
     rank: 0,
     title: cleanHtmlEntities(item.title),
     logoTitle: quality,
-    label: 'PHub',
+    label,
     type: 'PHub Video',
     genres,
     year,
@@ -1393,13 +1450,13 @@ export function pornApiToMovieHelper(item: PornApiMovieItem, embedUrlOverride?: 
     still: item.thumbnail_url || item.poster_url || '',
     synopsis: cleanHtmlEntities(item.description || `${genres.join(', ')} · ${item.duration || quality}`),
     cast: cast.map(cleanHtmlEntities),
-    director: cast[0] ? cleanHtmlEntities(cast[0]) : 'PHub',
+    director: cast[0] ? cleanHtmlEntities(cast[0]) : label,
     awards: quality,
     boxOffice: item.views ? `${item.views.toLocaleString()} views` : '',
     ratings: [],
     embedUrl,
     isHentaiOcean: false,
-    hentaiSlug: `phub-${item.slug}`,
+    hentaiSlug: `${idPrefix}${cleanSlug}`,
   }
 }
 
@@ -1681,22 +1738,15 @@ export function epornerToMovieHelper(item: EpornerVideoItem): Movie {
 
 function isTvShow(movie: Movie) {
   if (!movie) return false
-  if (
-    movie.isJav ||
-    (movie.id || '').startsWith('jav-') ||
-    (movie.id || '').startsWith('phub-') ||
-    movie.label === 'PHub' ||
-    movie.label === 'JAV'
-  ) {
+  if (isLordAdultMovie(movie)) {
+    if (movie.isHentaiOcean) {
+      return (
+        (movie.hentaiEpisodes?.length ?? 0) > 1 ||
+        (movie.episodeCount ?? 0) > 1 ||
+        (movie.type || '').toLowerCase() === 'series'
+      )
+    }
     return false
-  }
-
-  if (movie.isHentaiOcean) {
-    return (
-      (movie.hentaiEpisodes?.length ?? 0) > 1 ||
-      (movie.episodeCount ?? 0) > 1 ||
-      (movie.type || '').toLowerCase() === 'series'
-    )
   }
 
   if (movie.isAnime) {
@@ -1731,6 +1781,20 @@ function normalizeMovieIdentity(value: string) {
 function movieMatches(left: Movie, right: Movie) {
   if (left.id === right.id) {
     return true
+  }
+
+  // Adult movies should never match across different adult sections or with non-adult movies
+  const leftAdult = isLordAdultMovie(left)
+  const rightAdult = isLordAdultMovie(right)
+  if (leftAdult !== rightAdult) {
+    return false
+  }
+  if (leftAdult && rightAdult) {
+    const leftSection = isPhub1Movie(left) ? 'phub1' : isPhub2Movie(left) ? 'phub2' : isPhub3Movie(left) ? 'phub3' : isJavMovie(left) ? 'jav' : isHentaiMovie(left) ? 'hentai' : 'other'
+    const rightSection = isPhub1Movie(right) ? 'phub1' : isPhub2Movie(right) ? 'phub2' : isPhub3Movie(right) ? 'phub3' : isJavMovie(right) ? 'jav' : isHentaiMovie(right) ? 'hentai' : 'other'
+    if (leftSection !== rightSection) {
+      return false
+    }
   }
 
   if (
@@ -2746,11 +2810,7 @@ function App() {
         .filter(
           (entry) =>
             entry.progress < 100 &&
-            !entry.movie.isHentaiOcean &&
-            !entry.movie.isJav &&
-            !entry.movie.id.startsWith('jav-') &&
-            entry.movie.label !== 'JAV' &&
-            !entry.movie.genres.some((g) => g.toLowerCase() === 'hentai'),
+            !isLordAdultMovie(entry.movie),
         )
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
@@ -2784,15 +2844,92 @@ function App() {
         .filter(
           (entry) =>
             entry.progress < 100 &&
-            !entry.movie.id.startsWith('phub-') &&
-            entry.movie.label !== 'PHub' &&
-            !entry.movie.hentaiSlug?.startsWith('phub-') &&
-            !entry.movie.id.startsWith('jav-') &&
-            entry.movie.label !== 'JAV' &&
-            !entry.movie.isJav &&
-            !entry.movie.hentaiSlug?.startsWith('jav-') &&
-            (entry.movie.isHentaiOcean ||
-              entry.movie.genres.some((g) => g.toLowerCase() === 'hentai')),
+            isHentaiMovie(entry.movie),
+        )
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, 12)
+        .map((entry, index) => ({
+          ...entry.movie,
+          rank: index + 1,
+          progress: entry.progress,
+        })),
+    [watchHistory],
+  )
+  const continueWatchingPhub = useMemo(
+    () =>
+      Object.values(watchHistory)
+        .filter(
+          (entry) =>
+            entry.progress < 100 &&
+            isPhubMovie(entry.movie),
+        )
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, 12)
+        .map((entry, index) => ({
+          ...entry.movie,
+          rank: index + 1,
+          progress: entry.progress,
+        })),
+    [watchHistory],
+  )
+  const continueWatchingPhub1 = useMemo(
+    () =>
+      Object.values(watchHistory)
+        .filter(
+          (entry) =>
+            entry.progress < 100 &&
+            isPhub1Movie(entry.movie),
+        )
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, 12)
+        .map((entry, index) => ({
+          ...entry.movie,
+          rank: index + 1,
+          progress: entry.progress,
+        })),
+    [watchHistory],
+  )
+  const continueWatchingPhub2 = useMemo(
+    () =>
+      Object.values(watchHistory)
+        .filter(
+          (entry) =>
+            entry.progress < 100 &&
+            isPhub2Movie(entry.movie),
+        )
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, 12)
+        .map((entry, index) => ({
+          ...entry.movie,
+          rank: index + 1,
+          progress: entry.progress,
+        })),
+    [watchHistory],
+  )
+  const continueWatchingPhub3 = useMemo(
+    () =>
+      Object.values(watchHistory)
+        .filter(
+          (entry) =>
+            entry.progress < 100 &&
+            isPhub3Movie(entry.movie),
+        )
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, 12)
+        .map((entry, index) => ({
+          ...entry.movie,
+          rank: index + 1,
+          progress: entry.progress,
+        })),
+    [watchHistory],
+  )
+  const continueWatchingJav = useMemo(
+    () =>
+      Object.values(watchHistory)
+        .filter(
+          (entry) =>
+            entry.progress < 100 &&
+            isJavMovie(entry.movie),
         )
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
@@ -2806,36 +2943,42 @@ function App() {
   const savedLordList = useMemo(
     () =>
       Object.values(savedMovies).filter(
-        (m) =>
-          isLordAdultMovie(m) &&
-          !m.id.startsWith('phub-') &&
-          m.label !== 'PHub' &&
-          !m.hentaiSlug?.startsWith('phub-') &&
-          !m.id.startsWith('jav-') &&
-          m.label !== 'JAV' &&
-          !m.isJav &&
-          !m.hentaiSlug?.startsWith('jav-'),
+        (m) => isHentaiMovie(m),
       ),
     [savedMovies],
   )
   const savedPhubList = useMemo(
     () =>
       Object.values(savedMovies).filter(
-        (m) =>
-          m.id.startsWith('phub-') ||
-          m.label === 'PHub' ||
-          m.hentaiSlug?.startsWith('phub-'),
+        (m) => isPhubMovie(m),
+      ),
+    [savedMovies],
+  )
+  const savedPhub1List = useMemo(
+    () =>
+      Object.values(savedMovies).filter(
+        (m) => isPhub1Movie(m),
+      ),
+    [savedMovies],
+  )
+  const savedPhub2List = useMemo(
+    () =>
+      Object.values(savedMovies).filter(
+        (m) => isPhub2Movie(m),
+      ),
+    [savedMovies],
+  )
+  const savedPhub3List = useMemo(
+    () =>
+      Object.values(savedMovies).filter(
+        (m) => isPhub3Movie(m),
       ),
     [savedMovies],
   )
   const savedJavList = useMemo(
     () =>
       Object.values(savedMovies).filter(
-        (m) =>
-          m.id.startsWith('jav-') ||
-          m.label === 'JAV' ||
-          m.isJav ||
-          m.hentaiSlug?.startsWith('jav-'),
+        (m) => isJavMovie(m),
       ),
     [savedMovies],
   )
@@ -3825,30 +3968,16 @@ function App() {
       setDetailBackScreen('lord')
     }
 
-    if (
-      safeMovie.id.startsWith('jav-') ||
-      safeMovie.label === 'JAV' ||
-      safeMovie.isJav ||
-      safeMovie.hentaiSlug?.startsWith('jav-')
-    ) {
+    if (isJavMovie(safeMovie)) {
       setActiveLordTab('jav')
-    } else if (
-      safeMovie.id.startsWith('phub3-') ||
-      safeMovie.label === 'PHub 3' ||
-      safeMovie.hentaiSlug?.startsWith('phub3-') ||
-      safeMovie.embedUrl?.includes('eporner.com')
-    ) {
+    } else if (isPhub3Movie(safeMovie)) {
       setActiveLordTab('phub3')
-    } else if (
-      safeMovie.id.startsWith('phub-') ||
-      safeMovie.label === 'PHub' ||
-      safeMovie.hentaiSlug?.startsWith('phub-')
-    ) {
-      if (safeMovie.embedUrl?.includes('upload18.net') || safeMovie.embedUrl?.includes('xvidapi')) {
-        setActiveLordTab('phub2')
-      } else {
-        setActiveLordTab('phub')
-      }
+    } else if (isPhub2Movie(safeMovie)) {
+      setActiveLordTab('phub2')
+    } else if (isPhub1Movie(safeMovie)) {
+      setActiveLordTab('phub')
+    } else if (isHentaiMovie(safeMovie)) {
+      setActiveLordTab('collection')
     }
 
     setSelectedMovie(safeMovie)
@@ -3864,30 +3993,16 @@ function App() {
       setDetailBackScreen('lord')
     }
 
-    if (
-      safeMovie.id.startsWith('jav-') ||
-      safeMovie.label === 'JAV' ||
-      safeMovie.isJav ||
-      safeMovie.hentaiSlug?.startsWith('jav-')
-    ) {
+    if (isJavMovie(safeMovie)) {
       setActiveLordTab('jav')
-    } else if (
-      safeMovie.id.startsWith('phub3-') ||
-      safeMovie.label === 'PHub 3' ||
-      safeMovie.hentaiSlug?.startsWith('phub3-') ||
-      safeMovie.embedUrl?.includes('eporner.com')
-    ) {
+    } else if (isPhub3Movie(safeMovie)) {
       setActiveLordTab('phub3')
-    } else if (
-      safeMovie.id.startsWith('phub-') ||
-      safeMovie.label === 'PHub' ||
-      safeMovie.hentaiSlug?.startsWith('phub-')
-    ) {
-      if (safeMovie.embedUrl?.includes('upload18.net') || safeMovie.embedUrl?.includes('xvidapi')) {
-        setActiveLordTab('phub2')
-      } else {
-        setActiveLordTab('phub')
-      }
+    } else if (isPhub2Movie(safeMovie)) {
+      setActiveLordTab('phub2')
+    } else if (isPhub1Movie(safeMovie)) {
+      setActiveLordTab('phub')
+    } else if (isHentaiMovie(safeMovie)) {
+      setActiveLordTab('collection')
     }
 
     setSelectedMovie(safeMovie)
@@ -4363,15 +4478,26 @@ function App() {
     [removeContinueMovie, removeSavedMovie],
   )
 
-  const clearLordContinueWatching = useCallback(() => {
+  const clearLordContinueWatching = useCallback((tab?: LordTab) => {
     setWatchHistory((current) => {
       const next = { ...current }
       let changed = false
       Object.entries(current).forEach(([key, entry]) => {
-        if (
-          entry.movie.isHentaiOcean ||
-          entry.movie.genres.some((g) => g.toLowerCase() === 'hentai')
-        ) {
+        const matchesTab = !tab
+          ? isLordAdultMovie(entry.movie)
+          : tab === 'jav'
+            ? isJavMovie(entry.movie)
+            : tab === 'phub'
+              ? isPhub1Movie(entry.movie)
+              : tab === 'phub2'
+                ? isPhub2Movie(entry.movie)
+                : tab === 'phub3'
+                  ? isPhub3Movie(entry.movie)
+                  : tab === 'collection'
+                    ? isHentaiMovie(entry.movie)
+                    : isLordAdultMovie(entry.movie)
+
+        if (matchesTab) {
           recordMovieRemoved(entry.movie, currentUser)
           delete next[key]
           changed = true
@@ -5053,8 +5179,16 @@ function App() {
             rails={lordRails}
             loading={lordLoading}
             continueMovies={continueWatchingLord}
+            continuePhubMovies={continueWatchingPhub}
+            continuePhub1Movies={continueWatchingPhub1}
+            continuePhub2Movies={continueWatchingPhub2}
+            continuePhub3Movies={continueWatchingPhub3}
+            continueJavMovies={continueWatchingJav}
             savedMovies={savedLordList}
             savedPhubMovies={savedPhubList}
+            savedPhub1Movies={savedPhub1List}
+            savedPhub2Movies={savedPhub2List}
+            savedPhub3Movies={savedPhub3List}
             savedJavMovies={savedJavList}
             currentUser={currentUser}
             activeTab={activeLordTab}
@@ -12414,6 +12548,9 @@ type ContinueWatchingRailProps = MovieRailProps & {
   onRemoveWatchlist?: (movie: Movie) => void
   isJavSection?: boolean
   isPhubSection?: boolean
+  isPhub1Section?: boolean
+  isPhub2Section?: boolean
+  isPhub3Section?: boolean
   isLordSection?: boolean
 }
 
@@ -12431,6 +12568,9 @@ function ContinueWatchingRail({
   onRemoveContinue,
   isJavSection = false,
   isPhubSection = false,
+  isPhub1Section = false,
+  isPhub2Section = false,
+  isPhub3Section = false,
   isLordSection = false,
 }: ContinueWatchingRailProps) {
   const rowRef = useRef<HTMLDivElement | null>(null)
@@ -12438,29 +12578,29 @@ function ContinueWatchingRail({
 
   const displayMovies = useMemo(() => {
     if (isLordSection) {
-      return movies
+      return movies.filter(isHentaiMovie)
     }
-    const isJav = (m: Movie) =>
-      Boolean(
-        m.isJav ||
-          m.id.startsWith('jav-') ||
-          m.label === 'JAV' ||
-          m.hentaiSlug?.startsWith('jav-'),
-      )
-    const isPhub = (m: Movie) =>
-      Boolean(
-        m.id.startsWith('phub-') ||
-          m.label === 'PHub' ||
-          m.hentaiSlug?.startsWith('phub-'),
-      )
     if (isJavSection) {
-      return movies.filter(isJav)
+      return movies.filter(isJavMovie)
+    }
+    if (isPhub1Section) {
+      return movies.filter(isPhub1Movie)
+    }
+    if (isPhub2Section) {
+      return movies.filter(isPhub2Movie)
+    }
+    if (isPhub3Section) {
+      return movies.filter(isPhub3Movie)
     }
     if (isPhubSection) {
-      return movies.filter(isPhub)
+      return movies.filter(isPhubMovie)
     }
-    return movies.filter((m) => !isJav(m) && !isPhub(m))
-  }, [movies, isJavSection, isPhubSection, isLordSection])
+    return movies.filter((m) => !isLordAdultMovie(m))
+  }, [movies, isJavSection, isPhubSection, isPhub1Section, isPhub2Section, isPhub3Section, isLordSection])
+
+  if (displayMovies.length === 0) {
+    return null
+  }
 
   useEffect(() => {
     if (!menuState) {
@@ -12585,7 +12725,7 @@ function ContinueWatchingRail({
                 onClick={() => onOpenDetail(movie)}
               >
                 <img
-                  src={movie.poster || fallbackPosterForRank(movie.rank)}
+                  src={movie.still || movie.poster || movie.hero || fallbackPosterForRank(movie.rank)}
                   alt=""
                   onError={(event) => {
                     event.currentTarget.src = fallbackPosterForRank(movie.rank)
@@ -13881,22 +14021,16 @@ function LordPinModal({
       }}
     >
       <div className="window-frame">
-        {/* Top Bar */}
-        <header className="window-header">
-          <div className="window-dots">
-            <button
-              type="button"
-              className="dot dot--red"
-              onClick={onClose}
-              aria-label="Close"
-              title="Close"
-            />
-            <span className="dot dot--yellow" />
-            <span className="dot dot--green" />
-          </div>
-          <div className="window-title">Lord Password — Verification</div>
-          <div className="window-host">security / lumen</div>
-        </header>
+        {/* Close Button */}
+        <button
+          type="button"
+          className="bff-close"
+          onClick={onClose}
+          aria-label="Close"
+          title="Close"
+        >
+          <X size={18} />
+        </button>
 
         {/* Component Body */}
         <main className="lord-otp-card">
@@ -14141,8 +14275,16 @@ type LordScreenProps = {
   rails: LordRail[]
   loading: boolean
   continueMovies?: Movie[]
+  continuePhubMovies?: Movie[]
+  continuePhub1Movies?: Movie[]
+  continuePhub2Movies?: Movie[]
+  continuePhub3Movies?: Movie[]
+  continueJavMovies?: Movie[]
   savedMovies?: Movie[]
   savedPhubMovies?: Movie[]
+  savedPhub1Movies?: Movie[]
+  savedPhub2Movies?: Movie[]
+  savedPhub3Movies?: Movie[]
   savedJavMovies?: Movie[]
   currentUser?: UserInfo | null
   profiles?: UserProfile[]
@@ -14154,7 +14296,7 @@ type LordScreenProps = {
   onPlay: (movie: Movie) => void
   onSelectProfile?: (name: string) => void
   onBack: () => void
-  onClearContinueWatching?: () => void
+  onClearContinueWatching?: (tab?: LordTab) => void
   onMarkWatched?: (movie: Movie) => void
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
@@ -14166,8 +14308,16 @@ function LordScreen({
   rails = [],
   loading = false,
   continueMovies = [],
+  continuePhubMovies: _continuePhubMovies = [],
+  continuePhub1Movies = [],
+  continuePhub2Movies = [],
+  continuePhub3Movies = [],
+  continueJavMovies = [],
   savedMovies = [],
-  savedPhubMovies = [],
+  savedPhubMovies: _savedPhubMovies = [],
+  savedPhub1Movies = [],
+  savedPhub2Movies = [],
+  savedPhub3Movies = [],
   savedJavMovies = [],
   currentUser,
   profiles: _profiles = [],
@@ -14367,27 +14517,45 @@ function LordScreen({
             </button>
           </div>
 
-          {activeLordTab === 'collection' && (
-            <button
-              className="lord-clear-btn"
-              type="button"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    'Permanently delete all Lord Continue Watching history? This cannot be recovered.',
-                  )
-                ) {
-                  onClearContinueWatching?.()
-                }
-              }}
-              title="Permanently clear Lord Continue Watching history"
-              aria-label="Permanently clear Lord Continue Watching history"
-              disabled={continueMovies.length === 0}
-            >
-              <Trash2 size={18} />
-              <span>Clear History</span>
-            </button>
-          )}
+          <button
+            className="lord-clear-btn"
+            type="button"
+            onClick={() => {
+              const tabName =
+                activeLordTab === 'phub'
+                  ? 'PHub 1'
+                  : activeLordTab === 'phub2'
+                    ? 'PHub 2'
+                    : activeLordTab === 'phub3'
+                      ? 'PHub 3'
+                      : activeLordTab === 'jav'
+                        ? 'JAV'
+                        : 'Hentai'
+              if (
+                window.confirm(
+                  `Permanently delete ${tabName} Continue Watching history? This cannot be recovered.`,
+                )
+              ) {
+                onClearContinueWatching?.(activeLordTab)
+              }
+            }}
+            title="Permanently clear Continue Watching history for this section"
+            aria-label="Permanently clear Continue Watching history for this section"
+            disabled={
+              activeLordTab === 'jav'
+                ? continueJavMovies.length === 0
+                : activeLordTab === 'phub'
+                  ? continuePhub1Movies.length === 0
+                  : activeLordTab === 'phub2'
+                    ? continuePhub2Movies.length === 0
+                    : activeLordTab === 'phub3'
+                      ? continuePhub3Movies.length === 0
+                      : continueMovies.length === 0
+            }
+          >
+            <Trash2 size={18} />
+            <span>Clear History</span>
+          </button>
 
           {(activeLordTab === 'phub' || activeLordTab === 'phub2' || activeLordTab === 'phub3') && isAdmin && (
             <button
@@ -14487,7 +14655,7 @@ function LordScreen({
       {activeLordTab === 'jav' ? (
         <LordJavSection
           searchQuery={tabQueries.jav}
-          continueMovies={continueMovies}
+          continueMovies={continueJavMovies}
           savedMovies={savedJavMovies}
           onPlay={onPlay}
           onMarkWatched={onMarkWatched}
@@ -14499,8 +14667,8 @@ function LordScreen({
           key="phub-1"
           serverMode="pornapi"
           searchQuery={tabQueries.phub}
-          continueMovies={continueMovies}
-          savedMovies={savedPhubMovies}
+          continueMovies={continuePhub1Movies}
+          savedMovies={savedPhub1Movies}
           currentUser={currentUser}
           phubSeed={phubSeed}
           onOpenDetail={onOpenDetail}
@@ -14514,8 +14682,8 @@ function LordScreen({
           key="phub-2"
           serverMode="xvidapi"
           searchQuery={tabQueries.phub2}
-          continueMovies={continueMovies}
-          savedMovies={savedPhubMovies}
+          continueMovies={continuePhub2Movies}
+          savedMovies={savedPhub2Movies}
           currentUser={currentUser}
           phubSeed={phubSeed}
           onOpenDetail={onOpenDetail}
@@ -14529,8 +14697,8 @@ function LordScreen({
           key="phub-3"
           serverMode="eporner"
           searchQuery={tabQueries.phub3}
-          continueMovies={continueMovies}
-          savedMovies={savedPhubMovies}
+          continueMovies={continuePhub3Movies}
+          savedMovies={savedPhub3Movies}
           currentUser={currentUser}
           phubSeed={phubSeed}
           onOpenDetail={onOpenDetail}
@@ -15499,7 +15667,7 @@ function LordPhubSection({
 
   const handlePlayMovie = async (movie: Movie) => {
     if (isEporner) {
-      const cleanId = movie.hentaiSlug?.replace(/^phub3-/, '') || movie.id.replace(/^phub3-/, '')
+      const cleanId = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub-/, '')
       const embedUrl = movie.embedUrl || `https://www.eporner.com/embed/${cleanId}/`
       onPlay({ ...movie, embedUrl })
       return
@@ -15509,7 +15677,7 @@ function LordPhubSection({
       return
     }
     try {
-      const slug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+      const slug = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub-/, '')
       const detail = await fetchPornApiMovieDetail(slug)
       const embedUrl =
         detail?.episodes?.[0]?.sources?.[0]?.embed_url ||
@@ -15530,7 +15698,7 @@ function LordPhubSection({
       return
     }
     if (isEporner) {
-      const cleanId = movie.hentaiSlug?.replace(/^phub3-/, '') || movie.id.replace(/^phub3-/, '')
+      const cleanId = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub-/, '')
       const embedUrl = movie.embedUrl || `https://www.eporner.com/embed/${cleanId}/`
       onOpenDetail({ ...movie, embedUrl })
       return
@@ -15540,7 +15708,7 @@ function LordPhubSection({
       return
     }
     try {
-      const slug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+      const slug = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub-/, '')
       const detail = await fetchPornApiMovieDetail(slug)
       const embedUrl =
         detail?.episodes?.[0]?.sources?.[0]?.embed_url ||
@@ -15556,7 +15724,7 @@ function LordPhubSection({
   }
 
   const heroItem = rotatedVideos.length > 0 ? rotatedVideos[0] : null
-  const heroMovie = heroItem ? pornApiToMovieHelper(heroItem) : null
+  const heroMovie = heroItem ? pornApiToMovieHelper(heroItem, undefined, serverMode) : null
   const totalDisplayCount = totalVideos > 0 ? totalVideos : displayVideos.length
   const sectionLabel = isEporner ? 'PHub 3' : isXvid ? 'PHub 2' : 'PHub 1'
   const sectionBadge = isEporner
@@ -15643,7 +15811,7 @@ function LordPhubSection({
           {savedMovies && savedMovies.length > 0 && (
             <div style={{ marginBottom: 24 }}>
               <LordRailRow
-                key={`${isXvid ? 'phub2' : 'phub1'}-my-list`}
+                key={`${isEporner ? 'phub3' : isXvid ? 'phub2' : 'phub1'}-my-list`}
                 rail={{
                   title: 'My List',
                   items: savedMovies,
@@ -15656,12 +15824,15 @@ function LordPhubSection({
           {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
             <div style={{ marginBottom: 24 }}>
               <ContinueWatchingRail
-                title="Continue Watching"
+                title={`Continue Watching ${sectionLabel}`}
                 movies={continueMovies}
                 onOpenDetail={(m) => void handlePlayMovie(m)}
                 onMarkWatched={onMarkWatched}
                 onRemoveContinue={onRemoveContinue}
                 onRemoveWatchlist={onRemoveWatchlist}
+                isPhub1Section={!isEporner && !isXvid}
+                isPhub2Section={isXvid}
+                isPhub3Section={isEporner}
                 isPhubSection={true}
               />
             </div>
@@ -15723,7 +15894,7 @@ function LordPhubSection({
 
           <div className="jav-grid">
             {displayVideos.map((video, idx) => {
-              const movie = pornApiToMovieHelper(video)
+              const movie = pornApiToMovieHelper(video, undefined, serverMode)
               const firstCat = movie.genres[0] || 'PHub'
               return (
                 <div
