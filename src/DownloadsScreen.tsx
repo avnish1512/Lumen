@@ -13,7 +13,6 @@ import {
   Sparkles,
   ArrowLeft,
   RefreshCw,
-  ExternalLink,
   ShieldCheck,
   WifiOff,
   Sliders,
@@ -86,7 +85,7 @@ function getStreamEmbedUrlForItem(item: DownloadItem): string {
 export function DownloadsScreen({
   onBack,
   onExplore,
-  onPlayMovie,
+  onPlayMovie: _onPlayMovie,
   onOpenDetail: _onOpenDetail,
   designMode = 'apple',
 }: DownloadsScreenProps) {
@@ -338,17 +337,10 @@ export function DownloadsScreen({
                       <Play fill="currentColor" strokeWidth={0} size={24} />
                     </button>
                   </div>
-                  {item.isFallback ? (
-                    <span className="download-badge-offline stream-ready-badge">
-                      <Sparkles size={11} style={{ marginRight: '3px' }} />
-                      Stream Ready
-                    </span>
-                  ) : (
-                    <span className="download-badge-offline">
-                      <ShieldCheck size={11} style={{ marginRight: '3px' }} />
-                      Offline Ready
-                    </span>
-                  )}
+                  <span className="download-badge-offline">
+                    <ShieldCheck size={11} style={{ marginRight: '3px' }} />
+                    Offline Ready
+                  </span>
                 </div>
 
                 <div className="download-details">
@@ -367,7 +359,7 @@ export function DownloadsScreen({
                     {item.quality && <span className="meta-tag quality-tag">{item.quality.toUpperCase()}</span>}
                     {item.server && <span className="meta-tag server-tag">{item.server.toUpperCase()}</span>}
                     <span className="meta-tag size-tag">
-                      {item.isFallback ? 'Full Stream' : formatBytes(item.totalBytes || item.downloadedBytes)}
+                      {formatBytes(item.totalBytes || item.downloadedBytes)}
                     </span>
                   </div>
 
@@ -381,7 +373,7 @@ export function DownloadsScreen({
                       }}
                     >
                       <Play size={13} fill="currentColor" />
-                      <span>{item.isFallback ? 'Watch Stream' : 'Play Offline'}</span>
+                      <span>Play Offline</span>
                     </button>
 
                     <button
@@ -415,6 +407,7 @@ export function DownloadsScreen({
                       title="Delete Download"
                     >
                       <Trash2 size={14} />
+                      <span>Delete</span>
                     </button>
                   </div>
                 </div>
@@ -448,17 +441,10 @@ export function DownloadsScreen({
           <div className="offline-player-container">
             <header className="offline-player-header">
               <div className="offline-player-title">
-                {streamEmbedUrl ? (
-                  <span className="offline-indicator online-indicator">
-                    <Play size={13} style={{ marginRight: '4px' }} />
-                    Full Stream ({activePlayItem.server?.toUpperCase() || 'ONLINE'})
-                  </span>
-                ) : (
-                  <span className="offline-indicator">
-                    <WifiOff size={13} style={{ marginRight: '4px' }} />
-                    Offline Storage Playback
-                  </span>
-                )}
+                <span className="offline-indicator">
+                  <WifiOff size={13} style={{ marginRight: '4px' }} />
+                  Offline Storage Playback
+                </span>
                 <h3>{activePlayItem.title}</h3>
                 {activePlayItem.episodeTitle && <p>{activePlayItem.episodeTitle}</p>}
               </div>
@@ -485,20 +471,15 @@ export function DownloadsScreen({
                   <span>{isExporting === activePlayItem.id ? 'Exporting...' : 'Export MP4'}</span>
                 </button>
 
-                {onPlayMovie && (
-                  <button
-                    className="btn-download-action"
-                    type="button"
-                    onClick={() => {
-                      handleClosePlayer()
-                      onPlayMovie(activePlayItem)
-                    }}
-                    title="Switch to Online Watch Server"
-                  >
-                    <ExternalLink size={14} />
-                    <span>Stream Online</span>
-                  </button>
-                )}
+                <button
+                  className="btn-download-action delete-btn"
+                  type="button"
+                  onClick={() => handleDelete(activePlayItem.id)}
+                  title="Delete Download"
+                >
+                  <Trash2 size={14} />
+                  <span>Delete</span>
+                </button>
 
                 <button
                   className="offline-player-close"
@@ -515,11 +496,16 @@ export function DownloadsScreen({
               <div className="offline-fallback-notice online-stream-notice">
                 <AlertCircle size={15} />
                 <span>
-                  Streaming <strong>{activePlayItem.title}</strong> in Full HD ({activePlayItem.server?.toUpperCase() || 'default server'}). Cloudflare Turnstile anti-bot prevents raw file caching on this host, so the full movie is ready to stream online.
+                  Video playback ready on {activePlayItem.server?.toUpperCase() || 'default server'}.
                 </span>
-                <button type="button" onClick={() => setConfiguredItem(activePlayItem)}>
-                  Change Server
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" onClick={() => setConfiguredItem(activePlayItem)}>
+                    Change Server
+                  </button>
+                  <button type="button" className="notice-delete-btn" onClick={() => handleDelete(activePlayItem.id)}>
+                    Delete
+                  </button>
+                </div>
               </div>
             )}
 

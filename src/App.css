@@ -21371,10 +21371,32 @@ font-size: 11px;
   color: #fff;
 }
 
+.btn-download-action.delete-btn {
+  color: rgba(255, 69, 58, 0.9);
+  border-color: rgba(255, 69, 58, 0.25);
+}
+
 .btn-download-action.delete-btn:hover {
   background: rgba(255, 69, 58, 0.2);
   border-color: rgba(255, 69, 58, 0.5);
   color: #ff453a;
+}
+
+.notice-delete-btn {
+  background: rgba(255, 69, 58, 0.25) !important;
+  border: 1px solid rgba(255, 69, 58, 0.5) !important;
+  color: #ff453a !important;
+  border-radius: 8px !important;
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.notice-delete-btn:hover {
+  background: rgba(255, 69, 58, 0.4) !important;
+  color: #fff !important;
 }
 
 /* Empty State */
