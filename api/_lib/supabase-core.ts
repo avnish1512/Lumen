@@ -144,3 +144,34 @@ export async function saveWatchHistory(
     throw new Error(`Supabase watch-history write failed (${response.status}).`)
   }
 }
+
+export async function updateMovieProgress(
+  config: SupabaseConfig,
+  key: string,
+  movieId: string,
+  movieData: Record<string, unknown>,
+): Promise<void> {
+  // Fast path: Atomic Postgres RPC (merges single movie into jsonb history)
+  try {
+    const url = `${config.url}/rest/v1/rpc/update_movie_progress`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: restHeaders(config),
+      body: JSON.stringify({
+        p_key: key,
+        p_movie_id: movieId,
+        p_movie_data: movieData,
+      }),
+    })
+    if (response.ok) {
+      return
+    }
+  } catch {
+    // Fallback below if RPC fails
+  }
+
+  // Fallback: Read full history, merge, and save
+  const current = (await fetchWatchHistory(config, key)) ?? {}
+  current[movieId] = movieData
+  await saveWatchHistory(config, key, current)
+}

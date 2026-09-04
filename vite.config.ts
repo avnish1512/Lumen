@@ -44,6 +44,7 @@ import {
   saveAccountProfiles,
   fetchWatchHistory,
   saveWatchHistory,
+  updateMovieProgress,
   supabaseConfigFromEnv,
   type StoredProfile,
 } from './api/_lib/supabase-core'
@@ -1648,11 +1649,33 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
             }
             const raw = Buffer.concat(chunks).toString('utf8')
             const body = raw
-              ? (JSON.parse(raw) as { key?: string; history?: Record<string, unknown> })
+              ? (JSON.parse(raw) as {
+                  key?: string
+                  history?: Record<string, unknown>
+                  movieId?: string
+                  movieData?: Record<string, unknown>
+                })
               : {}
             const key = String(body.key ?? '').trim()
             const history = body.history
-            if (!key || !history || typeof history !== 'object') {
+            const movieId = typeof body.movieId === 'string' ? body.movieId.trim() : ''
+            const movieData = body.movieData
+            if (!key) {
+              sendJson(res, 400, { ok: false, error: 'key is required.' })
+              return
+            }
+            if (movieId && movieData && typeof movieData === 'object') {
+              if (config) {
+                try {
+                  await updateMovieProgress(config, key, movieId, movieData)
+                } catch {
+                  // ignore save failure
+                }
+              }
+              sendJson(res, 200, { ok: true, configured: Boolean(config) })
+              return
+            }
+            if (!history || typeof history !== 'object') {
               sendJson(res, 400, { ok: false, error: 'key and history are required.' })
               return
             }

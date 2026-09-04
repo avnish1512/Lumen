@@ -82,6 +82,23 @@ export async function registerDevice(
   email: string,
   device: DeviceRecord,
 ): Promise<DeviceRecord[]> {
+  // Fast path: Atomic Postgres RPC (single HTTP request, atomic array upsert)
+  try {
+    const rpcUrl = `${config.url}/rest/v1/rpc/upsert_device`
+    const rpcResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: headers(config),
+      body: JSON.stringify({ p_email: email, p_device: device }),
+    })
+    if (rpcResponse.ok) {
+      const data = (await rpcResponse.json()) as unknown
+      return sanitize(data)
+    }
+  } catch {
+    // Fallback below if RPC fails or is unavailable
+  }
+
+  // Fallback path: Read-filter-save
   const existing = await fetchDevices(config, email)
   const others = existing.filter((d) => d.id !== device.id)
   const next = [device, ...others]

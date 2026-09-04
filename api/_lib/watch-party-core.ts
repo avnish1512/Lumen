@@ -117,14 +117,39 @@ export async function updateParty(
   id: string,
   patch: Partial<Pick<WatchParty, 'status' | 'playback' | 'screen_share' | 'signal'>>,
 ): Promise<void> {
+  const playbackPatch: Record<string, unknown> = {
+    ...(patch.playback || {}),
+    ...(patch.screen_share ? { screen_share: patch.screen_share } : {}),
+    ...(patch.signal ? { signal: patch.signal } : {}),
+  }
+  const hasPlaybackPatch = Object.keys(playbackPatch).length > 0
+
+  // Fast path: Atomic Postgres RPC (single HTTP request, atomic JSON merge)
+  try {
+    const rpcUrl = `${config.url}/rest/v1/rpc/update_watch_party_playback`
+    const rpcResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: headers(config),
+      body: JSON.stringify({
+        p_id: id,
+        p_playback: hasPlaybackPatch ? playbackPatch : null,
+        p_status: patch.status ?? null,
+      }),
+    })
+    if (rpcResponse.ok) {
+      return
+    }
+  } catch {
+    // Fallback below if RPC fails or is unavailable
+  }
+
+  // Fallback path: Read-modify-write
   const current = await getParty(config, id)
   const currentPlayback = (current?.playback ?? { playing: false, time: 0 }) as Record<string, unknown>
 
   const updatedPlayback = {
     ...currentPlayback,
-    ...(patch.playback || {}),
-    ...(patch.screen_share ? { screen_share: patch.screen_share } : {}),
-    ...(patch.signal ? { signal: patch.signal } : {}),
+    ...playbackPatch,
   }
 
   const bodyObj: Record<string, unknown> = {

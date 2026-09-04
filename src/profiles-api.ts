@@ -97,6 +97,26 @@ export async function saveRemoteWatchHistory(
   }
 }
 
+export async function saveRemoteMovieProgress(
+  key: string,
+  movieId: string,
+  movieData: Record<string, any>,
+): Promise<void> {
+  if (!key || !movieId || !movieData) {
+    return
+  }
+
+  try {
+    await fetch('/api/watch-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, movieId, movieData }),
+    })
+  } catch {
+    // Best-effort
+  }
+}
+
 // Verify a candidate Lord PIN server-side. The PIN itself is never sent to the
 // client — the server only answers ok/no.
 export async function verifyRemoteLordPin(pin: string): Promise<boolean> {

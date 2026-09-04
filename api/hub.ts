@@ -11,6 +11,7 @@ import {
   saveAccountProfiles,
   fetchWatchHistory,
   saveWatchHistory,
+  updateMovieProgress,
   supabaseConfigFromEnv,
   type StoredProfile,
 } from './_lib/supabase-core.js'
@@ -473,7 +474,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }
       const key = String(body.key ?? '').trim()
       const history = body.history
-      if (!key || !history || typeof history !== 'object') {
+      const movieId = typeof body.movieId === 'string' ? body.movieId.trim() : ''
+      const movieData = body.movieData
+      if (!key) {
+        res.status(400).json({ ok: false, error: 'key is required.' })
+        return
+      }
+      if (movieId && movieData && typeof movieData === 'object') {
+        if (config) {
+          try {
+            await updateMovieProgress(config, key, movieId, movieData as Record<string, unknown>)
+          } catch {}
+        }
+        res.status(200).json({ ok: true, configured: Boolean(config) })
+        return
+      }
+      if (!history || typeof history !== 'object') {
         res.status(400).json({ ok: false, error: 'key and history required.' })
         return
       }
