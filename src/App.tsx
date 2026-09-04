@@ -7295,6 +7295,17 @@ function SeasonEpisodeSection({
     }
   }, [targetTmdbId, isTvId, selectedSeason])
 
+  const seasonLabels = useMemo(() => {
+    if (movie.isAnime && animeSeasons.length > 0) {
+      const map: Record<number, string> = {}
+      for (const s of animeSeasons) {
+        map[s.season] = s.title
+      }
+      return map
+    }
+    return undefined
+  }, [movie.isAnime, animeSeasons])
+
   const activeSeason =
     seasons.find((season) => season.season === selectedSeason) ?? seasons[0]
 
@@ -7322,17 +7333,6 @@ function SeasonEpisodeSection({
   ) {
     episodes.push(movie.nextEpisode.number)
   }
-
-  const seasonLabels = useMemo(() => {
-    if (movie.isAnime && animeSeasons.length > 0) {
-      const map: Record<number, string> = {}
-      for (const s of animeSeasons) {
-        map[s.season] = s.title
-      }
-      return map
-    }
-    return undefined
-  }, [movie.isAnime, animeSeasons])
 
   const formatAirDate = (value: number | string) => {
     const date = typeof value === 'number' ? new Date(value) : new Date(value)
@@ -12597,10 +12597,6 @@ function ContinueWatchingRail({
     }
     return movies.filter((m) => !isLordAdultMovie(m))
   }, [movies, isJavSection, isPhubSection, isPhub1Section, isPhub2Section, isPhub3Section, isLordSection])
-
-  if (displayMovies.length === 0) {
-    return null
-  }
 
   useEffect(() => {
     if (!menuState) {
