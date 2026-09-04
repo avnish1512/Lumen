@@ -6,6 +6,8 @@
 export interface DownloadItem {
   id: string
   movieId: string
+  tmdbId?: number | string
+  imdbId?: string
   title: string
   year?: string
   season?: number
@@ -15,6 +17,8 @@ export interface DownloadItem {
   still?: string
   runtime?: string
   quality?: string
+  server?: string
+  isFallback?: boolean
   totalBytes: number
   downloadedBytes: number
   progress: number // 0 to 100
@@ -25,6 +29,7 @@ export interface DownloadItem {
   mediaType: 'movie' | 'tv' | 'anime' | 'drama'
   mimeType?: string
   directUrl?: string
+  trailerYoutubeId?: string
 }
 
 const DB_NAME = 'lumen_downloads_db'
@@ -93,7 +98,12 @@ const activeControllers = new Map<string, AbortController>()
 /**
  * Estimate realistic video size based on runtime and media type (1080p ~7.5MB/min)
  */
-export function estimateMediaSize(runtimeStr?: string, mediaType?: string): number {
+export function estimateMediaSize(
+  runtimeStr?: string,
+  mediaType?: string,
+  quality?: string,
+): number {
+  let baseSize = 850 * 1024 * 1024
   if (runtimeStr) {
     const minsMatch = runtimeStr.match(/(\d+)\s*(?:min|m)/i)
     const hoursMatch = runtimeStr.match(/(\d+)\s*(?:hr|h)/i)
@@ -101,13 +111,17 @@ export function estimateMediaSize(runtimeStr?: string, mediaType?: string): numb
     if (hoursMatch) totalMins += parseInt(hoursMatch[1], 10) * 60
     if (minsMatch) totalMins += parseInt(minsMatch[1], 10)
     if (totalMins > 0) {
-      return Math.round(totalMins * 7.2 * 1024 * 1024)
+      baseSize = Math.round(totalMins * 7.2 * 1024 * 1024)
     }
+  } else if (mediaType === 'tv' || mediaType === 'anime') {
+    baseSize = 360 * 1024 * 1024
   }
-  if (mediaType === 'tv' || mediaType === 'anime') {
-    return 360 * 1024 * 1024 // ~360 MB per episode
-  }
-  return 850 * 1024 * 1024 // ~850 MB for standard movie
+
+  const q = (quality || '1080p').toLowerCase()
+  if (q.includes('480')) return Math.round(baseSize * 0.38)
+  if (q.includes('720')) return Math.round(baseSize * 0.68)
+  if (q.includes('4k') || q.includes('2160')) return Math.round(baseSize * 2.5)
+  return baseSize
 }
 
 /**
@@ -266,7 +280,11 @@ export async function getAllDownloads(): Promise<DownloadItem[]> {
         const results = (request.result as DownloadItem[]) || []
         let needsMigration = false
         results.forEach((item) => {
-          if ((!item.totalBytes || item.totalBytes === 0) && item.status === 'completed') {
+          if (item.isFallback && item.downloadedBytes > 0) {
+            item.downloadedBytes = 0
+            item.totalBytes = 0
+            needsMigration = true
+          } else if ((!item.totalBytes || item.totalBytes === 0) && item.status === 'completed' && !item.isFallback) {
             const estimated = estimateMediaSize(item.runtime, item.mediaType)
             item.totalBytes = estimated
             item.downloadedBytes = estimated
@@ -342,16 +360,17 @@ export async function getDownloadBlob(id: string): Promise<Blob | null> {
     })
 
     if (blob) {
+      // Purge any legacy 0:01 fake placeholder (< 200 KB)
+      if (blob.size < 200_000) {
+        try {
+          const writeTx = db.transaction(STORE_BLOBS, 'readwrite')
+          writeTx.objectStore(STORE_BLOBS).delete(id)
+        } catch {
+          // ignore
+        }
+        return null
+      }
       return blob
-    }
-
-    // Auto-generate and cache offline blob for completed items that were saved previously
-    const all = await getAllDownloads()
-    const item = all.find((i) => i.id === id)
-    if (item && item.status === 'completed') {
-      const generatedBlob = await createOfflineVideoBlob(item.title, item.episodeTitle)
-      await saveDownloadBlob(id, generatedBlob)
-      return generatedBlob
     }
 
     return null
@@ -391,8 +410,8 @@ export async function deleteDownload(id: string): Promise<void> {
  */
 export async function getTotalStorageUsed(): Promise<{ totalBytes: number; formatted: string }> {
   const items = await getAllDownloads()
-  const completed = items.filter((i) => i.status === 'completed')
-  const totalBytes = completed.reduce((sum, item) => sum + (item.totalBytes || item.downloadedBytes || 0), 0)
+  const completed = items.filter((i) => i.status === 'completed' && !i.isFallback)
+  const totalBytes = completed.reduce((sum, item) => sum + (item.downloadedBytes || 0), 0)
   return {
     totalBytes,
     formatted: formatBytes(totalBytes),
@@ -411,25 +430,36 @@ export function formatBytes(bytes: number, decimals = 1): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
+export interface DownloadOptions {
+  server?: string
+  quality?: string
+}
+
 /**
- * Start downloading a movie or episode stream URL
+ * Start downloading a movie or episode stream URL with optional server/quality choices
  */
 export async function startDownload(
   meta: Omit<DownloadItem, 'progress' | 'status' | 'downloadedBytes' | 'totalBytes' | 'createdAt'>,
   streamUrl?: string,
+  options?: DownloadOptions,
 ): Promise<DownloadItem> {
   const id = meta.id
   const existing = (await getAllDownloads()).find((i) => i.id === id)
 
-  if (existing && existing.status === 'completed') {
+  if (existing && existing.status === 'completed' && !options) {
     return existing
   }
 
-  const calculatedSize = estimateMediaSize(meta.runtime, meta.mediaType)
+  const quality = options?.quality || meta.quality || '1080p'
+  const server = options?.server || meta.server || 'auto'
+  const calculatedSize = estimateMediaSize(meta.runtime, meta.mediaType, quality)
 
   // Create initial item
   const item: DownloadItem = {
     ...meta,
+    quality,
+    server,
+    isFallback: false,
     totalBytes: calculatedSize,
     downloadedBytes: 0,
     progress: 0,
@@ -440,47 +470,126 @@ export async function startDownload(
 
   await saveDownloadMetadata(item)
 
-  const isDirectBinary = streamUrl && (streamUrl.endsWith('.mp4') || streamUrl.includes('.m3u8') || streamUrl.startsWith('blob:'))
+  const isDirectBinary =
+    streamUrl &&
+    (streamUrl.endsWith('.mp4') ||
+      streamUrl.includes('.mp4?') ||
+      streamUrl.endsWith('.m3u8') ||
+      streamUrl.includes('.m3u8?') ||
+      streamUrl.startsWith('blob:'))
 
   if (isDirectBinary && streamUrl) {
     void executeStreamDownload(item, streamUrl)
-  } else {
-    void executeOfflinePackageDownload(item, calculatedSize)
+    return item
   }
+
+  // Query stream resolver for real direct stream / proxy
+  void (async () => {
+    try {
+      const params = new URLSearchParams({
+        title: meta.title || '',
+        mediaType: meta.mediaType || 'movie',
+      })
+      if (meta.tmdbId) {
+        params.set('tmdbId', String(meta.tmdbId))
+      } else if (meta.movieId) {
+        if (meta.movieId.startsWith('tt')) {
+          params.set('imdbId', meta.movieId)
+        } else {
+          params.set('tmdbId', meta.movieId)
+        }
+      }
+      if (meta.imdbId) params.set('imdbId', meta.imdbId)
+      if (meta.season) params.set('season', String(meta.season))
+      if (meta.episode) params.set('episode', String(meta.episode))
+      if (streamUrl) params.set('directUrl', streamUrl)
+      if (server) params.set('server', server)
+      if (quality) params.set('quality', quality)
+
+      const response = await fetch(`/api/stream-resolver?${params.toString()}`)
+      if (response.ok) {
+        const data = (await response.json()) as {
+          ok?: boolean
+          proxiedUrl?: string
+          streamUrl?: string
+          quality?: string
+          source?: string
+        }
+        if (data.ok && (data.proxiedUrl || data.streamUrl)) {
+          const downloadUrl = data.proxiedUrl || data.streamUrl || ''
+          item.directUrl = downloadUrl
+          item.quality = data.quality || quality
+          item.server = data.source || server
+          item.isFallback = false
+          item.errorMessage = undefined
+          await saveDownloadMetadata({ ...item })
+          await executeStreamDownload(item, downloadUrl)
+          return
+        }
+      }
+    } catch {
+      // Fallback below
+    }
+
+    // Stream provider is iframe/Turnstile protected: mark as Stream-Ready online playback
+    item.isFallback = true
+    item.status = 'completed'
+    item.progress = 100
+    item.downloadedBytes = 0
+    item.totalBytes = 0
+    item.completedAt = Date.now()
+    item.errorMessage = `Stream protected by anti-bot on ${server === 'auto' ? 'default server' : server}. Ready to stream online in full HD.`
+    await saveDownloadMetadata({ ...item })
+  })()
 
   return item
 }
 
 /**
+ * Re-download an existing item with an alternate server and/or quality
+ */
+export async function redownloadItem(
+  item: DownloadItem,
+  options?: DownloadOptions,
+  customStreamUrl?: string,
+): Promise<DownloadItem> {
+  await deleteDownload(item.id)
+  return startDownload(
+    {
+      id: item.id,
+      movieId: item.movieId,
+      tmdbId: item.tmdbId,
+      imdbId: item.imdbId,
+      title: item.title,
+      year: item.year,
+      season: item.season,
+      episode: item.episode,
+      episodeTitle: item.episodeTitle,
+      poster: item.poster,
+      still: item.still,
+      runtime: item.runtime,
+      mediaType: item.mediaType,
+      quality: options?.quality || item.quality,
+      server: options?.server || item.server,
+      trailerYoutubeId: item.trailerYoutubeId,
+    },
+    customStreamUrl || item.directUrl,
+    options,
+  )
+}
+
+/**
  * Downloads and stores full offline video binary package into IndexedDB
  */
-async function executeOfflinePackageDownload(item: DownloadItem, targetSize: number): Promise<void> {
-  let progress = 0
-  const stepInterval = 140
-  const totalSteps = 7
-
-  const interval = window.setInterval(async () => {
-    progress += Math.floor(100 / totalSteps)
-    if (progress >= 100) {
-      window.clearInterval(interval)
-      
-      // Generate actual playable offline video Blob and store into IndexedDB
-      const offlineBlob = await createOfflineVideoBlob(item.title, item.episodeTitle)
-      await saveDownloadBlob(item.id, offlineBlob)
-
-      item.progress = 100
-      item.downloadedBytes = targetSize
-      item.totalBytes = targetSize
-      item.status = 'completed'
-      item.completedAt = Date.now()
-      await saveDownloadMetadata(item)
-    } else {
-      item.progress = progress
-      item.downloadedBytes = Math.round((progress / 100) * targetSize)
-      item.totalBytes = targetSize
-      await saveDownloadMetadata({ ...item })
-    }
-  }, stepInterval)
+export async function executeOfflinePackageDownload(item: DownloadItem, _targetSize?: number): Promise<void> {
+  // Mark as completed stream-ready item without generating dummy fake video files
+  item.progress = 100
+  item.downloadedBytes = 0
+  item.totalBytes = 0
+  item.isFallback = true
+  item.status = 'completed'
+  item.completedAt = Date.now()
+  await saveDownloadMetadata(item)
 }
 
 /**
@@ -562,14 +671,14 @@ async function executeStreamDownload(item: DownloadItem, url: string): Promise<v
     if ((err as Error)?.name === 'AbortError') {
       item.status = 'paused'
     } else {
-      // If direct fetch was blocked by CORS, package offline video blob into IndexedDB
-      const offlineBlob = await createOfflineVideoBlob(item.title, item.episodeTitle)
-      await saveDownloadBlob(item.id, offlineBlob)
-
+      // Direct stream fetch blocked by CORS or anti-bot: save as Stream-Ready online playback
       item.status = 'completed'
+      item.isFallback = true
       item.progress = 100
       item.completedAt = Date.now()
-      item.downloadedBytes = item.totalBytes || 850 * 1024 * 1024
+      item.downloadedBytes = 0
+      item.totalBytes = 0
+      item.errorMessage = `Direct stream blocked by anti-bot on ${item.server}. Ready to stream online in full HD.`
     }
     await saveDownloadMetadata(item)
   } finally {

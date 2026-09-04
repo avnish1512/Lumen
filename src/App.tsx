@@ -159,6 +159,7 @@ import { SplashScreen } from './SplashScreen'
 import { ErrorBoundary } from './ErrorBoundary'
 import { DownloadsScreen } from './DownloadsScreen'
 import { startDownload, getAllDownloads, subscribeDownloads } from './downloads'
+import { DownloadOptionsModal } from './DownloadOptionsModal'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -5071,6 +5072,7 @@ function App() {
                 genres: item.mediaType === 'anime' ? ['Anime'] : [],
                 streamSeason: item.season,
                 streamEpisode: item.episode,
+                trailerYoutubeId: item.trailerYoutubeId,
               })
               openWatch(movieObj)
             }}
@@ -6457,6 +6459,7 @@ function DetailScreen({
   const similarsRef = useRef<HTMLDivElement | null>(null)
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false)
 
   const isHentaiMovie = Boolean(
     movie.isHentaiOcean ||
@@ -6489,22 +6492,33 @@ function DetailScreen({
     }
   }, [movie.id, isHentaiMovie])
 
-  const handleDownloadClick = async () => {
+  const handleDownloadClick = () => {
+    setIsDownloadModalOpen(true)
+  }
+
+  const handleConfirmDownload = async (server: string, quality: string) => {
     setIsDownloading(true)
     try {
-      const streamUrl = buildStreamUrl(movie, 'rivestream')
+      const streamProviderToUse = server !== 'auto' && isStreamProvider(server) ? (server as StreamProvider) : 'rivestream'
+      const streamUrl = buildStreamUrl(movie, streamProviderToUse)
       await startDownload(
         {
           id: movie.id,
           movieId: movie.id,
+          tmdbId: movie.tmdbId,
+          imdbId: movie.id?.startsWith('tt') ? movie.id : undefined,
           title: movie.title,
           year: movie.year,
+          season: movie.streamSeason,
+          episode: movie.streamEpisode,
           poster: movie.poster,
           still: movie.still,
           runtime: movie.runtime,
           mediaType: movie.isAnime ? 'anime' : (movie.type === 'series' ? 'tv' : 'movie'),
+          trailerYoutubeId: movie.trailerYoutubeId,
         },
         streamUrl,
+        { server, quality },
       )
       setIsDownloaded(true)
     } finally {
@@ -7071,6 +7085,19 @@ function DetailScreen({
           </>
         )}
       </div>
+
+      {isDownloadModalOpen && (
+        <DownloadOptionsModal
+          isOpen={isDownloadModalOpen}
+          onClose={() => setIsDownloadModalOpen(false)}
+          onConfirm={handleConfirmDownload}
+          movie={movie}
+          season={movie.streamSeason}
+          episode={movie.streamEpisode}
+          currentServer="auto"
+          currentQuality="1080p"
+        />
+      )}
     </section>
   )
 }
@@ -8027,6 +8054,7 @@ function WatchScreen({
 
   const [isWatchDownloaded, setIsWatchDownloaded] = useState(false)
   const [isWatchDownloading, setIsWatchDownloading] = useState(false)
+  const [isWatchDownloadModalOpen, setIsWatchDownloadModalOpen] = useState(false)
 
   const currentDownloadKey = movie.streamSeason && movie.streamEpisode
     ? `${movie.id}-s${movie.streamSeason}e${movie.streamEpisode}`
@@ -8050,14 +8078,21 @@ function WatchScreen({
     }
   }, [currentDownloadKey])
 
-  const handleWatchDownload = async () => {
+  const handleWatchDownload = () => {
+    setIsWatchDownloadModalOpen(true)
+  }
+
+  const handleConfirmWatchDownload = async (server: string, quality: string) => {
     setIsWatchDownloading(true)
     try {
-      const activeStreamUrl = buildStreamUrl(movie, activeProviderId)
+      const providerToUse = server !== 'auto' && isStreamProvider(server) ? (server as StreamProvider) : activeProviderId
+      const activeStreamUrl = buildStreamUrl(movie, providerToUse)
       await startDownload(
         {
           id: currentDownloadKey,
           movieId: movie.id,
+          tmdbId: movie.tmdbId,
+          imdbId: movie.id?.startsWith('tt') ? movie.id : undefined,
           title: movie.title,
           year: movie.year,
           season: movie.streamSeason,
@@ -8067,8 +8102,10 @@ function WatchScreen({
           still: movie.still,
           runtime: movie.runtime,
           mediaType: movie.isAnime ? 'anime' : (movie.type === 'series' ? 'tv' : 'movie'),
+          trailerYoutubeId: movie.trailerYoutubeId,
         },
         activeStreamUrl,
+        { server, quality },
       )
       setIsWatchDownloaded(true)
     } finally {
@@ -9473,6 +9510,19 @@ function WatchScreen({
           {hasEpisodes && renderEpisodePanel(false)}
           {renderCommentsSection()}
         </div>
+
+        {isWatchDownloadModalOpen && (
+          <DownloadOptionsModal
+            isOpen={isWatchDownloadModalOpen}
+            onClose={() => setIsWatchDownloadModalOpen(false)}
+            onConfirm={handleConfirmWatchDownload}
+            movie={movie}
+            season={season}
+            episode={episode}
+            currentServer={activeProviderId}
+            currentQuality="1080p"
+          />
+        )}
       </section>
     )
   }
@@ -9723,6 +9773,19 @@ function WatchScreen({
           )}
         </div>
       </div>
+
+      {isWatchDownloadModalOpen && (
+        <DownloadOptionsModal
+          isOpen={isWatchDownloadModalOpen}
+          onClose={() => setIsWatchDownloadModalOpen(false)}
+          onConfirm={handleConfirmWatchDownload}
+          movie={movie}
+          season={season}
+          episode={episode}
+          currentServer={activeProviderId}
+          currentQuality="1080p"
+        />
+      )}
     </section>
   )
 }
@@ -12330,6 +12393,7 @@ function LibraryScreen({
                 genres: item.mediaType === 'anime' ? ['Anime'] : [],
                 streamSeason: item.season,
                 streamEpisode: item.episode,
+                trailerYoutubeId: item.trailerYoutubeId,
               })
               if (onPlayMovie) {
                 onPlayMovie(movieObj)

@@ -87,6 +87,8 @@ import {
   removeOtherDevices,
   type DeviceRecord,
 } from './api/_lib/devices-core'
+import { resolveStreamSources } from './api/_lib/stream-resolver-core'
+import { handleStreamProxyRequest } from './api/_lib/stream-proxy-core'
 
 const OMDB_BASE_URL = 'https://www.omdbapi.com/'
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3'
@@ -1967,6 +1969,58 @@ function epornerDevProxy(): Plugin {
   }
 }
 
+function streamResolverDevProxy(): Plugin {
+  return {
+    name: 'stream-resolver-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/stream-resolver', async (req, res) => {
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const q = (key: string) => requestUrl.searchParams.get(key) || undefined
+
+        try {
+          const result = await resolveStreamSources({
+            tmdbId: q('tmdbId'),
+            imdbId: q('imdbId'),
+            title: q('title') || '',
+            mediaType: q('mediaType') as any,
+            season: Number(q('season')) || undefined,
+            episode: Number(q('episode')) || undefined,
+            directUrl: q('directUrl'),
+            server: q('server'),
+            quality: q('quality'),
+          })
+
+          sendJson(res, result.ok ? 200 : 404, result)
+        } catch (error) {
+          sendJson(res, 502, {
+            ok: false,
+            error: error instanceof Error ? error.message : 'Resolver error.',
+          })
+        }
+      })
+    },
+  }
+}
+
+function streamProxyDevProxy(): Plugin {
+  return {
+    name: 'stream-proxy-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/stream-proxy', async (req, res) => {
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        const targetUrl = requestUrl.searchParams.get('url') || ''
+        let customHeaders: Record<string, string> | undefined
+        try {
+          const raw = requestUrl.searchParams.get('headers')
+          if (raw) customHeaders = JSON.parse(raw)
+        } catch {}
+
+        await handleStreamProxyRequest(req, res, targetUrl, customHeaders)
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
@@ -2010,6 +2064,8 @@ export default defineConfig(({ mode }) => {
         movieGluConfigFromEnv(env),
         createTmdbTrailerAuthChain(env),
       ),
+      streamResolverDevProxy(),
+      streamProxyDevProxy(),
     ],
   }
 })

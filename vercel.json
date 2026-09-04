@@ -38,6 +38,8 @@
     { "source": "/api/devices", "destination": "/api/hub?kind=devices" },
     { "source": "/api/lord-pin", "destination": "/api/hub?kind=lord-pin" },
     { "source": "/api/phub-refresh", "destination": "/api/hub?kind=phub-refresh" },
+    { "source": "/api/stream-resolver", "destination": "/api/hub?kind=stream-resolver" },
+    { "source": "/api/stream-proxy", "destination": "/api/hub?kind=stream-proxy" },
     {
       "source": "/se_player.php",
       "destination": "/api/se-player"

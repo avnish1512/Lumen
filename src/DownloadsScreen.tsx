@@ -16,6 +16,8 @@ import {
   ExternalLink,
   ShieldCheck,
   WifiOff,
+  Sliders,
+  AlertCircle,
 } from 'lucide-react'
 import {
   type DownloadItem,
@@ -23,12 +25,15 @@ import {
   deleteDownload,
   subscribeDownloads,
   getDownloadBlob,
-  createOfflineVideoBlob,
-  saveDownloadBlob,
   exportToDevice,
   formatBytes,
   getTotalStorageUsed,
+  redownloadItem,
 } from './downloads'
+import { buildStreamUrl, type StreamProvider, isStreamProvider } from './tmdb'
+import type { Movie } from './omdb'
+import { normalizeMovie } from './omdb'
+import { DownloadOptionsModal } from './DownloadOptionsModal'
 
 interface DownloadsScreenProps {
   onBack?: () => void
@@ -36,6 +41,46 @@ interface DownloadsScreenProps {
   onPlayMovie?: (item: DownloadItem) => void
   onOpenDetail?: (item: DownloadItem) => void
   designMode?: 'apple' | 'netflix'
+}
+
+function downloadItemToMovie(item: DownloadItem): Movie {
+  const numericTmdbId =
+    typeof item.tmdbId === 'number'
+      ? item.tmdbId
+      : item.tmdbId
+        ? parseInt(String(item.tmdbId), 10)
+        : undefined
+
+  return normalizeMovie({
+    id: item.movieId || item.id,
+    title: item.title,
+    year: item.year || '',
+    poster: item.poster || '',
+    still: item.still || item.poster || '',
+    hero: item.still || item.poster || '',
+    runtime: item.runtime || '',
+    type: item.mediaType === 'tv' ? 'series' : item.mediaType === 'anime' ? 'anime' : 'movie',
+    isAnime: item.mediaType === 'anime',
+    genres: item.mediaType === 'anime' ? ['Anime'] : [],
+    tmdbId: numericTmdbId,
+    tmdbType: item.mediaType === 'tv' ? 'tv' : 'movie',
+    streamSeason: item.season,
+    streamEpisode: item.episode,
+    trailerYoutubeId: item.trailerYoutubeId,
+  })
+}
+
+function getStreamEmbedUrlForItem(item: DownloadItem): string {
+  if (item.trailerYoutubeId) {
+    return `https://www.youtube-nocookie.com/embed/${item.trailerYoutubeId}?autoplay=1&enablejsapi=1`
+  }
+  if (item.directUrl && (item.directUrl.startsWith('http://') || item.directUrl.startsWith('https://')) && !item.directUrl.includes('/api/stream-proxy')) {
+    return item.directUrl
+  }
+  const movie = downloadItemToMovie(item)
+  const provider = item.server && isStreamProvider(item.server) ? (item.server as StreamProvider) : 'vidking'
+  const url = buildStreamUrl(movie, provider)
+  return url || `https://www.vidking.net/embed/movie/${movie.tmdbId || item.id}?color=e50914&autoPlay=true`
 }
 
 export function DownloadsScreen({
@@ -49,9 +94,21 @@ export function DownloadsScreen({
   const [storageUsed, setStorageUsed] = useState<string>('0 MB')
   const [activePlayItem, setActivePlayItem] = useState<DownloadItem | null>(null)
   const [offlineVideoUrl, setOfflineVideoUrl] = useState<string | null>(null)
+  const [streamEmbedUrl, setStreamEmbedUrl] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<'all' | 'movie' | 'tv' | 'anime'>('all')
+  const [configuredItem, setConfiguredItem] = useState<DownloadItem | null>(null)
   const videoPlayerRef = useRef<HTMLVideoElement | null>(null)
+
+  const handleRedownloadConfirm = async (server: string, quality: string) => {
+    if (!configuredItem) return
+    const target = configuredItem
+    setConfiguredItem(null)
+    if (activePlayItem?.id === target.id) {
+      handleClosePlayer()
+    }
+    await redownloadItem(target, { server, quality })
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -78,21 +135,21 @@ export function DownloadsScreen({
     }
   }, [])
 
-  // Handle playing video in popup modal (100% offline from device storage)
+  // Handle playing video in popup modal (100% offline from device storage or full stream)
   const handlePlayOffline = async (item: DownloadItem) => {
     setActivePlayItem(item)
     const blob = await getDownloadBlob(item.id)
-    if (blob) {
+    if (blob && blob.size > 200_000 && !item.isFallback) {
       const url = URL.createObjectURL(blob)
       setOfflineVideoUrl(url)
-    } else if (item.directUrl && (item.directUrl.startsWith('blob:') || item.directUrl.endsWith('.mp4') || item.directUrl.includes('.m3u8'))) {
-      setOfflineVideoUrl(item.directUrl)
+      setStreamEmbedUrl(null)
     } else {
-      // Generate and cache offline playable blob
-      const generatedBlob = await createOfflineVideoBlob(item.title, item.episodeTitle)
-      await saveDownloadBlob(item.id, generatedBlob)
-      const url = URL.createObjectURL(generatedBlob)
-      setOfflineVideoUrl(url)
+      if (offlineVideoUrl && offlineVideoUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(offlineVideoUrl)
+      }
+      setOfflineVideoUrl(null)
+      const embedUrl = getStreamEmbedUrlForItem(item)
+      setStreamEmbedUrl(embedUrl)
     }
   }
 
@@ -101,6 +158,7 @@ export function DownloadsScreen({
       URL.revokeObjectURL(offlineVideoUrl)
     }
     setOfflineVideoUrl(null)
+    setStreamEmbedUrl(null)
     setActivePlayItem(null)
   }
 
@@ -280,10 +338,17 @@ export function DownloadsScreen({
                       <Play fill="currentColor" strokeWidth={0} size={24} />
                     </button>
                   </div>
-                  <span className="download-badge-offline">
-                    <ShieldCheck size={11} style={{ marginRight: '3px' }} />
-                    Offline Ready
-                  </span>
+                  {item.isFallback ? (
+                    <span className="download-badge-offline stream-ready-badge">
+                      <Sparkles size={11} style={{ marginRight: '3px' }} />
+                      Stream Ready
+                    </span>
+                  ) : (
+                    <span className="download-badge-offline">
+                      <ShieldCheck size={11} style={{ marginRight: '3px' }} />
+                      Offline Ready
+                    </span>
+                  )}
                 </div>
 
                 <div className="download-details">
@@ -299,8 +364,10 @@ export function DownloadsScreen({
                         <Clock size={11} /> {item.runtime}
                       </span>
                     )}
+                    {item.quality && <span className="meta-tag quality-tag">{item.quality.toUpperCase()}</span>}
+                    {item.server && <span className="meta-tag server-tag">{item.server.toUpperCase()}</span>}
                     <span className="meta-tag size-tag">
-                      {formatBytes(item.totalBytes || item.downloadedBytes)}
+                      {item.isFallback ? 'Full Stream' : formatBytes(item.totalBytes || item.downloadedBytes)}
                     </span>
                   </div>
 
@@ -314,7 +381,20 @@ export function DownloadsScreen({
                       }}
                     >
                       <Play size={13} fill="currentColor" />
-                      <span>Play Offline</span>
+                      <span>{item.isFallback ? 'Watch Stream' : 'Play Offline'}</span>
+                    </button>
+
+                    <button
+                      className="btn-download-action"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setConfiguredItem(item)
+                      }}
+                      title="Change Server / Quality"
+                    >
+                      <Sliders size={13} />
+                      <span>Server</span>
                     </button>
 
                     <button
@@ -368,15 +448,32 @@ export function DownloadsScreen({
           <div className="offline-player-container">
             <header className="offline-player-header">
               <div className="offline-player-title">
-                <span className="offline-indicator">
-                  <WifiOff size={13} style={{ marginRight: '4px' }} />
-                  Offline Storage Playback
-                </span>
+                {streamEmbedUrl ? (
+                  <span className="offline-indicator online-indicator">
+                    <Play size={13} style={{ marginRight: '4px' }} />
+                    Full Stream ({activePlayItem.server?.toUpperCase() || 'ONLINE'})
+                  </span>
+                ) : (
+                  <span className="offline-indicator">
+                    <WifiOff size={13} style={{ marginRight: '4px' }} />
+                    Offline Storage Playback
+                  </span>
+                )}
                 <h3>{activePlayItem.title}</h3>
                 {activePlayItem.episodeTitle && <p>{activePlayItem.episodeTitle}</p>}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  className="btn-download-action"
+                  type="button"
+                  onClick={() => setConfiguredItem(activePlayItem)}
+                  title="Change Server / Quality"
+                >
+                  <Sliders size={14} />
+                  <span>Change Server</span>
+                </button>
+
                 <button
                   className="btn-download-action"
                   type="button"
@@ -414,8 +511,28 @@ export function DownloadsScreen({
               </div>
             </header>
 
+            {streamEmbedUrl && (
+              <div className="offline-fallback-notice online-stream-notice">
+                <AlertCircle size={15} />
+                <span>
+                  Streaming <strong>{activePlayItem.title}</strong> in Full HD ({activePlayItem.server?.toUpperCase() || 'default server'}). Cloudflare Turnstile anti-bot prevents raw file caching on this host, so the full movie is ready to stream online.
+                </span>
+                <button type="button" onClick={() => setConfiguredItem(activePlayItem)}>
+                  Change Server
+                </button>
+              </div>
+            )}
+
             <div className="offline-video-wrapper">
-              {offlineVideoUrl ? (
+              {streamEmbedUrl ? (
+                <iframe
+                  src={streamEmbedUrl}
+                  className="offline-stream-iframe"
+                  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                  title={activePlayItem.title}
+                />
+              ) : offlineVideoUrl ? (
                 <video
                   ref={videoPlayerRef}
                   className="offline-video-element"
@@ -427,12 +544,36 @@ export function DownloadsScreen({
               ) : (
                 <div className="offline-video-error">
                   <RefreshCw className="spin" size={32} />
-                  <p>Loading offline video stream from device storage...</p>
+                  <p>Connecting to video stream...</p>
                 </div>
               )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Download Options / Change Server Modal */}
+      {configuredItem && (
+        <DownloadOptionsModal
+          isOpen={Boolean(configuredItem)}
+          onClose={() => setConfiguredItem(null)}
+          onConfirm={handleRedownloadConfirm}
+          movie={{
+            title: configuredItem.title,
+            poster: configuredItem.poster,
+            still: configuredItem.still,
+            runtime: configuredItem.runtime,
+            year: configuredItem.year,
+            type: configuredItem.mediaType === 'tv' ? 'series' : 'movie',
+            isAnime: configuredItem.mediaType === 'anime',
+          }}
+          season={configuredItem.season}
+          episode={configuredItem.episode}
+          episodeTitle={configuredItem.episodeTitle}
+          currentServer={configuredItem.server}
+          currentQuality={configuredItem.quality}
+          isRedownload={true}
+        />
       )}
     </section>
   )

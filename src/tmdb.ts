@@ -33,6 +33,34 @@ export type StreamProvider =
   | 'upload18'
   | 'eporner'
 
+export function isStreamProvider(value: string | null | undefined): value is StreamProvider {
+  return (
+    value === 'vidrift' ||
+    value === 'rivestream' ||
+    value === 'cinesrc' ||
+    value === 'embedapi' ||
+    value === 'vidphantom' ||
+    value === 'mgeb' ||
+    value === 'primesrc' ||
+    value === 'embedmaster' ||
+    value === 'filmu' ||
+    value === 'nhdapi' ||
+    value === 'yenime' ||
+    value === 'vidsync' ||
+    value === 'multiembed-vip' ||
+    value === 'vidking' ||
+    value === 'clickhost' ||
+    value === 'megaplay' ||
+    value === 'megabuzz' ||
+    value === 'megavid' ||
+    value === 'oceanplay' ||
+    value === 'apijav' ||
+    value === 'phubplay' ||
+    value === 'upload18' ||
+    value === 'eporner'
+  )
+}
+
 export type StreamProviderOption = {
   id: StreamProvider
   name: string

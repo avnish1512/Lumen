@@ -58,6 +58,11 @@ import {
   removeOtherDevices,
   type DeviceRecord,
 } from './_lib/devices-core.js'
+import {
+  resolveStreamSources,
+  type ResolveStreamRequest,
+} from './_lib/stream-resolver-core.js'
+import { handleStreamProxyRequest } from './_lib/stream-proxy-core.js'
 
 const inMemoryProfilesMap = new Map<string, StoredProfile[]>()
 let globalLordPin = '1408'
@@ -818,6 +823,55 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     } catch (error) {
       res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Devices error.' })
     }
+    return
+  }
+
+  // ---- stream-resolver ----
+  if (kind === 'stream-resolver') {
+    res.setHeader('Cache-Control', 'no-store')
+    try {
+      const tmdbId = qv(req.query.tmdbId) || (body.tmdbId ? String(body.tmdbId) : undefined)
+      const imdbId = qv(req.query.imdbId) || (body.imdbId ? String(body.imdbId) : undefined)
+      const title = String(qv(req.query.title) || body.title || '').trim()
+      const mediaType = (qv(req.query.mediaType) || body.mediaType) as ResolveStreamRequest['mediaType']
+      const season = Number(qv(req.query.season) || body.season) || undefined
+      const episode = Number(qv(req.query.episode) || body.episode) || undefined
+      const directUrl = qv(req.query.directUrl) || (body.directUrl ? String(body.directUrl) : undefined)
+      const server = qv(req.query.server) || (body.server ? String(body.server) : undefined)
+      const quality = qv(req.query.quality) || (body.quality ? String(body.quality) : undefined)
+
+      const result = await resolveStreamSources({
+        tmdbId,
+        imdbId,
+        title,
+        mediaType,
+        season,
+        episode,
+        directUrl,
+        server,
+        quality,
+      })
+
+      res.status(result.ok ? 200 : 404).json(result)
+    } catch (error) {
+      res.status(502).json({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Stream resolution failed.',
+      })
+    }
+    return
+  }
+
+  // ---- stream-proxy ----
+  if (kind === 'stream-proxy') {
+    const targetUrl = (qv(req.query.url) ?? '').trim()
+    let customHeaders: Record<string, string> | undefined
+    try {
+      const rawH = qv(req.query.headers)
+      if (rawH) customHeaders = JSON.parse(rawH)
+    } catch {}
+
+    await handleStreamProxyRequest(req as any, res as any, targetUrl, customHeaders)
     return
   }
 
