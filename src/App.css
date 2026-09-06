@@ -51,7 +51,7 @@ button {
   .netflix-mobile-header,
   .apple-mobile-header,
   .app-unified-topbar {
-    position: sticky !important;
+    position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
@@ -84,6 +84,18 @@ button {
     backdrop-filter: blur(20px) saturate(1.2) !important;
     -webkit-backdrop-filter: blur(20px) saturate(1.2) !important;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6) !important;
+  }
+
+  .library-screen {
+    padding-top: calc(max(env(safe-area-inset-top, 0px), 48px) + 48px) !important;
+  }
+
+  .livetv-screen {
+    padding-top: calc(max(env(safe-area-inset-top, 0px), 48px) + 48px) !important;
+  }
+
+  .manga-screen:not(.manga-reader-screen) {
+    padding-top: calc(max(env(safe-area-inset-top, 0px), 48px) + 48px) !important;
   }
 
   .home-header h1,
@@ -8413,8 +8425,6 @@ a.watch-option-card {
       linear-gradient(90deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.18));
   }
 
-  .home-screen .home-header,
-  .browse-screen .home-header,
   .home-screen .hero-copy,
   .browse-screen .hero-copy {
     z-index: 3;
@@ -12598,13 +12608,12 @@ body:has(.add-profile-screen),
 }
 
 .home-hero .home-header {
-  position: relative;
-  /* This header is positioned + z-indexed, so it forms its own stacking
-     context — the profile dropdown inside it (z-index 4000) is clamped to
-     THIS value relative to the hero's siblings. Keep it high enough to beat
-     the hero copy (4), carousel dots (4) AND the content rails / bars below
-     the hero (which use z-index up to ~100) so the open dropdown is never
-     painted under them. Stays below the fullscreen player/overlays (9999). */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  max-width: 576px;
+  margin: 0 auto;
   z-index: 3000;
 }
 
