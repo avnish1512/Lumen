@@ -1,12 +1,13 @@
 /* global process */
 import Constants from 'expo-constants'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, BackHandler, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { WebView } from 'react-native-webview'
 
 const MAX_RETRIES = 5
 
-const fallbackHost = process.env.EXPO_PUBLIC_VITE_HOST || '192.168.31.5'
+const liveProductionUrl = 'https://lumen-six-nu.vercel.app/'
+const fallbackHost = process.env.EXPO_PUBLIC_VITE_HOST || ''
 const vitePort = process.env.EXPO_PUBLIC_VITE_PORT || '5173'
 
 function normalizeWebAppUrl(value) {
@@ -35,7 +36,7 @@ function getMetroHost() {
 
 const defaultWebAppUrl =
   normalizeWebAppUrl(process.env.EXPO_PUBLIC_WEB_APP_URL) ||
-  `http://${getMetroHost()}:${vitePort}/`
+  (fallbackHost ? `http://${getMetroHost()}:${vitePort}/` : liveProductionUrl)
 
 export default function ExpoWebShell() {
   const webViewRef = useRef(null)
@@ -44,7 +45,49 @@ export default function ExpoWebShell() {
   const [reloadKey, setReloadKey] = useState(0)
   const [hasError, setHasError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [canGoBack, setCanGoBack] = useState(false)
+  const canGoBackRef = useRef(false)
   const timeoutRef = useRef(null)
+
+  const updateCanGoBack = useCallback((val) => {
+    setCanGoBack(val)
+    canGoBackRef.current = val
+  }, [])
+
+  const handleMessage = useCallback((event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data)
+      if (data && data.type === 'LUMEN_NAV_STATE') {
+        if (typeof data.canGoBack === 'boolean') {
+          updateCanGoBack(data.canGoBack)
+        }
+      }
+    } catch {
+      // ignore non-json messages
+    }
+  }, [updateCanGoBack])
+
+  // Hardware back button support for Android
+  useEffect(() => {
+    const onBackPress = () => {
+      if (canGoBackRef.current && webViewRef.current) {
+        webViewRef.current.injectJavaScript(`
+          (function() {
+            if (typeof window.__handleLumenBack === 'function') {
+              window.__handleLumenBack();
+            } else {
+              window.history.back();
+            }
+          })();
+          true;
+        `)
+        return true
+      }
+      return false
+    }
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress)
+    return () => subscription.remove()
+  }, [])
 
   // Safety connection timeout: If targetUrl doesn't respond in 4.5s, trigger error screen
   useEffect(() => {
@@ -106,6 +149,12 @@ export default function ExpoWebShell() {
         onError={handleError}
         onHttpError={handleError}
         onLoadEnd={handleLoadEnd}
+        onMessage={handleMessage}
+        onNavigationStateChange={(navState) => {
+          if (navState.canGoBack) {
+            updateCanGoBack(true)
+          }
+        }}
         originWhitelist={['*']}
         setSupportMultipleWindows={false}
         source={{ uri: targetUrl }}

@@ -218,6 +218,16 @@ type Screen = 'home' | 'movies' | 'tv' | 'anime' | 'detail' | 'watch' | 'search'
 type PrimaryTab = 'Home' | 'Movies' | 'TV Shows' | 'Anime' | 'Library' | 'Search' | 'Drama' | 'Live TV' | 'Manga' | 'Downloads'
 type SavedMovies = Record<string, Movie>
 
+export interface LumenHistoryState {
+  screen: Screen
+  movie?: Movie | null
+  detailBackScreen?: Screen
+  watchBackScreen?: Screen
+  lordBackScreen?: Screen
+  loginBackScreen?: Screen
+  historyIndex: number
+}
+
 // 4-digit PIN that unlocks the hidden "Lord" profile. Change this value (or the
 // localStorage key 'lord_pin') to set your own code.
 const DEFAULT_LORD_PIN = '1408'
@@ -336,6 +346,24 @@ export type UserProfile = {
 }
 
 const adminStarredServerKey = 'lumen.starredServer.admin'
+
+function notifyNativeNavState(canGoBack: boolean, screen: Screen) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof window !== 'undefined' && (window as any).ReactNativeWebView?.postMessage) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).ReactNativeWebView.postMessage(
+        JSON.stringify({
+          type: 'LUMEN_NAV_STATE',
+          canGoBack,
+          screen,
+        }),
+      )
+    }
+  } catch {
+    // ignore cross-origin or JSON serialization issues
+  }
+}
 
 function starredServerKeyFor(user: UserInfo | null) {
   if (isMainAccount(user?.email)) {
@@ -2759,6 +2787,8 @@ function App() {
   const [homeHeroMovie, setHomeHeroMovie] = useState<Movie | null>(() => initialCache?.homeHeroMovie ?? null)
   const [dramaHeroMovie, setDramaHeroMovie] = useState<Movie | null>(null)
   const [detailBackScreen, setDetailBackScreen] = useState<Screen>('home')
+  const [watchBackScreen, setWatchBackScreen] = useState<Screen>('home')
+  const historyIndexRef = useRef<number>(0)
   const [savedMovies, setSavedMovies] = useState<SavedMovies>(readSavedMovies)
   const [likedMovies, setLikedMovies] = useState<SavedMovies>(readLikedMovies)
   const [watchHistory, setWatchHistory] =
@@ -3161,44 +3191,109 @@ function App() {
                 ? 'Anime'
                 : 'Movies'
 
-  const setScreen = (nextScreen: Screen) => {
-    setScreenState(nextScreen)
-    try {
-      if (nextScreen !== 'login' && nextScreen !== 'profiles') {
-        window.sessionStorage.setItem(activeScreenKey, nextScreen)
-      } else {
-        window.sessionStorage.removeItem(activeScreenKey)
-      }
-    } catch {}
-    window.history.replaceState(
-      null,
-      '',
-      nextScreen === 'home' ? window.location.pathname : `#${nextScreen}`,
-    )
-    const resetScroll = () => {
-      const shell = appShellRef.current
-      if (shell) {
+  const resetScroll = useCallback(() => {
+    const shell = appShellRef.current
+    if (shell) {
+      if (typeof shell.scrollTo === 'function') {
         shell.scrollTo({ top: 0, behavior: 'auto' })
-        shell.scrollTop = 0
       }
-      const root = document.getElementById('root')
-      if (root) {
+      shell.scrollTop = 0
+    }
+    const root = document.getElementById('root')
+    if (root) {
+      if (typeof root.scrollTo === 'function') {
         root.scrollTo({ top: 0, behavior: 'auto' })
-        root.scrollTop = 0
       }
-      if (document.documentElement) {
+      root.scrollTop = 0
+    }
+    if (document.documentElement) {
+      if (typeof document.documentElement.scrollTo === 'function') {
         document.documentElement.scrollTo({ top: 0, behavior: 'auto' })
-        document.documentElement.scrollTop = 0
       }
-      if (document.body) {
+      document.documentElement.scrollTop = 0
+    }
+    if (document.body) {
+      if (typeof document.body.scrollTo === 'function') {
         document.body.scrollTo({ top: 0, behavior: 'auto' })
-        document.body.scrollTop = 0
       }
+      document.body.scrollTop = 0
+    }
+    if (typeof window.scrollTo === 'function') {
       window.scrollTo({ top: 0, behavior: 'auto' })
     }
-    resetScroll()
-    window.requestAnimationFrame(resetScroll)
-  }
+  }, [])
+
+  const setScreen = useCallback(
+    (nextScreen: Screen, options?: { replace?: boolean; movie?: Movie | null }) => {
+      if (nextScreen === screen && !options?.movie) {
+        resetScroll()
+        window.requestAnimationFrame(resetScroll)
+        return
+      }
+
+      setScreenState(nextScreen)
+      try {
+        if (nextScreen !== 'login' && nextScreen !== 'profiles') {
+          window.sessionStorage.setItem(activeScreenKey, nextScreen)
+        } else {
+          window.sessionStorage.removeItem(activeScreenKey)
+        }
+      } catch {}
+
+      const shouldReplace =
+        Boolean(options?.replace) ||
+        nextScreen === 'login' ||
+        nextScreen === 'profiles' ||
+        (screen === 'home' && nextScreen === 'home')
+
+      const targetMovie =
+        options?.movie !== undefined
+          ? options.movie
+          : nextScreen === 'detail' || nextScreen === 'watch'
+            ? selectedMovie
+            : null
+
+      if (shouldReplace) {
+        const historyState: LumenHistoryState = {
+          screen: nextScreen,
+          movie: targetMovie,
+          detailBackScreen,
+          watchBackScreen,
+          lordBackScreen,
+          loginBackScreen,
+          historyIndex: historyIndexRef.current,
+        }
+        window.history.replaceState(
+          historyState,
+          '',
+          nextScreen === 'home' ? window.location.pathname : `#${nextScreen}`,
+        )
+      } else {
+        const nextIndex = historyIndexRef.current + 1
+        historyIndexRef.current = nextIndex
+        const historyState: LumenHistoryState = {
+          screen: nextScreen,
+          movie: targetMovie,
+          detailBackScreen,
+          watchBackScreen,
+          lordBackScreen,
+          loginBackScreen,
+          historyIndex: nextIndex,
+        }
+        window.history.pushState(
+          historyState,
+          '',
+          nextScreen === 'home' ? window.location.pathname : `#${nextScreen}`,
+        )
+      }
+
+      notifyNativeNavState(historyIndexRef.current > 0, nextScreen)
+
+      resetScroll()
+      window.requestAnimationFrame(resetScroll)
+    },
+    [screen, selectedMovie, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, resetScroll],
+  )
 
   const openProfileOrLogin = () => {
     setLoginBackScreen(screen)
@@ -3961,58 +4056,300 @@ function App() {
     [markContinueWatching],
   )
 
-  const openDetail = (movie: Movie) => {
-    const safeMovie = normalizeMovie(movie)
-    if (screen !== 'detail' && screen !== 'watch') {
-      setDetailBackScreen(screen)
-    } else if (isLordAdultMovie(safeMovie) && detailBackScreen !== 'lord') {
-      setDetailBackScreen('lord')
+  const openDetail = useCallback(
+    (movie: Movie) => {
+      const safeMovie = normalizeMovie(movie)
+      const prevScreen = screen !== 'detail' && screen !== 'watch' ? screen : detailBackScreen
+      const newDetailBackScreen = isLordAdultMovie(safeMovie) && prevScreen !== 'lord' ? 'lord' : prevScreen
+      setDetailBackScreen(newDetailBackScreen)
+
+      if (isJavMovie(safeMovie)) {
+        setActiveLordTab('jav')
+      } else if (isPhub3Movie(safeMovie)) {
+        setActiveLordTab('phub3')
+      } else if (isPhub2Movie(safeMovie)) {
+        setActiveLordTab('phub2')
+      } else if (isPhub1Movie(safeMovie)) {
+        setActiveLordTab('phub')
+      } else if (isHentaiMovie(safeMovie)) {
+        setActiveLordTab('collection')
+      }
+
+      setSelectedMovie(safeMovie)
+      setScreenState('detail')
+      try {
+        window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(safeMovie))
+        window.sessionStorage.setItem(activeScreenKey, 'detail')
+      } catch {}
+
+      const nextIndex = historyIndexRef.current + 1
+      historyIndexRef.current = nextIndex
+      const historyState: LumenHistoryState = {
+        screen: 'detail',
+        movie: safeMovie,
+        detailBackScreen: newDetailBackScreen,
+        watchBackScreen,
+        lordBackScreen,
+        loginBackScreen,
+        historyIndex: nextIndex,
+      }
+      window.history.pushState(historyState, '', '#detail')
+      notifyNativeNavState(true, 'detail')
+
+      resetScroll()
+      window.requestAnimationFrame(resetScroll)
+      void hydrateMovie(safeMovie)
+    },
+    [screen, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, resetScroll, hydrateMovie],
+  )
+
+  const openWatch = useCallback(
+    (movie: Movie) => {
+      const safeMovie = normalizeMovie(movie)
+      const backTo = screen === 'detail' ? 'detail' : (screen !== 'watch' ? screen : detailBackScreen)
+      setWatchBackScreen(backTo)
+
+      let currentDetailBack = detailBackScreen
+      if (screen !== 'detail' && screen !== 'watch') {
+        currentDetailBack = screen
+        setDetailBackScreen(screen)
+      } else if (isLordAdultMovie(safeMovie) && detailBackScreen !== 'lord') {
+        currentDetailBack = 'lord'
+        setDetailBackScreen('lord')
+      }
+
+      if (isJavMovie(safeMovie)) {
+        setActiveLordTab('jav')
+      } else if (isPhub3Movie(safeMovie)) {
+        setActiveLordTab('phub3')
+      } else if (isPhub2Movie(safeMovie)) {
+        setActiveLordTab('phub2')
+      } else if (isPhub1Movie(safeMovie)) {
+        setActiveLordTab('phub')
+      } else if (isHentaiMovie(safeMovie)) {
+        setActiveLordTab('collection')
+      }
+
+      setSelectedMovie(safeMovie)
+      markContinueWatching(safeMovie)
+      setStreamError('')
+      setScreenState('watch')
+      try {
+        window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(safeMovie))
+        window.sessionStorage.setItem(activeScreenKey, 'watch')
+      } catch {}
+
+      const nextIndex = historyIndexRef.current + 1
+      historyIndexRef.current = nextIndex
+      const historyState: LumenHistoryState = {
+        screen: 'watch',
+        movie: safeMovie,
+        detailBackScreen: currentDetailBack,
+        watchBackScreen: backTo,
+        lordBackScreen,
+        loginBackScreen,
+        historyIndex: nextIndex,
+      }
+      window.history.pushState(historyState, '', '#watch')
+      notifyNativeNavState(true, 'watch')
+
+      resetScroll()
+      window.requestAnimationFrame(resetScroll)
+      void hydrateMovie(safeMovie).then(markContinueWatching)
+      void hydrateStreamingMovie(safeMovie)
+    },
+    [screen, detailBackScreen, lordBackScreen, loginBackScreen, resetScroll, hydrateMovie, hydrateStreamingMovie, markContinueWatching],
+  )
+
+  // Synchronize history state on popstate (browser back/forward & mobile hardware back)
+  useEffect(() => {
+    const currentState = window.history.state as LumenHistoryState | null
+    if (currentState && typeof currentState.historyIndex === 'number') {
+      historyIndexRef.current = currentState.historyIndex
+    } else {
+      const initialHistoryState: LumenHistoryState = {
+        screen,
+        movie: selectedMovie,
+        detailBackScreen,
+        watchBackScreen,
+        lordBackScreen,
+        loginBackScreen,
+        historyIndex: 0,
+      }
+      window.history.replaceState(
+        initialHistoryState,
+        '',
+        screen === 'home' ? window.location.pathname : `#${screen}`,
+      )
+      historyIndexRef.current = 0
     }
 
-    if (isJavMovie(safeMovie)) {
-      setActiveLordTab('jav')
-    } else if (isPhub3Movie(safeMovie)) {
-      setActiveLordTab('phub3')
-    } else if (isPhub2Movie(safeMovie)) {
-      setActiveLordTab('phub2')
-    } else if (isPhub1Movie(safeMovie)) {
-      setActiveLordTab('phub')
-    } else if (isHentaiMovie(safeMovie)) {
-      setActiveLordTab('collection')
+    notifyNativeNavState(historyIndexRef.current > 0, screen)
+
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as LumenHistoryState | null
+
+      if (state) {
+        historyIndexRef.current =
+          typeof state.historyIndex === 'number'
+            ? state.historyIndex
+            : Math.max(0, historyIndexRef.current - 1)
+
+        setScreenState(state.screen)
+
+        if (state.movie) {
+          setSelectedMovie(state.movie)
+          try {
+            window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(state.movie))
+          } catch {}
+          if (state.screen === 'detail') {
+            void hydrateMovie(state.movie)
+          } else if (state.screen === 'watch') {
+            void hydrateMovie(state.movie).then(markContinueWatching)
+            void hydrateStreamingMovie(state.movie)
+          }
+        }
+
+        if (state.detailBackScreen) {
+          setDetailBackScreen(state.detailBackScreen)
+        }
+        if (state.watchBackScreen) {
+          setWatchBackScreen(state.watchBackScreen)
+        }
+        if (state.lordBackScreen) {
+          setLordBackScreen(state.lordBackScreen)
+        }
+        if (state.loginBackScreen) {
+          setLoginBackScreen(state.loginBackScreen)
+        }
+
+        try {
+          if (state.screen !== 'login' && state.screen !== 'profiles') {
+            window.sessionStorage.setItem(activeScreenKey, state.screen)
+          } else {
+            window.sessionStorage.removeItem(activeScreenKey)
+          }
+        } catch {}
+
+        notifyNativeNavState(historyIndexRef.current > 0, state.screen)
+        resetScroll()
+        window.requestAnimationFrame(resetScroll)
+      } else {
+        const hash = window.location.hash.replace(/^#/, '') as Screen
+        const validScreens: Screen[] = [
+          'home',
+          'movies',
+          'tv',
+          'anime',
+          'detail',
+          'watch',
+          'search',
+          'library',
+          'login',
+          'profiles',
+          'drama',
+          'livetv',
+          'lord',
+          'manga',
+          'downloads',
+        ]
+        historyIndexRef.current = 0
+        if (hash && validScreens.includes(hash)) {
+          if (hash === 'detail' && selectedMovie) {
+            setScreenState('detail')
+            void hydrateMovie(selectedMovie)
+            notifyNativeNavState(true, 'detail')
+          } else if (hash === 'watch' && selectedMovie) {
+            setScreenState('watch')
+            notifyNativeNavState(true, 'watch')
+          } else {
+            setScreenState(hash)
+            notifyNativeNavState(hash !== 'home', hash)
+          }
+        } else if (screen === 'watch' && selectedMovie) {
+          // If popped from watch and state is null (e.g. iframe history pop), restore detail!
+          setScreenState('detail')
+          void hydrateMovie(selectedMovie)
+          notifyNativeNavState(true, 'detail')
+        } else {
+          setScreenState('home')
+          notifyNativeNavState(false, 'home')
+        }
+        resetScroll()
+        window.requestAnimationFrame(resetScroll)
+      }
     }
 
-    setSelectedMovie(safeMovie)
-    setScreen('detail')
-    void hydrateMovie(safeMovie)
-  }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [screen, selectedMovie, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, hydrateMovie, hydrateStreamingMovie, markContinueWatching, resetScroll])
 
-  const openWatch = (movie: Movie) => {
-    const safeMovie = normalizeMovie(movie)
-    if (screen !== 'detail' && screen !== 'watch') {
-      setDetailBackScreen(screen)
-    } else if (isLordAdultMovie(safeMovie) && detailBackScreen !== 'lord') {
-      setDetailBackScreen('lord')
+  // Expose hardware back handler for mobile shells (ExpoWebShell / React Native WebView)
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).__handleLumenBack = () => {
+      if (screen === 'watch') {
+        if (selectedMovie) {
+          openDetail(selectedMovie)
+        } else if (detailBackScreen && detailBackScreen !== 'watch') {
+          setScreen(detailBackScreen)
+        } else {
+          setScreen('home')
+        }
+        return true
+      }
+
+      if (screen === 'detail') {
+        if (detailBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
+          setScreen('lord')
+        } else if (detailBackScreen && detailBackScreen !== 'detail' && detailBackScreen !== 'watch') {
+          setScreen(detailBackScreen)
+        } else {
+          setScreen('home')
+        }
+        return true
+      }
+
+      if (screen === 'downloads') {
+        setScreen('library')
+        return true
+      }
+
+      if (screen === 'login') {
+        setScreen(loginBackScreen || 'home')
+        return true
+      }
+
+      if (screen === 'profiles') {
+        setScreen('login')
+        return true
+      }
+
+      if (screen === 'lord') {
+        setScreen(lordBackScreen || 'home')
+        return true
+      }
+
+      if (screen === 'manga') {
+        setScreen('home')
+        return true
+      }
+
+      if (screen !== 'home') {
+        setScreen('home')
+        return true
+      }
+
+      // If already on 'home', return false so native shell can exit the app
+      notifyNativeNavState(false, 'home')
+      return false
     }
 
-    if (isJavMovie(safeMovie)) {
-      setActiveLordTab('jav')
-    } else if (isPhub3Movie(safeMovie)) {
-      setActiveLordTab('phub3')
-    } else if (isPhub2Movie(safeMovie)) {
-      setActiveLordTab('phub2')
-    } else if (isPhub1Movie(safeMovie)) {
-      setActiveLordTab('phub')
-    } else if (isHentaiMovie(safeMovie)) {
-      setActiveLordTab('collection')
+    return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).__handleLumenBack
     }
-
-    setSelectedMovie(safeMovie)
-    markContinueWatching(safeMovie)
-    setScreen('watch')
-    setStreamError('')
-    void hydrateMovie(safeMovie).then(markContinueWatching)
-    void hydrateStreamingMovie(safeMovie)
-  }
+  }, [screen, selectedMovie, detailBackScreen, loginBackScreen, lordBackScreen, openDetail, setScreen])
 
   // --- BFF "watch together" ---
   const openBff = (movie: Movie | null) => {
@@ -4846,7 +5183,13 @@ function App() {
       {screen === 'manga' && (
         <ErrorBoundary onReset={() => setScreen('home')}>
           <MangaScreen
-            onBack={() => setScreen('home')}
+            onBack={() => {
+              if (historyIndexRef.current > 0) {
+                window.history.back()
+              } else {
+                setScreen('home')
+              }
+            }}
             currentUser={currentUser}
             onProfile={openProfileOrLogin}
             profiles={profiles}
@@ -4906,9 +5249,9 @@ function App() {
             isLoading={detailLoading}
             error={detailError}
             onBack={() => {
-              if (detailBackScreen === 'lord' || isLordAdultMovie(selectedMovie)) {
+              if (detailBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
                 setScreen('lord')
-              } else if (detailBackScreen) {
+              } else if (detailBackScreen && detailBackScreen !== 'detail' && detailBackScreen !== 'watch') {
                 setScreen(detailBackScreen)
               } else {
                 setScreen('home')
@@ -4966,9 +5309,9 @@ function App() {
             streamProvider={streamProvider}
             streamSandboxEnabled={streamSandboxEnabled}
             onBack={() => {
-              if (detailBackScreen === 'lord' || isLordAdultMovie(selectedMovie)) {
-                setScreen('lord')
-              } else if (detailBackScreen) {
+              if (selectedMovie) {
+                openDetail(selectedMovie)
+              } else if (detailBackScreen && detailBackScreen !== 'watch') {
                 setScreen(detailBackScreen)
               } else {
                 setScreen('home')
@@ -5055,7 +5398,13 @@ function App() {
       {screen === 'downloads' && (
         <ErrorBoundary onReset={() => setScreen('home')}>
           <DownloadsScreen
-            onBack={() => setScreen('library')}
+            onBack={() => {
+              if (historyIndexRef.current > 0) {
+                window.history.back()
+              } else {
+                setScreen('library')
+              }
+            }}
             onExplore={() => setScreen('home')}
             designMode={designMode}
             onPlayMovie={(item) => {
@@ -5123,7 +5472,13 @@ function App() {
               setCurrentUser(null)
               setScreen('login')
             }}
-            onBack={() => setScreen(loginBackScreen)}
+            onBack={() => {
+              if (historyIndexRef.current > 0) {
+                window.history.back()
+              } else {
+                setScreen(loginBackScreen || 'home')
+              }
+            }}
             onSwitchProfile={() => {
               setTempUser(currentUser)
               setScreen('profiles')
@@ -5167,8 +5522,12 @@ function App() {
               .filter((src): src is string => Boolean(src && src.startsWith('http')))
               .slice(0, 12)}
             onBack={() => {
-              setScreen('login')
               setTempUser(null)
+              if (historyIndexRef.current > 0) {
+                window.history.back()
+              } else {
+                setScreen('login')
+              }
             }}
           />
         </ErrorBoundary>
@@ -5200,7 +5559,13 @@ function App() {
             onOpenDetail={openDetail}
             onPlay={openWatch}
             onSelectProfile={switchToProfile}
-            onBack={() => setScreen(lordBackScreen)}
+            onBack={() => {
+              if (historyIndexRef.current > 0) {
+                window.history.back()
+              } else {
+                setScreen(lordBackScreen || 'home')
+              }
+            }}
             onClearContinueWatching={clearLordContinueWatching}
             onMarkWatched={markWatchedMovie}
             onRemoveContinue={removeContinueMovie}

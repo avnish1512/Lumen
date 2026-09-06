@@ -11,11 +11,17 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_WEB_APP_URL": "https://lumen-six-nu.vercel.app/"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_WEB_APP_URL": "https://lumen-six-nu.vercel.app/"
       }
     }
   },
