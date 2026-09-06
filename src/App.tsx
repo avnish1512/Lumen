@@ -5215,10 +5215,6 @@ function App() {
           currentUser={currentUser}
           onSuccess={unlockLord}
           onClose={() => setShowLordPin(false)}
-          onOpenSetLordPin={() => {
-            setShowLordPin(false)
-            setShowSetLordPin(true)
-          }}
         />
       )}
 
@@ -6262,7 +6258,7 @@ function BrowseScreen({
                 likedMovies={likedMovies}
                 variant="icon"
               />
-              {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut && onSetLordPin ? (
+              {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
                 <ProfileMenu
                   currentUser={currentUser}
                   profiles={profiles}
@@ -12328,7 +12324,7 @@ function LibraryScreen({
             likedMovies={likedMovies}
             variant="icon"
           />
-          {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut && onSetLordPin ? (
+          {onSelectProfile && onManageProfiles && onTransferProfile && onAccount && onHelp && onSignOut ? (
             <ProfileMenu
               currentUser={currentUser}
               profiles={profiles}
@@ -13891,16 +13887,13 @@ type LordPinModalProps = {
 // Lord Password modal guarding the hidden "Lord" profile with Orbit PIN Animation
 function LordPinModal({
   expectedPin,
-  currentUser,
   onSuccess,
   onClose,
-  onOpenSetLordPin,
 }: LordPinModalProps) {
   const [digits, setDigits] = useState('')
   const [error, setError] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
-  const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
 
   const slotsRef = useRef<(HTMLLabelElement | null)[]>([])
   const inputsRef = useRef<(HTMLInputElement | null)[]>([])
@@ -14207,18 +14200,6 @@ function LordPinModal({
                 <span>This profile is locked with a 4-digit password.</span>
               )}
             </p>
-
-            {isAdmin && onOpenSetLordPin && (
-              <div style={{ marginTop: 24 }}>
-                <button
-                  type="button"
-                  className="lord-pin-change-btn"
-                  onClick={onOpenSetLordPin}
-                >
-                  <KeyRound size={14} /> Admin: Change Password
-                </button>
-              </div>
-            )}
           </div>
         </main>
       </div>
@@ -16453,7 +16434,6 @@ export function ProfileMenu({
   onAccount,
   onHelp,
   onSignOut,
-  onSetLordPin,
 }: ProfileMenuProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -16487,7 +16467,6 @@ export function ProfileMenu({
   const otherProfiles = profileList.filter(
     (profile) => profile && profile.name && profile.name.toLowerCase() !== (currentUser?.name ?? '').toLowerCase(),
   )
-  const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
 
   const runAndClose = (action: () => void) => () => {
     setOpen(false)
@@ -16567,17 +16546,6 @@ export function ProfileMenu({
             <Crown size={18} />
             <span>Lord</span>
           </button>
-          {isAdmin && onSetLordPin && (
-            <button
-              className="profile-menu-item profile-menu-action"
-              type="button"
-              role="menuitem"
-              onClick={runAndClose(onSetLordPin)}
-            >
-              <KeyRound size={18} />
-              <span>Set Lord Password</span>
-            </button>
-          )}
           <button
             className="profile-menu-item profile-menu-action"
             type="button"
