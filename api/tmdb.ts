@@ -478,8 +478,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   if (req.query.id && req.query.type === 'filmbox') {
-    const apiKey =
-      process.env.RAPIDAPI_KEY || '5b3524ee59msh498263595c20ecap1552cfjsn65a7114ff4aa'
+    const apiKey = process.env.RAPIDAPI_KEY
+    if (!apiKey) {
+      res.status(503).json({ error: 'RAPIDAPI_KEY is not configured on the server.' })
+      return
+    }
     let id = getQueryValue(req.query.id)
     const se = getQueryValue(req.query.se) || '1'
     const ep = getQueryValue(req.query.ep) || '1'

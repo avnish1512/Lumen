@@ -53,12 +53,12 @@ export const ANILIST_CLIENTS: AniListClient[] = [
   {
     name: 'Primary (45397)',
     id: (import.meta as any).env?.ANILIST_CLIENT_ID || (import.meta as any).env?.VITE_ANILIST_CLIENT_ID || '45397',
-    secret: (import.meta as any).env?.ANILIST_CLIENT_SECRET || (import.meta as any).env?.VITE_ANILIST_CLIENT_SECRET || 'sx912uXkCtWuA3wLZPP3T9IAyEfYfkC8qjxxWvHn',
+    secret: (import.meta as any).env?.ANILIST_CLIENT_SECRET || (import.meta as any).env?.VITE_ANILIST_CLIENT_SECRET || '',
   },
   {
     name: 'Secondary (49118)',
     id: (import.meta as any).env?.ANILIST_SECONDARY_CLIENT_ID || (import.meta as any).env?.VITE_ANILIST_SECONDARY_CLIENT_ID || '49118',
-    secret: (import.meta as any).env?.ANILIST_SECONDARY_CLIENT_SECRET || (import.meta as any).env?.VITE_ANILIST_SECONDARY_CLIENT_SECRET || 'fjVuedrK0l2Jg6DrNE3vbKPlXp2QyQ0DANHXIorF',
+    secret: (import.meta as any).env?.ANILIST_SECONDARY_CLIENT_SECRET || (import.meta as any).env?.VITE_ANILIST_SECONDARY_CLIENT_SECRET || '',
   },
 ];
 

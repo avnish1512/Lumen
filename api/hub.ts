@@ -323,8 +323,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const limit = qv(req.query.limit) ?? '24'
     const categories = qv(req.query.categories)
     const search = qv(req.query.search)
-    const pornstars = qv(req.query.pornstars)
-    const apiKey = env.PHUB_API_KEY || '2ceb712d93165c1f69e2ff70948aa09705f7da4610ffb0caec764f224ef1b8f1'
+    const apiKey = env.PHUB_API_KEY
+    if (!apiKey) {
+      res.status(503).json({ success: false, error: 'PHUB_API_KEY is not configured on the server.' })
+      return
+    }
 
     let targetUrl = `https://porn-api.com/api/v1/public${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
     const params = new URLSearchParams()
@@ -584,11 +587,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
       if (req.method === 'POST' || req.method === 'PUT') {
         const bodyAdminEmail = String(body.adminEmail ?? '').trim().toLowerCase()
-        const isAuthorizedEmail = bodyAdminEmail === 'avnishpc00@gmail.com' || bodyAdminEmail === adminEmailFromEnv(env)
+        const expectedAdminEmail = adminEmailFromEnv(env)
+        const isAuthorizedEmail = bodyAdminEmail === expectedAdminEmail
         const isAuthorizedKey = await adminAuthorized(env, config, req, body)
 
-        if (!isAuthorizedEmail && !isAuthorizedKey) {
-          res.status(403).json({ ok: false, error: 'Only admin avnishpc00@gmail.com can refresh PHub videos.' })
+        if (!isAuthorizedEmail || !isAuthorizedKey) {
+          res.status(403).json({ ok: false, error: 'Not authorized.' })
           return
         }
 
@@ -699,6 +703,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const isAdmin = () => adminAuthorized(env, config, req, body)
     try {
       if (req.method === 'POST' && action === 'verify') {
+        const ip = getClientIp(req)
+        if (!checkRateLimit(`login:${ip}`, 12, 60_000)) {
+          res.status(429).json({ ok: false, error: 'Too many login attempts. Please wait a moment.' })
+          return
+        }
         res.status(200).json({ ok: await verifyAccount(config, String(body.email ?? '').toLowerCase(), String(body.password ?? '')) })
         return
       }
@@ -864,6 +873,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   // ---- stream-proxy ----
   if (kind === 'stream-proxy') {
+    const ip = getClientIp(req)
+    if (!checkRateLimit(`stream-proxy:${ip}`, 120, 60_000)) {
+      res.setHeader('Content-Type', 'application/json')
+      res.status(429).json({ ok: false, error: 'Too many stream proxy requests. Please wait a moment.' })
+      return
+    }
     const targetUrl = (qv(req.query.url) ?? '').trim()
     let customHeaders: Record<string, string> | undefined
     try {
