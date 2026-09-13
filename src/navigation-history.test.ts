@@ -148,4 +148,68 @@ describe('Navigation History & Mobile Back Button Support', () => {
     handleWatchBack()
     expect(screen).toBe('detail')
   })
+
+  it('routes back from watch directly to lord screen for adult movies (skipping detail/information page)', () => {
+    let screen = 'watch'
+    const lordMovie: Movie = normalizeMovie({
+      id: 'jav-12345',
+      title: 'Sample JAV Movie',
+      year: '2024',
+      type: 'JAV Video',
+      label: 'JAV',
+      isJav: true,
+      genres: ['JAV'],
+      runtime: '120 min',
+      synopsis: 'JAV video description',
+    })
+    const watchBackScreen = 'lord'
+
+    // Simulate updated WatchScreen.onBack logic
+    const isLordAdultMovie = (m: Movie) => Boolean(m.isJav || m.label === 'JAV' || m.id.startsWith('jav-'))
+    const handleWatchBack = () => {
+      if (watchBackScreen === 'lord' || (lordMovie && isLordAdultMovie(lordMovie))) {
+        screen = 'lord'
+      } else if (lordMovie) {
+        screen = 'detail'
+      } else {
+        screen = 'home'
+      }
+    }
+
+    handleWatchBack()
+    expect(screen).toBe('lord')
+  })
+
+  it('forwards openDetail directly to watch for adult movies in lord', () => {
+    let activeScreen = 'lord'
+    let playedMovie: Movie | null = null
+
+    const openWatch = (m: Movie) => {
+      activeScreen = 'watch'
+      playedMovie = m
+    }
+
+    const isLordAdultMovie = (m: Movie) => Boolean(m.isJav || m.label === 'JAV' || m.id.startsWith('jav-'))
+    const openDetail = (m: Movie) => {
+      if (isLordAdultMovie(m) || activeScreen === 'lord') {
+        openWatch(m)
+        return
+      }
+      activeScreen = 'detail'
+    }
+
+    const adultMovie: Movie = normalizeMovie({
+      id: 'jav-999',
+      title: 'Adult Feature',
+      year: '2024',
+      type: 'JAV Video',
+      label: 'JAV',
+      isJav: true,
+    })
+
+    openDetail(adultMovie)
+    expect(activeScreen).toBe('watch')
+    expect(playedMovie).toEqual(adultMovie)
+  })
 })
+

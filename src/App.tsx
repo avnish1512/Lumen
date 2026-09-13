@@ -2517,7 +2517,12 @@ function App() {
     if (restored) {
       if (restored === 'detail' || restored === 'watch') {
         const movie = readSelectedMovie()
-        if (movie) return restored
+        if (movie) {
+          if (restored === 'detail' && isLordAdultMovie(movie)) {
+            return 'lord'
+          }
+          return restored
+        }
         return 'home'
       }
       return restored
@@ -4056,61 +4061,22 @@ function App() {
     [markContinueWatching],
   )
 
-  const openDetail = useCallback(
-    (movie: Movie) => {
-      const safeMovie = normalizeMovie(movie)
-      const prevScreen = screen !== 'detail' && screen !== 'watch' ? screen : detailBackScreen
-      const newDetailBackScreen = isLordAdultMovie(safeMovie) && prevScreen !== 'lord' ? 'lord' : prevScreen
-      setDetailBackScreen(newDetailBackScreen)
-
-      if (isJavMovie(safeMovie)) {
-        setActiveLordTab('jav')
-      } else if (isPhub3Movie(safeMovie)) {
-        setActiveLordTab('phub3')
-      } else if (isPhub2Movie(safeMovie)) {
-        setActiveLordTab('phub2')
-      } else if (isPhub1Movie(safeMovie)) {
-        setActiveLordTab('phub')
-      } else if (isHentaiMovie(safeMovie)) {
-        setActiveLordTab('collection')
-      }
-
-      setSelectedMovie(safeMovie)
-      setScreenState('detail')
-      try {
-        window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(safeMovie))
-        window.sessionStorage.setItem(activeScreenKey, 'detail')
-      } catch {}
-
-      const nextIndex = historyIndexRef.current + 1
-      historyIndexRef.current = nextIndex
-      const historyState: LumenHistoryState = {
-        screen: 'detail',
-        movie: safeMovie,
-        detailBackScreen: newDetailBackScreen,
-        watchBackScreen,
-        lordBackScreen,
-        loginBackScreen,
-        historyIndex: nextIndex,
-      }
-      window.history.pushState(historyState, '', '#detail')
-      notifyNativeNavState(true, 'detail')
-
-      resetScroll()
-      window.requestAnimationFrame(resetScroll)
-      void hydrateMovie(safeMovie)
-    },
-    [screen, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, resetScroll, hydrateMovie],
-  )
-
   const openWatch = useCallback(
     (movie: Movie) => {
       const safeMovie = normalizeMovie(movie)
-      const backTo = screen === 'detail' ? 'detail' : (screen !== 'watch' ? screen : detailBackScreen)
+      const isAdultOrLord = isLordAdultMovie(safeMovie) || screen === 'lord'
+      const backTo = isAdultOrLord
+        ? 'lord'
+        : screen === 'detail'
+          ? 'detail'
+          : (screen !== 'watch' ? screen : detailBackScreen)
       setWatchBackScreen(backTo)
 
       let currentDetailBack = detailBackScreen
-      if (screen !== 'detail' && screen !== 'watch') {
+      if (isAdultOrLord) {
+        currentDetailBack = 'lord'
+        setDetailBackScreen('lord')
+      } else if (screen !== 'detail' && screen !== 'watch') {
         currentDetailBack = screen
         setDetailBackScreen(screen)
       } else if (isLordAdultMovie(safeMovie) && detailBackScreen !== 'lord') {
@@ -4161,6 +4127,58 @@ function App() {
     [screen, detailBackScreen, lordBackScreen, loginBackScreen, resetScroll, hydrateMovie, hydrateStreamingMovie, markContinueWatching],
   )
 
+  const openDetail = useCallback(
+    (movie: Movie) => {
+      const safeMovie = normalizeMovie(movie)
+      if (isLordAdultMovie(safeMovie) || screen === 'lord') {
+        openWatch(safeMovie)
+        return
+      }
+
+      const prevScreen = screen !== 'detail' && screen !== 'watch' ? screen : detailBackScreen
+      const newDetailBackScreen = isLordAdultMovie(safeMovie) && prevScreen !== 'lord' ? 'lord' : prevScreen
+      setDetailBackScreen(newDetailBackScreen)
+
+      if (isJavMovie(safeMovie)) {
+        setActiveLordTab('jav')
+      } else if (isPhub3Movie(safeMovie)) {
+        setActiveLordTab('phub3')
+      } else if (isPhub2Movie(safeMovie)) {
+        setActiveLordTab('phub2')
+      } else if (isPhub1Movie(safeMovie)) {
+        setActiveLordTab('phub')
+      } else if (isHentaiMovie(safeMovie)) {
+        setActiveLordTab('collection')
+      }
+
+      setSelectedMovie(safeMovie)
+      setScreenState('detail')
+      try {
+        window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(safeMovie))
+        window.sessionStorage.setItem(activeScreenKey, 'detail')
+      } catch {}
+
+      const nextIndex = historyIndexRef.current + 1
+      historyIndexRef.current = nextIndex
+      const historyState: LumenHistoryState = {
+        screen: 'detail',
+        movie: safeMovie,
+        detailBackScreen: newDetailBackScreen,
+        watchBackScreen,
+        lordBackScreen,
+        loginBackScreen,
+        historyIndex: nextIndex,
+      }
+      window.history.pushState(historyState, '', '#detail')
+      notifyNativeNavState(true, 'detail')
+
+      resetScroll()
+      window.requestAnimationFrame(resetScroll)
+      void hydrateMovie(safeMovie)
+    },
+    [screen, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, resetScroll, hydrateMovie, openWatch],
+  )
+
   // Synchronize history state on popstate (browser back/forward & mobile hardware back)
   useEffect(() => {
     const currentState = window.history.state as LumenHistoryState | null
@@ -4203,7 +4221,12 @@ function App() {
             window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(state.movie))
           } catch {}
           if (state.screen === 'detail') {
-            void hydrateMovie(state.movie)
+            if (state.detailBackScreen === 'lord' || (state.movie && isLordAdultMovie(state.movie))) {
+              setScreenState('lord')
+              notifyNativeNavState(historyIndexRef.current > 0, 'lord')
+            } else {
+              void hydrateMovie(state.movie)
+            }
           } else if (state.screen === 'watch') {
             void hydrateMovie(state.movie).then(markContinueWatching)
             void hydrateStreamingMovie(state.movie)
@@ -4256,9 +4279,14 @@ function App() {
         historyIndexRef.current = 0
         if (hash && validScreens.includes(hash)) {
           if (hash === 'detail' && selectedMovie) {
-            setScreenState('detail')
-            void hydrateMovie(selectedMovie)
-            notifyNativeNavState(true, 'detail')
+            if (isLordAdultMovie(selectedMovie)) {
+              setScreenState('lord')
+              notifyNativeNavState(true, 'lord')
+            } else {
+              setScreenState('detail')
+              void hydrateMovie(selectedMovie)
+              notifyNativeNavState(true, 'detail')
+            }
           } else if (hash === 'watch' && selectedMovie) {
             setScreenState('watch')
             notifyNativeNavState(true, 'watch')
@@ -4267,10 +4295,15 @@ function App() {
             notifyNativeNavState(hash !== 'home', hash)
           }
         } else if (screen === 'watch' && selectedMovie) {
-          // If popped from watch and state is null (e.g. iframe history pop), restore detail!
-          setScreenState('detail')
-          void hydrateMovie(selectedMovie)
-          notifyNativeNavState(true, 'detail')
+          // If popped from watch and state is null (e.g. iframe history pop), restore lord for adult or detail!
+          if (watchBackScreen === 'lord' || isLordAdultMovie(selectedMovie)) {
+            setScreenState('lord')
+            notifyNativeNavState(true, 'lord')
+          } else {
+            setScreenState('detail')
+            void hydrateMovie(selectedMovie)
+            notifyNativeNavState(true, 'detail')
+          }
         } else {
           setScreenState('home')
           notifyNativeNavState(false, 'home')
@@ -4289,7 +4322,9 @@ function App() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).__handleLumenBack = () => {
       if (screen === 'watch') {
-        if (selectedMovie) {
+        if (watchBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
+          setScreen('lord')
+        } else if (selectedMovie) {
           openDetail(selectedMovie)
         } else if (detailBackScreen && detailBackScreen !== 'watch') {
           setScreen(detailBackScreen)
@@ -4350,6 +4385,13 @@ function App() {
       delete (window as any).__handleLumenBack
     }
   }, [screen, selectedMovie, detailBackScreen, loginBackScreen, lordBackScreen, openDetail, setScreen])
+
+  // Ensure Lord adult movies never stay stuck on the detail (information) page
+  useEffect(() => {
+    if (screen === 'detail' && selectedMovie && isLordAdultMovie(selectedMovie)) {
+      setScreen('lord')
+    }
+  }, [screen, selectedMovie, setScreen])
 
   // --- BFF "watch together" ---
   const openBff = (movie: Movie | null) => {
@@ -5236,7 +5278,7 @@ function App() {
         </ErrorBoundary>
       )}
 
-      {screen === 'detail' && selectedMovie && (
+      {screen === 'detail' && selectedMovie && !isLordAdultMovie(selectedMovie) && (
         <ErrorBoundary onReset={() => setScreen('home')}>
           <DetailScreen
             movie={selectedMovie}
@@ -5309,7 +5351,9 @@ function App() {
             streamProvider={streamProvider}
             streamSandboxEnabled={streamSandboxEnabled}
             onBack={() => {
-              if (selectedMovie) {
+              if (watchBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
+                setScreen('lord')
+              } else if (selectedMovie) {
                 openDetail(selectedMovie)
               } else if (detailBackScreen && detailBackScreen !== 'watch') {
                 setScreen(detailBackScreen)
@@ -5556,7 +5600,7 @@ function App() {
             onTabChange={setActiveLordTab}
             tabQueries={lordTabQueries}
             onTabQueriesChange={setLordTabQueries}
-            onOpenDetail={openDetail}
+            onOpenDetail={openWatch}
             onPlay={openWatch}
             onSelectProfile={switchToProfile}
             onBack={() => {
@@ -13214,7 +13258,7 @@ function ContinueWatchingRail({
               <Download />
               <span>Download</span>
             </button>
-            {activeMenuIsTv && (
+            {activeMenuIsTv && !isLordSection && !isJavSection && !isPhubSection && !isPhub1Section && !isPhub2Section && !isPhub3Section && (
               <button
                 type="button"
                 role="menuitem"
@@ -13224,14 +13268,25 @@ function ContinueWatchingRail({
                 <span>Go to Episode</span>
               </button>
             )}
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => runMenuAction(() => onOpenDetail(activeMenuMovie))}
-            >
-              <Info />
-              <span>{activeMenuIsTv ? 'Go to Show' : 'Go to Movie'}</span>
-            </button>
+            {!isLordSection && !isJavSection && !isPhubSection && !isPhub1Section && !isPhub2Section && !isPhub3Section ? (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => runMenuAction(() => onOpenDetail(activeMenuMovie))}
+              >
+                <Info />
+                <span>{activeMenuIsTv ? 'Go to Show' : 'Go to Movie'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => runMenuAction(() => onOpenDetail(activeMenuMovie))}
+              >
+                <Play />
+                <span>Play</span>
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"
@@ -14698,7 +14753,7 @@ type LordScreenProps = {
   onTabChange?: (tab: LordTab) => void
   tabQueries?: Record<LordTab, string>
   onTabQueriesChange?: React.Dispatch<React.SetStateAction<Record<LordTab, string>>>
-  onOpenDetail: (movie: Movie) => void
+  onOpenDetail?: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSelectProfile?: (name: string) => void
   onBack: () => void
@@ -14847,7 +14902,7 @@ function LordScreen({
   const pickMatch = (movie: Movie) => {
     setQuery('')
     setSearchFocused(false)
-    onOpenDetail(movie)
+    onPlay(movie)
   }
 
   return (
@@ -15158,14 +15213,6 @@ function LordScreen({
                   <Play fill="currentColor" strokeWidth={0} size={20} />
                   <span>Play</span>
                 </button>
-                <button
-                  className="lord-hero-info"
-                  type="button"
-                  onClick={() => onOpenDetail(hero)}
-                >
-                  <Info size={20} />
-                  <span>More Info</span>
-                </button>
               </div>
             </div>
           </div>
@@ -15178,7 +15225,7 @@ function LordScreen({
                   title: 'My List',
                   items: savedMovies,
                 }}
-                onOpenDetail={onOpenDetail}
+                onOpenDetail={onPlay}
               />
             </div>
           )}
@@ -15188,7 +15235,7 @@ function LordScreen({
               <ContinueWatchingRail
                 title="Continue Watching"
                 movies={continueMovies}
-                onOpenDetail={onOpenDetail}
+                onOpenDetail={onPlay}
                 onMarkWatched={onMarkWatched}
                 onRemoveContinue={onRemoveContinue}
                 onRemoveWatchlist={onRemoveWatchlist}
@@ -15202,7 +15249,7 @@ function LordScreen({
               <LordRailRow
                 key={rail.title}
                 rail={rail}
-                onOpenDetail={onOpenDetail}
+                onOpenDetail={onPlay}
               />
             ))}
           </div>
@@ -15715,7 +15762,7 @@ function LordPhubSection({
   savedMovies = [],
   currentUser: _currentUser,
   phubSeed: phubSeedProp,
-  onOpenDetail,
+  onOpenDetail: _onOpenDetail,
   onPlay,
   onMarkWatched,
   onRemoveContinue,
@@ -16098,37 +16145,6 @@ function LordPhubSection({
     }
   }
 
-  const handleOpenDetailMovie = async (movie: Movie) => {
-    if (!onOpenDetail) {
-      void handlePlayMovie(movie)
-      return
-    }
-    if (isEporner) {
-      const cleanId = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub-/, '')
-      const embedUrl = movie.embedUrl || `https://www.eporner.com/embed/${cleanId}/`
-      onOpenDetail({ ...movie, embedUrl })
-      return
-    }
-    if (movie.embedUrl) {
-      onOpenDetail(movie)
-      return
-    }
-    try {
-      const slug = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub-/, '')
-      const detail = await fetchPornApiMovieDetail(slug)
-      const embedUrl =
-        detail?.episodes?.[0]?.sources?.[0]?.embed_url ||
-        detail?.episodes?.[0]?.sources?.[0]?.m3u8_url
-      if (embedUrl) {
-        onOpenDetail({ ...movie, embedUrl })
-      } else {
-        onOpenDetail(movie)
-      }
-    } catch {
-      onOpenDetail(movie)
-    }
-  }
-
   const heroItem = rotatedVideos.length > 0 ? rotatedVideos[0] : null
   const heroMovie = heroItem ? pornApiToMovieHelper(heroItem, undefined, serverMode) : null
   const totalDisplayCount = totalVideos > 0 ? totalVideos : displayVideos.length
@@ -16199,16 +16215,6 @@ function LordPhubSection({
                     <Play fill="currentColor" strokeWidth={0} size={20} />
                     <span>Play</span>
                   </button>
-                  {onOpenDetail && (
-                    <button
-                      className="lord-hero-info"
-                      type="button"
-                      onClick={() => void handleOpenDetailMovie(heroMovie)}
-                    >
-                      <Info size={20} />
-                      <span>More Info</span>
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
@@ -16222,7 +16228,7 @@ function LordPhubSection({
                   title: 'My List',
                   items: savedMovies,
                 }}
-                onOpenDetail={(m) => void handleOpenDetailMovie(m)}
+                onOpenDetail={(m) => void handlePlayMovie(m)}
               />
             </div>
           )}
