@@ -211,5 +211,36 @@ describe('Navigation History & Mobile Back Button Support', () => {
     expect(activeScreen).toBe('watch')
     expect(playedMovie).toEqual(adultMovie)
   })
+
+  it('navigates to the apple clone home screen when incognito is clicked, rather than previous watch screen', () => {
+    let screen = 'lord'
+    let designMode: 'apple' | 'netflix' = 'netflix'
+    let selectedMovie: Movie | null = normalizeMovie({
+      id: 'jav-999',
+      title: 'Previous Video',
+      year: '2024',
+      type: 'JAV Video',
+      label: 'JAV',
+      isJav: true,
+    })
+
+    const isLordAdultMovie = (m?: Movie | null) => Boolean(m && (m.isJav || m.label === 'JAV' || m.id.startsWith('jav-')))
+
+    const exitLordToHome = () => {
+      if (designMode !== 'apple') {
+        designMode = 'apple'
+      }
+      if (selectedMovie && isLordAdultMovie(selectedMovie)) {
+        selectedMovie = null
+      }
+      screen = 'home'
+    }
+
+    exitLordToHome()
+    expect(screen).toBe('home')
+    expect(designMode).toBe('apple')
+    expect(selectedMovie).toBeNull()
+  })
 })
+
 

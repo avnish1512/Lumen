@@ -3335,7 +3335,7 @@ function App() {
 
   const unlockLord = () => {
     setShowLordPin(false)
-    setLordBackScreen(screen)
+    setLordBackScreen('home')
     setScreen('lord')
     if (lordMovies.length === 0) {
       setLordLoading(true)
@@ -3347,6 +3347,25 @@ function App() {
         .finally(() => setLordLoading(false))
     }
   }
+
+  const exitLordToHome = useCallback(() => {
+    if (designMode !== 'apple') {
+      setDesignMode('apple')
+      try {
+        window.localStorage.setItem('omdb.apple-tv-style.designMode', 'apple')
+      } catch {}
+    }
+    setLordBackScreen('home')
+    setWatchBackScreen('home')
+    setDetailBackScreen('home')
+    if (selectedMovie && isLordAdultMovie(selectedMovie)) {
+      setSelectedMovie(null)
+      try {
+        window.sessionStorage.removeItem(selectedMovieKey)
+      } catch {}
+    }
+    setScreen('home')
+  }, [designMode, selectedMovie, setScreen])
 
   const signOut = () => {
     setCurrentUser(null)
@@ -4240,7 +4259,7 @@ function App() {
           setWatchBackScreen(state.watchBackScreen)
         }
         if (state.lordBackScreen) {
-          setLordBackScreen(state.lordBackScreen)
+          setLordBackScreen(state.lordBackScreen === 'watch' ? 'home' : state.lordBackScreen)
         }
         if (state.loginBackScreen) {
           setLoginBackScreen(state.loginBackScreen)
@@ -4361,7 +4380,7 @@ function App() {
       }
 
       if (screen === 'lord') {
-        setScreen(lordBackScreen || 'home')
+        exitLordToHome()
         return true
       }
 
@@ -4384,7 +4403,7 @@ function App() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (window as any).__handleLumenBack
     }
-  }, [screen, selectedMovie, detailBackScreen, loginBackScreen, lordBackScreen, openDetail, setScreen])
+  }, [screen, selectedMovie, detailBackScreen, loginBackScreen, lordBackScreen, openDetail, setScreen, exitLordToHome])
 
   // Ensure Lord adult movies never stay stuck on the detail (information) page
   useEffect(() => {
@@ -5603,13 +5622,7 @@ function App() {
             onOpenDetail={openWatch}
             onPlay={openWatch}
             onSelectProfile={switchToProfile}
-            onBack={() => {
-              if (historyIndexRef.current > 0) {
-                window.history.back()
-              } else {
-                setScreen(lordBackScreen || 'home')
-              }
-            }}
+            onBack={exitLordToHome}
             onClearContinueWatching={clearLordContinueWatching}
             onMarkWatched={markWatchedMovie}
             onRemoveContinue={removeContinueMovie}
