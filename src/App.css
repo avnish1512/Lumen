@@ -19969,6 +19969,55 @@ font-size: 11px;
   margin: 0;
 }
 
+/* JAV Skeleton Loading Grid */
+.jav-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.jav-skeleton-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.jav-skeleton-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 75%);
+  background-size: 200% 100%;
+  animation: javShimmer 1.5s infinite;
+}
+
+.jav-skeleton-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.jav-skeleton-line {
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 75%);
+  background-size: 200% 100%;
+  animation: javShimmer 1.5s infinite;
+}
+
+@keyframes javShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 /* Pagination Controls */
 .jav-pagination {
   display: flex;

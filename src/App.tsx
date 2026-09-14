@@ -160,6 +160,13 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { DownloadsScreen } from './DownloadsScreen'
 import { startDownload, getAllDownloads, subscribeDownloads } from './downloads'
 import { DownloadOptionsModal } from './DownloadOptionsModal'
+import {
+  type JavPost,
+  INITIAL_JAV_POSTS,
+  getCachedJavCatalog,
+  fetchJavCatalog,
+  prefetchJavCatalog,
+} from './jav-api'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -2081,18 +2088,12 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
   if (isJav) {
     try {
       const cat = movie.genres?.[0]
-      let url = 'https://server.apijav.com/wp-json/myvideo/v1/posts?per_page=12&orderby=views&order=DESC'
-      if (cat && cat !== 'All' && cat !== 'JAV') {
-        url += `&category=${encodeURIComponent(cat)}`
-      }
-      const res = await fetch(url)
-      if (res.ok) {
-        const data: JavPost[] = await res.json()
-        if (Array.isArray(data) && data.length > 0) {
-          return data
-            .map(javToMovieHelper)
-            .filter((m) => m.id !== movie.id)
-        }
+      const cleanCat = cat && cat !== 'All' && cat !== 'JAV' ? cat : 'All'
+      const catalog = await fetchJavCatalog({ perPage: 12, category: cleanCat, orderBy: 'views' })
+      if (catalog?.posts && catalog.posts.length > 0) {
+        return catalog.posts
+          .map(javToMovieHelper)
+          .filter((m) => m.id !== movie.id)
       }
     } catch {}
   }
@@ -3337,6 +3338,7 @@ function App() {
     setShowLordPin(false)
     setLordBackScreen('home')
     setScreen('lord')
+    prefetchJavCatalog()
     if (lordMovies.length === 0) {
       setLordLoading(true)
       void fetchMatureCollection()
@@ -8539,16 +8541,10 @@ function WatchScreen({
     async function loadJavRelated() {
       try {
         const cat = movie.genres[0]
-        let url = 'https://server.apijav.com/wp-json/myvideo/v1/posts?per_page=12&orderby=views&order=DESC'
-        if (cat && cat !== 'All' && cat !== 'JAV') {
-          url += `&category=${encodeURIComponent(cat)}`
-        }
-        const res = await fetch(url)
-        if (res.ok) {
-          const data: JavPost[] = await res.json()
-          if (active && Array.isArray(data)) {
-            setJavRelated(data.map(javToMovieHelper).filter((m) => m.id !== movie.id))
-          }
+        const cleanCat = cat && cat !== 'All' && cat !== 'JAV' ? cat : 'All'
+        const catalog = await fetchJavCatalog({ perPage: 12, category: cleanCat, orderBy: 'views' })
+        if (active && catalog?.posts && Array.isArray(catalog.posts)) {
+          setJavRelated(catalog.posts.map(javToMovieHelper).filter((m) => m.id !== movie.id))
         }
       } catch {}
     }
@@ -14848,6 +14844,18 @@ function LordScreen({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null)
 
+  const [visitedJav, setVisitedJav] = useState(activeLordTab === 'jav')
+  useEffect(() => {
+    if (activeLordTab === 'jav') {
+      setVisitedJav(true)
+    }
+  }, [activeLordTab])
+
+  // Prefetch JAV catalog immediately on LordScreen mount
+  useEffect(() => {
+    prefetchJavCatalog()
+  }, [])
+
   useEffect(() => {
     let active = true
     async function syncSeed() {
@@ -14985,6 +14993,8 @@ function LordScreen({
               className={`lord-tab-btn ${activeLordTab === 'jav' ? 'is-active' : ''}`}
               type="button"
               onClick={() => setActiveLordTab('jav')}
+              onMouseEnter={() => prefetchJavCatalog()}
+              onFocus={() => prefetchJavCatalog()}
             >
               <Video size={15} />
               <span>JAV</span>
@@ -15126,17 +15136,22 @@ function LordScreen({
         </div>
       )}
 
-      {activeLordTab === 'jav' ? (
-        <LordJavSection
-          searchQuery={tabQueries.jav}
-          continueMovies={continueJavMovies}
-          savedMovies={savedJavMovies}
-          onPlay={onPlay}
-          onMarkWatched={onMarkWatched}
-          onRemoveContinue={onRemoveContinue}
-          onRemoveWatchlist={onRemoveWatchlist}
-        />
-      ) : activeLordTab === 'phub' ? (
+      {/* Keep JAV tab alive once visited so tab switching is instant with 0ms delay */}
+      <div style={{ display: activeLordTab === 'jav' ? 'block' : 'none' }}>
+        {(visitedJav || activeLordTab === 'jav') && (
+          <LordJavSection
+            searchQuery={tabQueries.jav}
+            continueMovies={continueJavMovies}
+            savedMovies={savedJavMovies}
+            onPlay={onPlay}
+            onMarkWatched={onMarkWatched}
+            onRemoveContinue={onRemoveContinue}
+            onRemoveWatchlist={onRemoveWatchlist}
+          />
+        )}
+      </div>
+
+      {activeLordTab === 'phub' ? (
         <LordPhubSection
           key="phub-1"
           serverMode="pornapi"
@@ -16406,27 +16421,7 @@ function LordPhubSection({
   )
 }
 
-export type JavPost = {
-  id: number
-  title: string
-  slug: string
-  date: string
-  thumbnail: string
-  duration: string
-  categories: string[]
-  tags: string[]
-  actors: string[]
-  studio: string
-  code: string
-  views: number
-  likes: number
-  dislikes: number
-  is_hd: boolean
-  player_api: string
-  embed_url: string
-  embedUrl?: string
-  iframe_html: string
-}
+export type { JavPost }
 
 function javToMovieHelper(post: JavPost): Movie {
   const codePrefix = post.code ? `[${post.code}] ` : ''
@@ -16498,14 +16493,25 @@ function LordJavSection({
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
 }) {
-  const [posts, setPosts] = useState<JavPost[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalPosts, setTotalPosts] = useState(0)
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [orderBy, setOrderBy] = useState<'date' | 'views' | 'title'>('views')
+  const [page, setPage] = useState(1)
+
+  // Synchronous cache read for instantaneous 0ms perceived latency
+  const initialData = useMemo(() => {
+    return getCachedJavCatalog({
+      category: selectedCategory,
+      orderBy,
+      page,
+      searchQuery,
+    })
+  }, [selectedCategory, orderBy, page, searchQuery])
+
+  const [posts, setPosts] = useState<JavPost[]>(() => initialData?.posts || INITIAL_JAV_POSTS)
+  const [loading, setLoading] = useState(!initialData && posts.length === 0)
+  const [error, setError] = useState('')
+  const [totalPages, setTotalPages] = useState(initialData?.totalPages || 500)
+  const [totalPosts, setTotalPosts] = useState(initialData?.totalPosts || 12000)
 
   useEffect(() => {
     setPage(1)
@@ -16513,36 +16519,39 @@ function LordJavSection({
 
   useEffect(() => {
     let active = true
-    async function fetchJavPosts() {
-      setLoading(true)
+    const cached = getCachedJavCatalog({
+      category: selectedCategory,
+      orderBy,
+      page,
+      searchQuery,
+    })
+
+    if (cached && cached.posts.length > 0) {
+      setPosts(cached.posts)
+      setTotalPages(cached.totalPages)
+      setTotalPosts(cached.totalPosts)
+      setLoading(false)
       setError('')
+    } else if (posts.length === 0) {
+      setLoading(true)
+    }
+
+    async function fetchJavPosts() {
       try {
-        let url = `https://server.apijav.com/wp-json/myvideo/v1/posts?per_page=24&page=${page}&orderby=${orderBy}&order=DESC`
-
-        if (selectedCategory !== 'All') {
-          url += `&category=${encodeURIComponent(selectedCategory)}`
-        }
-
-        if (searchQuery.trim()) {
-          url += `&search=${encodeURIComponent(searchQuery.trim())}`
-        }
-
-        const res = await fetch(url)
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`)
-        }
-
-        const wpTotal = res.headers.get('X-WP-Total')
-        const wpTotalPages = res.headers.get('X-WP-TotalPages')
-        if (wpTotal) setTotalPosts(parseInt(wpTotal, 10))
-        if (wpTotalPages) setTotalPages(parseInt(wpTotalPages, 10))
-
-        const data: JavPost[] = await res.json()
-        if (active) {
-          setPosts(Array.isArray(data) ? data : [])
+        const result = await fetchJavCatalog({
+          category: selectedCategory,
+          orderBy,
+          page,
+          searchQuery,
+        })
+        if (active && result && Array.isArray(result.posts) && result.posts.length > 0) {
+          setPosts(result.posts)
+          setTotalPages(result.totalPages)
+          setTotalPosts(result.totalPosts)
+          setError('')
         }
       } catch {
-        if (active) {
+        if (active && posts.length === 0) {
           setError('Failed to load JAV catalog. Please try again.')
         }
       } finally {
@@ -16683,12 +16692,19 @@ function LordJavSection({
       </div>
 
       {/* Main Content Area */}
-      {loading ? (
-        <div className="jav-loading">
-          <LoaderCircle className="spin-icon" size={32} />
-          <p>Loading JAV catalog...</p>
+      {loading && posts.length === 0 ? (
+        <div className="jav-skeleton-grid" aria-label="Loading JAV catalog">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={`jav-skel-${i}`} className="jav-skeleton-card">
+              <div className="jav-skeleton-thumb" />
+              <div className="jav-skeleton-body">
+                <div className="jav-skeleton-line" style={{ width: '85%' }} />
+                <div className="jav-skeleton-line" style={{ width: '50%' }} />
+              </div>
+            </div>
+          ))}
         </div>
-      ) : error ? (
+      ) : error && posts.length === 0 ? (
         <div className="jav-empty">
           <AlertCircle size={40} />
           <p>{error}</p>
