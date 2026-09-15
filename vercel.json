@@ -28,6 +28,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/anilist", "destination": "/api/hub?kind=anilist" },
     { "source": "/api/img", "destination": "/api/hub?kind=img" },
     { "source": "/api/mangahook", "destination": "/api/hub?kind=manga" },
     { "source": "/api/livetv", "destination": "/api/hub?kind=livetv" },
