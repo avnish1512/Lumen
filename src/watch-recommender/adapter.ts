@@ -1,4 +1,9 @@
 import type { Movie } from '../omdb'
+import {
+  fetchAnimeCollection,
+  fetchMovieCollection,
+  fetchTvShowCollection,
+} from '../omdb'
 import type { AniListAnime } from '../anilist'
 import { fetchAnimeByOptions } from '../anilist'
 import { fetchKoreanChineseDramas, fetchTmdbHomeRails } from '../tmdb'
@@ -60,7 +65,7 @@ export class PoolFetchError extends Error {
 const PROBE_ENDPOINT: Record<CategorySource, string> = {
   'tmdb-rails': '/api/tmdb-home-rails',
   'tmdb-drama': '/api/tmdb-drama',
-  anilist: 'https://graphql.anilist.co',
+  anilist: '/api/anilist',
 }
 
 /**
@@ -73,6 +78,14 @@ async function probeReachable(source: CategorySource): Promise<void> {
   try {
     await fetch(PROBE_ENDPOINT[source], { method: 'GET' })
   } catch (cause) {
+    if (source === 'anilist') {
+      try {
+        await fetch('https://graphql.anilist.co', { method: 'GET' })
+        return
+      } catch {
+        // Fall through to error below
+      }
+    }
     throw new PoolFetchError(
       `Could not reach the ${source} data source.`,
       { cause },
@@ -187,9 +200,35 @@ export async function fetchPoolInputs(category: Category): Promise<PoolInputs> {
   let inputs: PoolInputs
 
   switch (category) {
-    case 'movie':
+    case 'movie': {
+      let homeRails = await fetchTmdbHomeRails()
+      if (buildCandidatePool('movie', { homeRails }).length === 0) {
+        try {
+          const movieCollection = await fetchMovieCollection()
+          homeRails = {
+            ...homeRails,
+            movieCollection,
+          }
+        } catch {
+          // Retain original homeRails
+        }
+      }
+      inputs = { homeRails }
+      break
+    }
     case 'tv': {
-      const homeRails = await fetchTmdbHomeRails()
+      let homeRails = await fetchTmdbHomeRails()
+      if (buildCandidatePool('tv', { homeRails }).length === 0) {
+        try {
+          const tvShowCollection = await fetchTvShowCollection()
+          homeRails = {
+            ...homeRails,
+            tvShowCollection,
+          }
+        } catch {
+          // Retain original homeRails
+        }
+      }
       inputs = { homeRails }
       break
     }
@@ -199,11 +238,34 @@ export async function fetchPoolInputs(category: Category): Promise<PoolInputs> {
       break
     }
     case 'anime': {
-      const media = await fetchAnimeByOptions({
-        sort: ['TRENDING_DESC', 'POPULARITY_DESC'],
-        perPage: 50,
-      })
-      inputs = { animeList: media.map((item, i) => mapAniListToMovie(item, i + 1)) }
+      let animeList: Movie[] = []
+      try {
+        const media = await fetchAnimeByOptions({
+          sort: ['TRENDING_DESC', 'POPULARITY_DESC'],
+          perPage: 50,
+        })
+        if (media && media.length > 0) {
+          animeList = media.map((item, i) => mapAniListToMovie(item, i + 1))
+        }
+      } catch {
+        animeList = []
+      }
+
+      if (animeList.length === 0) {
+        try {
+          const animeCol = await fetchAnimeCollection()
+          animeList = [
+            ...(animeCol.top ?? []),
+            ...(animeCol.thrilling ?? []),
+            ...(animeCol.adventure ?? []),
+            ...(animeCol.kidsFamily ?? []),
+          ]
+        } catch {
+          animeList = []
+        }
+      }
+
+      inputs = { animeList }
       break
     }
   }

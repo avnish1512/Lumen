@@ -232,7 +232,10 @@ export function WatchRecommenderModal({
             movie={state.recommendation}
             category={state.category}
             designMode={designMode}
-            onOpenDetail={onOpenDetail}
+            onOpenDetail={(movie) => {
+              handleClose()
+              onOpenDetail(movie)
+            }}
             onShuffle={shuffle}
           />
         )}

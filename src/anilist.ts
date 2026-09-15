@@ -111,11 +111,26 @@ async function queryAniList(query: string, variables: Record<string, any>, retry
   };
 
   try {
-    const response = await fetch(ANILIST_GRAPHQL_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ query, variables }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(ANILIST_GRAPHQL_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query, variables }),
+      });
+    } catch (directError) {
+      // In browser or restrictive network environments, direct request may fail (CORS/network block).
+      // Fall back to the local proxy endpoint.
+      try {
+        response = await fetch('/api/anilist', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ query, variables }),
+        });
+      } catch {
+        throw directError;
+      }
+    }
 
     const remaining = response.headers.get('X-RateLimit-Remaining');
     const retryAfter = response.headers.get('Retry-After') || response.headers.get('X-RateLimit-Reset');

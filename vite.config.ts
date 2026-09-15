@@ -2021,12 +2021,53 @@ function streamProxyDevProxy(): Plugin {
   }
 }
 
+function anilistDevProxy(): Plugin {
+  return {
+    name: 'anilist-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/anilist', async (req, res) => {
+        if (req.method === 'GET') {
+          sendJson(res, 200, { ok: true })
+          return
+        }
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: 'Method not allowed' })
+          return
+        }
+
+        let body = ''
+        req.on('data', (chunk) => {
+          body += chunk
+        })
+        req.on('end', async () => {
+          try {
+            const upstream = await fetch('https://graphql.anilist.co', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+              },
+              body,
+            })
+            const data = await upstream.json()
+            sendJson(res, upstream.status, data)
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'AniList proxy failed'
+            sendJson(res, 502, { error: message })
+          }
+        })
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
     plugins: [
       react(),
+      anilistDevProxy(),
       phubDevProxy(env.PHUB_API_KEY),
       epornerDevProxy(),
       omdbDevProxy(createOmdbApiKeys(env)),
@@ -2069,3 +2110,4 @@ export default defineConfig(({ mode }) => {
     ],
   }
 })
+
