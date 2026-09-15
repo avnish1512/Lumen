@@ -242,10 +242,10 @@ export async function fetchPoolInputs(category: Category): Promise<PoolInputs> {
       const { list, rails } = await fetchKoreanChineseDramas()
       const allDramas = [
         ...(list ?? []),
-        ...(rails?.korean ?? []),
-        ...(rails?.chinese ?? []),
-        ...(rails?.trending ?? []),
-        ...(rails?.topRated ?? []),
+        ...(rails?.kDrama ?? []),
+        ...(rails?.cDrama ?? []),
+        ...(rails?.newReleases ?? []),
+        ...(rails?.romCom ?? []),
       ]
       inputs = { dramaList: allDramas }
       break
