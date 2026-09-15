@@ -346,6 +346,11 @@ export function useWatchRecommender(
   const stateRef = useRef(state)
   stateRef.current = state
 
+  // Set of Movie IDs already shown to the user in the current session.
+  // Passed to weightedShuffleRecommendation so shuffle visits every title in the
+  // pool without repeating until the entire pool has been shown.
+  const seenIdsRef = useRef<Set<string>>(new Set())
+
   // Shared retrieval routine used by both `selectCategory` and `retry`. It runs
   // the adapter for the given category, builds the pool, selects a
   // recommendation, and dispatches the matching resolution action — but only if
@@ -365,6 +370,10 @@ export function useWatchRecommender(
         if (pool.length === 0 || recommendation === null) {
           dispatch({ type: 'empty' })
           return
+        }
+        seenIdsRef.current.clear()
+        if (recommendation.id) {
+          seenIdsRef.current.add(recommendation.id)
         }
         // Derive the genre refinement options from the fetched pool so only
         // genres that actually have titles are offered (Req 10.1).
@@ -396,6 +405,7 @@ export function useWatchRecommender(
     (category: Category) => {
       const requestId = requestIdRef.current + 1
       requestIdRef.current = requestId
+      seenIdsRef.current.clear()
       dispatch({ type: 'selectCategory', category })
       runFetch(category, requestId)
     },
@@ -413,6 +423,10 @@ export function useWatchRecommender(
     }
     const pool = filterByGenre(basePool, genre)
     const recommendation = weightedSelectRecommendation(pool, tasteRef.current)
+    seenIdsRef.current.clear()
+    if (recommendation?.id) {
+      seenIdsRef.current.add(recommendation.id)
+    }
     dispatch({ type: 'selectGenre', genre, pool, recommendation })
   }, [])
 
@@ -428,6 +442,8 @@ export function useWatchRecommender(
       pool,
       recommendation,
       tasteRef.current,
+      Math.random,
+      seenIdsRef.current,
     )
     if (next === null) {
       return
@@ -445,6 +461,7 @@ export function useWatchRecommender(
     }
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
+    seenIdsRef.current.clear()
     dispatch({ type: 'retry' })
     runFetch(category, requestId)
   }, [runFetch])
@@ -453,6 +470,7 @@ export function useWatchRecommender(
   // retrieval so a late response cannot resurrect a recommendation after reset.
   const reset = useCallback(() => {
     requestIdRef.current += 1
+    seenIdsRef.current.clear()
     dispatch({ type: 'reset' })
   }, [])
 

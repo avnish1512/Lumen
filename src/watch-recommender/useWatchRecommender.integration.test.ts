@@ -182,6 +182,38 @@ describe('useWatchRecommender integration: idle → loading → ready → shuffl
     // No additional retrieval was triggered by shuffle (Req 6.2).
     expect(fetchPoolInputsMock).toHaveBeenCalledTimes(1)
   })
+
+  it('shuffle cycles through all distinct pool titles without repeating until the pool is exhausted', async () => {
+    const movies = [makeMovie('1'), makeMovie('2'), makeMovie('3'), makeMovie('4'), makeMovie('5')]
+    fetchPoolInputsMock.mockResolvedValue(movieRailsInputs(movies))
+
+    const { result } = renderHook(() => useWatchRecommender())
+
+    act(() => {
+      result.current.selectCategory('movie')
+    })
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready')
+    })
+
+    const initialId = result.current.state.recommendation?.id
+    expect(initialId).toBeDefined()
+
+    const seenIds = new Set<string>([initialId!])
+    // Next 4 shuffles must each pick a distinct, unvisited title from the pool
+    for (let i = 0; i < 4; i++) {
+      act(() => {
+        result.current.shuffle()
+      })
+      const pickId = result.current.state.recommendation?.id
+      expect(pickId).toBeDefined()
+      expect(seenIds.has(pickId!)).toBe(false)
+      seenIds.add(pickId!)
+    }
+
+    // All 5 unique titles were visited without any duplicates
+    expect(seenIds.size).toBe(5)
+  })
 })
 
 // -----------------------------------------------------------------------------

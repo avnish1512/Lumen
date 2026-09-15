@@ -189,6 +189,7 @@ export function shuffleRecommendation(
   pool: Movie[],
   current: Movie | null,
   rng: Rng = Math.random,
+  seenIds?: Set<string>,
 ): Movie | null {
   if (pool.length === 0) {
     return null
@@ -197,17 +198,36 @@ export function shuffleRecommendation(
     return pool[0]
   }
 
-  // Candidates that differ from the current recommendation by identity (`id`).
   const currentId = current?.id
-  const alternatives =
-    typeof currentId === 'string' && currentId.length > 0
-      ? pool.filter((movie) => movie.id !== currentId)
-      : pool
+  let source: Movie[]
 
-  // When every entry shares `current`'s id (no distinct alternative), fall back
-  // to selecting from the whole pool so the function stays total.
-  const source = alternatives.length > 0 ? alternatives : pool
-  return selectRecommendation(source, rng)
+  if (seenIds && seenIds.size > 0) {
+    const unvisited = pool.filter((movie) => movie.id && !seenIds.has(movie.id))
+    if (unvisited.length > 0) {
+      source = unvisited
+    } else {
+      // All items have been seen: reset history (keeping current) to start a fresh cycle
+      seenIds.clear()
+      if (currentId) seenIds.add(currentId)
+      const alternatives =
+        typeof currentId === 'string' && currentId.length > 0
+          ? pool.filter((movie) => movie.id !== currentId)
+          : pool
+      source = alternatives.length > 0 ? alternatives : pool
+    }
+  } else {
+    const alternatives =
+      typeof currentId === 'string' && currentId.length > 0
+        ? pool.filter((movie) => movie.id !== currentId)
+        : pool
+    source = alternatives.length > 0 ? alternatives : pool
+  }
+
+  const pick = selectRecommendation(source, rng)
+  if (pick && seenIds) {
+    seenIds.add(pick.id)
+  }
+  return pick
 }
 
 // -----------------------------------------------------------------------------
@@ -366,7 +386,8 @@ export function weightedSelectRecommendation(
 
 /**
  * Weighted counterpart to `shuffleRecommendation`: re-selects from the pool
- * (avoiding `current` when alternatives exist) using taste-weighted selection.
+ * (avoiding `current` when alternatives exist, and avoiding previously seen
+ * recommendations when `seenIds` is supplied) using taste-weighted selection.
  * Returns `null` for an empty pool, the sole title for a single-title pool, and
  * never throws (Requirements 6.2, 6.3 + personalization).
  */
@@ -375,6 +396,7 @@ export function weightedShuffleRecommendation(
   current: Movie | null,
   taste: TasteProfile,
   rng: Rng = Math.random,
+  seenIds?: Set<string>,
 ): Movie | null {
   if (pool.length === 0) {
     return null
@@ -382,13 +404,37 @@ export function weightedShuffleRecommendation(
   if (pool.length === 1) {
     return pool[0]
   }
+
   const currentId = current?.id
-  const alternatives =
-    typeof currentId === 'string' && currentId.length > 0
-      ? pool.filter((movie) => movie.id !== currentId)
-      : pool
-  const source = alternatives.length > 0 ? alternatives : pool
-  return weightedSelectRecommendation(source, taste, rng)
+  let source: Movie[]
+
+  if (seenIds && seenIds.size > 0) {
+    const unvisited = pool.filter((movie) => movie.id && !seenIds.has(movie.id))
+    if (unvisited.length > 0) {
+      source = unvisited
+    } else {
+      // All items have been seen: reset history (keeping current) to start a fresh cycle
+      seenIds.clear()
+      if (currentId) seenIds.add(currentId)
+      const alternatives =
+        typeof currentId === 'string' && currentId.length > 0
+          ? pool.filter((movie) => movie.id !== currentId)
+          : pool
+      source = alternatives.length > 0 ? alternatives : pool
+    }
+  } else {
+    const alternatives =
+      typeof currentId === 'string' && currentId.length > 0
+        ? pool.filter((movie) => movie.id !== currentId)
+        : pool
+    source = alternatives.length > 0 ? alternatives : pool
+  }
+
+  const pick = weightedSelectRecommendation(source, taste, rng)
+  if (pick && seenIds) {
+    seenIds.add(pick.id)
+  }
+  return pick
 }
 
 /**

@@ -202,67 +202,89 @@ export async function fetchPoolInputs(category: Category): Promise<PoolInputs> {
   switch (category) {
     case 'movie': {
       let homeRails = await fetchTmdbHomeRails()
-      if (buildCandidatePool('movie', { homeRails }).length === 0) {
-        try {
-          const movieCollection = await fetchMovieCollection()
-          homeRails = {
-            ...homeRails,
-            movieCollection,
-          }
-        } catch {
-          // Retain original homeRails
+      try {
+        const omdbCollection = await fetchMovieCollection()
+        homeRails = {
+          ...homeRails,
+          movieCollection: {
+            top: [...(homeRails.movieCollection?.top ?? []), ...(omdbCollection.top ?? [])],
+            thrilling: [...(homeRails.movieCollection?.thrilling ?? []), ...(omdbCollection.thrilling ?? [])],
+            adventure: [...(homeRails.movieCollection?.adventure ?? []), ...(omdbCollection.adventure ?? [])],
+            kidsFamily: [...(homeRails.movieCollection?.kidsFamily ?? []), ...(omdbCollection.kidsFamily ?? [])],
+          },
         }
+      } catch {
+        // Retain original homeRails
       }
       inputs = { homeRails }
       break
     }
     case 'tv': {
       let homeRails = await fetchTmdbHomeRails()
-      if (buildCandidatePool('tv', { homeRails }).length === 0) {
-        try {
-          const tvShowCollection = await fetchTvShowCollection()
-          homeRails = {
-            ...homeRails,
-            tvShowCollection,
-          }
-        } catch {
-          // Retain original homeRails
+      try {
+        const tvShowCollection = await fetchTvShowCollection()
+        homeRails = {
+          ...homeRails,
+          tvShowCollection: {
+            top: [...(homeRails.tvShowCollection?.top ?? []), ...(tvShowCollection.top ?? [])],
+            thrilling: [...(homeRails.tvShowCollection?.thrilling ?? []), ...(tvShowCollection.thrilling ?? [])],
+            adventure: [...(homeRails.tvShowCollection?.adventure ?? []), ...(tvShowCollection.adventure ?? [])],
+            kidsFamily: [...(homeRails.tvShowCollection?.kidsFamily ?? []), ...(tvShowCollection.kidsFamily ?? [])],
+          },
         }
+      } catch {
+        // Retain original homeRails
       }
       inputs = { homeRails }
       break
     }
     case 'drama': {
-      const { list } = await fetchKoreanChineseDramas()
-      inputs = { dramaList: list }
+      const { list, rails } = await fetchKoreanChineseDramas()
+      const allDramas = [
+        ...(list ?? []),
+        ...(rails?.korean ?? []),
+        ...(rails?.chinese ?? []),
+        ...(rails?.trending ?? []),
+        ...(rails?.topRated ?? []),
+      ]
+      inputs = { dramaList: allDramas }
       break
     }
     case 'anime': {
       let animeList: Movie[] = []
       try {
-        const media = await fetchAnimeByOptions({
-          sort: ['TRENDING_DESC', 'POPULARITY_DESC'],
-          perPage: 50,
-        })
-        if (media && media.length > 0) {
-          animeList = media.map((item, i) => mapAniListToMovie(item, i + 1))
+        const [page1, page2] = await Promise.all([
+          fetchAnimeByOptions({
+            sort: ['TRENDING_DESC', 'POPULARITY_DESC'],
+            perPage: 50,
+            page: 1,
+          }),
+          fetchAnimeByOptions({
+            sort: ['SCORE_DESC', 'POPULARITY_DESC'],
+            perPage: 50,
+            page: 2,
+          }),
+        ])
+        const combined = [...(page1 || []), ...(page2 || [])]
+        if (combined.length > 0) {
+          animeList = combined.map((item, i) => mapAniListToMovie(item, i + 1))
         }
       } catch {
         animeList = []
       }
 
-      if (animeList.length === 0) {
-        try {
-          const animeCol = await fetchAnimeCollection()
-          animeList = [
-            ...(animeCol.top ?? []),
-            ...(animeCol.thrilling ?? []),
-            ...(animeCol.adventure ?? []),
-            ...(animeCol.kidsFamily ?? []),
-          ]
-        } catch {
-          animeList = []
-        }
+      // Also merge the curated OMDb collection
+      try {
+        const animeCol = await fetchAnimeCollection()
+        const extraAnime = [
+          ...(animeCol.top ?? []),
+          ...(animeCol.thrilling ?? []),
+          ...(animeCol.adventure ?? []),
+          ...(animeCol.kidsFamily ?? []),
+        ]
+        animeList = [...animeList, ...extraAnime]
+      } catch {
+        // keep animeList
       }
 
       inputs = { animeList }
