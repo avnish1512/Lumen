@@ -903,6 +903,62 @@ describe('Hentai Ocean integration', () => {
     })
     expect(sorted[0].id).toBe('hentaiocean-series-overflow-2')
   })
+
+  it('dynamically adapts similar rail recommendations based on currently playing video genres', () => {
+    const actionCurrent: Movie = {
+      id: 'hentaiocean-action-1',
+      title: 'Shinobi Battle',
+      isHentaiOcean: true,
+      genres: ['Hentai', 'Action', 'Supernatural'],
+      rank: 1,
+      logoTitle: 'Shinobi Battle',
+      label: 'Hentai',
+      type: 'Anime',
+      year: '2026',
+      runtime: '24 min',
+      rating: '9.0',
+      maturity: '18+',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: '',
+      cast: [],
+      director: '',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const actionOther: Movie = {
+      ...actionCurrent,
+      id: 'hentaiocean-action-2',
+      title: 'Ninja Climax',
+      genres: ['Hentai', 'Action', 'Supernatural'],
+    }
+
+    const schoolRomance: Movie = {
+      ...actionCurrent,
+      id: 'hentaiocean-romance-1',
+      title: 'School Love',
+      genres: ['Hentai', 'Romance', 'School'],
+    }
+
+    const candidates = [actionCurrent, actionOther, schoolRomance]
+    const currentGenres = actionCurrent.genres.map((g) => g.toLowerCase())
+
+    const sorted = candidates
+      .filter((m) => m.id !== actionCurrent.id && isHentaiMovie(m))
+      .sort((a, b) => {
+        const aMatches = a.genres.filter((g) => currentGenres.includes(g.toLowerCase())).length
+        const bMatches = b.genres.filter((g) => currentGenres.includes(g.toLowerCase())).length
+        return bMatches - aMatches
+      })
+
+    // Action/Supernatural video must rank Ninja Climax first over School Love
+    expect(sorted[0].id).toBe('hentaiocean-action-2')
+    expect(sorted[1].id).toBe('hentaiocean-romance-1')
+  })
 })
 
 

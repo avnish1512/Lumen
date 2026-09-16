@@ -22161,4 +22161,27 @@ font-size: 11px;
   font-weight: 700;
 }
 
+/* Watch Screen Similars Rail */
+.watch-similars-rail-section {
+  width: 100%;
+  margin-top: 24px;
+}
+
+.watch-similars-rail-section .detail-section {
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.watch-similars-rail-section .detail-section-heading {
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  margin-bottom: 4px !important;
+}
+
+.watch-similars-rail-section .detail-poster-viewport {
+  margin-right: 0 !important;
+}
+
+
 

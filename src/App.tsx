@@ -2114,7 +2114,72 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
     try {
       const { movies } = await fetchMatureCollection()
       if (movies && movies.length > 0) {
-        return movies.filter((m) => m.id !== movie.id)
+        const pool = movies.filter(
+          (m) => m.id !== movie.id && (isHentaiMovie(m) || m.isHentaiOcean || m.id.startsWith('hentaiocean-')),
+        )
+        const franchiseKey = extractFranchisePrefix(movie.title)
+        const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+        const titleWords = (movie.title || '')
+          .toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter((w) => w.length > 2 && !['the', 'and', 'with', 'from', 'for', 'part', 'episode', 'series', 'animation', 'ga', 'datta', 'hanashi'].includes(w))
+        const seenIds = new Set<string>([String(movie.id)])
+        const combined: Movie[] = []
+
+        // 1. Franchise titles sharing the same franchise prefix
+        if (franchiseKey && franchiseKey.length >= 3) {
+          for (const item of pool) {
+            const otherKey = extractFranchisePrefix(item.title)
+            const idKey = String(item.id)
+            if (
+              !seenIds.has(idKey) &&
+              (otherKey === franchiseKey ||
+                item.title.toLowerCase().includes(franchiseKey) ||
+                movie.title.toLowerCase().includes(otherKey))
+            ) {
+              seenIds.add(idKey)
+              combined.push({
+                ...item,
+                label: item.label || 'Related',
+              })
+            }
+          }
+        }
+
+        // 2. Keyword overlap in titles
+        if (titleWords.length > 0) {
+          for (const item of pool) {
+            const idKey = String(item.id)
+            if (!seenIds.has(idKey)) {
+              const itemTitleLower = item.title.toLowerCase()
+              const matchingWordCount = titleWords.filter((w) => itemTitleLower.includes(w)).length
+              if (matchingWordCount > 0) {
+                seenIds.add(idKey)
+                combined.push(item)
+              }
+            }
+          }
+        }
+
+        // 3. Fallback recommendations sorted by genre similarity with current video
+        const sortedFallback = [...pool]
+          .filter((m) => !seenIds.has(String(m.id)))
+          .sort((a, b) => {
+            const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+            const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+            return bMatches - aMatches
+          })
+
+        for (const item of sortedFallback) {
+          const idKey = String(item.id)
+          if (!seenIds.has(idKey)) {
+            seenIds.add(idKey)
+            combined.push(item)
+          }
+        }
+
+        return combined.slice(0, 16)
       }
     } catch {}
   }
@@ -8675,56 +8740,28 @@ function WatchScreen({
           m.genres.some((g) => g.toLowerCase() === 'hentai'),
       )
 
-    // 1. Live related videos from provider / AniList / TMDB
-    if (liveRelated.length > 0) {
-      return liveRelated.slice(0, 8)
-    }
-
-    // 2. Provider-specific fallbacks matching current video's category/genre
-    if (isPhub3Video) {
-      const currentKeywords = (movie.genres || []).map((g) => g.toLowerCase())
-      return EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
-        .filter((m) => m.id !== movie.id)
-        .sort((a, b) => {
-          const aMatches = (a.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
-          const bMatches = (b.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
-          return bMatches - aMatches
-        })
-        .slice(0, 8)
-    }
-
-    if (isPhub2Video) {
-      const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
-      return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
-        .filter((m) => m.id !== movie.id)
-        .sort((a, b) => {
-          const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
-          const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
-          return bMatches - aMatches
-        })
-        .slice(0, 8)
-    }
-
-    if (isPhub1Video) {
-      if (phubRelated.length > 0) {
-        return phubRelated.slice(0, 8)
-      }
-    }
-
-    if (isJavVideo && javRelated.length > 0) {
-      return javRelated.slice(0, 8)
-    }
-
+    // 1. Hentai (Hentai Ocean) - Rank strictly based on current playing video (franchise, title words, and genre matching)
     if (isHentai) {
-      const candidates = (hentaiRelated.length > 0 ? hentaiRelated : (relatedMovies || []))
-        .filter((m) => m.id !== movie.id && (isHentaiMovie(m) || m.isHentaiOcean || m.id.startsWith('hentaiocean-')))
+      const candidates = [
+        ...liveRelated,
+        ...hentaiRelated,
+        ...(relatedMovies || []),
+      ].filter(
+        (m) => m.id !== movie.id && (isHentaiMovie(m) || m.isHentaiOcean || m.id.startsWith('hentaiocean-')),
+      )
 
       if (candidates.length > 0) {
         const franchiseKey = extractFranchisePrefix(movie.title)
         const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+        const titleWords = (movie.title || '')
+          .toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter((w) => w.length > 2 && !['the', 'and', 'with', 'from', 'for', 'part', 'episode', 'series', 'animation', 'ga', 'datta', 'hanashi'].includes(w))
         const seenIds = new Set<string>([String(movie.id)])
         const combined: Movie[] = []
 
+        // 1. Franchise titles from pool that share the same franchise base name
         if (franchiseKey && franchiseKey.length >= 3) {
           for (const item of candidates) {
             const otherKey = extractFranchisePrefix(item.title)
@@ -8744,6 +8781,22 @@ function WatchScreen({
           }
         }
 
+        // 2. Keyword matching in title
+        if (titleWords.length > 0) {
+          for (const item of candidates) {
+            const idKey = String(item.id)
+            if (!seenIds.has(idKey)) {
+              const itemTitleLower = item.title.toLowerCase()
+              const matchingWordCount = titleWords.filter((w) => itemTitleLower.includes(w)).length
+              if (matchingWordCount > 0) {
+                seenIds.add(idKey)
+                combined.push(item)
+              }
+            }
+          }
+        }
+
+        // 3. Fallback recommendations sorted by genre similarity with the current video
         const sortedFallback = [...candidates]
           .filter((m) => !seenIds.has(String(m.id)))
           .sort((a, b) => {
@@ -8761,9 +8814,49 @@ function WatchScreen({
         }
 
         if (combined.length > 0) {
-          return combined.slice(0, 8)
+          return combined.slice(0, 16)
         }
       }
+    }
+
+    // 2. Live related videos from provider / AniList / TMDB
+    if (liveRelated.length > 0) {
+      return liveRelated.slice(0, 16)
+    }
+
+    // 3. Provider-specific fallbacks matching current video's category/genre
+    if (isPhub3Video) {
+      const currentKeywords = (movie.genres || []).map((g) => g.toLowerCase())
+      return EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
+        .filter((m) => m.id !== movie.id)
+        .sort((a, b) => {
+          const aMatches = (a.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
+          const bMatches = (b.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
+          return bMatches - aMatches
+        })
+        .slice(0, 16)
+    }
+
+    if (isPhub2Video) {
+      const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+      return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
+        .filter((m) => m.id !== movie.id)
+        .sort((a, b) => {
+          const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+          const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+          return bMatches - aMatches
+        })
+        .slice(0, 16)
+    }
+
+    if (isPhub1Video) {
+      if (phubRelated.length > 0) {
+        return phubRelated.slice(0, 16)
+      }
+    }
+
+    if (isJavVideo && javRelated.length > 0) {
+      return javRelated.slice(0, 16)
     }
 
     const cleanRelated = (relatedMovies || []).filter(
@@ -8774,7 +8867,7 @@ function WatchScreen({
     const seenIds = new Set<string>([String(movie.id)])
     const combined: Movie[] = []
 
-    // 3. Franchise titles from local pool that share the same franchise base name
+    // 4. Franchise titles from local pool that share the same franchise base name
     if (franchiseKey && franchiseKey.length >= 3) {
       for (const item of cleanRelated) {
         const otherKey = extractFranchisePrefix(item.title)
@@ -8794,7 +8887,7 @@ function WatchScreen({
       }
     }
 
-    // 4. Fallback recommendations sorted by genre similarity
+    // 5. Fallback recommendations sorted by genre similarity
     const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
     const sortedFallback = [...cleanRelated]
       .filter((m) => !seenIds.has(String(m.id)))
@@ -8812,7 +8905,7 @@ function WatchScreen({
       }
     }
 
-    return combined.slice(0, 8)
+    return combined.slice(0, 16)
   }, [liveRelated, isPhub3Video, isPhub2Video, isPhub1Video, phubRelated, isJavVideo, javRelated, isHentai, hentaiRelated, movie.id, movie.title, movie.genres, relatedMovies])
 
   const renderYouTubeRelatedSidebar = () => {
@@ -10018,6 +10111,15 @@ function WatchScreen({
           </div>
 
           {hasEpisodes && renderEpisodePanel(false)}
+          {relatedList.length > 0 && (
+            <div className="watch-similars-rail-section">
+              <DetailPosterRail
+                title="Similars"
+                movies={relatedList}
+                onOpenDetail={onSelectMovie}
+              />
+            </div>
+          )}
           {renderYouTubeRelatedSidebar()}
           {renderCommentsSection()}
         </div>
@@ -10268,6 +10370,16 @@ function WatchScreen({
             </p>
             <Metadata movie={movie} />
           </div>
+
+          {relatedList.length > 0 && (
+            <div className="watch-similars-rail-section">
+              <DetailPosterRail
+                title="Similars"
+                movies={relatedList}
+                onOpenDetail={onSelectMovie}
+              />
+            </div>
+          )}
 
           {renderCommentsSection()}
         </div>
