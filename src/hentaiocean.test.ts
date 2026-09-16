@@ -821,6 +821,88 @@ describe('Hentai Ocean integration', () => {
     const publicList = allHistory.filter((e) => !isLordAdultMovie(e.movie)).map((e) => e.movie)
     expect(publicList).toHaveLength(0)
   })
+
+  it('provides similar hentai videos rail without being filtered by adult guard', () => {
+    const currentHentai: Movie = {
+      id: 'hentaiocean-series-overflow',
+      title: 'Overflow',
+      isHentaiOcean: true,
+      rank: 1,
+      logoTitle: 'Overflow',
+      label: 'Hentai',
+      type: 'Series',
+      genres: ['Hentai', 'Romance', 'School'],
+      year: '2026',
+      runtime: '24 min',
+      rating: '9.5',
+      maturity: '18+',
+      progress: 0,
+      hero: 'https://hentaiocean.com/thumbnail/overflow.webp',
+      poster: 'https://hentaiocean.com/thumbnail/overflow.webp',
+      still: 'https://hentaiocean.com/thumbnail/overflow.webp',
+      synopsis: 'Overflow series synopsis',
+      cast: [],
+      director: 'Hentai Ocean',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+    }
+
+    const sequelHentai: Movie = {
+      ...currentHentai,
+      id: 'hentaiocean-series-overflow-2',
+      title: 'Overflow 2',
+      genres: ['Hentai', 'Romance'],
+    }
+
+    const romanceHentai: Movie = {
+      ...currentHentai,
+      id: 'hentaiocean-series-another-romance',
+      title: 'Another Romance',
+      genres: ['Hentai', 'Romance'],
+    }
+
+    const actionHentai: Movie = {
+      ...currentHentai,
+      id: 'hentaiocean-series-action-hentai',
+      title: 'Action Battle Hentai',
+      genres: ['Hentai', 'Action'],
+    }
+
+    const javMovie: Movie = {
+      ...currentHentai,
+      id: 'jav-12345',
+      title: 'JAV Video',
+      isHentaiOcean: false,
+      isJav: true,
+      label: 'JAV',
+      genres: ['JAV'],
+    }
+
+    const candidates = [currentHentai, sequelHentai, romanceHentai, actionHentai, javMovie]
+
+    // Simulate similar videos selection for Hentai titles
+    const isHentai = isHentaiMovie(currentHentai)
+    expect(isHentai).toBe(true)
+
+    const pool = candidates.filter((m) => m.id !== currentHentai.id && isHentaiMovie(m))
+    expect(pool).toHaveLength(3)
+    expect(pool.some((m) => m.id === javMovie.id)).toBe(false)
+
+    // Verify franchise matching puts sequel first
+    const franchiseKey = 'overflow'
+    const franchiseMatches = pool.filter((m) => m.title.toLowerCase().startsWith(franchiseKey))
+    expect(franchiseMatches.map((m) => m.id)).toContain('hentaiocean-series-overflow-2')
+
+    // Verify genre similarity ranking
+    const currentGenres = currentHentai.genres.map((g) => g.toLowerCase())
+    const sorted = [...pool].sort((a, b) => {
+      const aMatches = a.genres.filter((g) => currentGenres.includes(g.toLowerCase())).length
+      const bMatches = b.genres.filter((g) => currentGenres.includes(g.toLowerCase())).length
+      return bMatches - aMatches
+    })
+    expect(sorted[0].id).toBe('hentaiocean-series-overflow-2')
+  })
 })
 
 

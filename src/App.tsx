@@ -2098,6 +2098,27 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
     } catch {}
   }
 
+  // 4b. Hentai (Hentai Ocean)
+  const isHentaiTarget = Boolean(
+    !isJav &&
+      !isPhub3 &&
+      !isPhub2 &&
+      !isPhub1 &&
+      (isHentaiMovie(movie) ||
+        movie.isHentaiOcean ||
+        movie.id.startsWith('hentaiocean-') ||
+        movie.hentaiSlug?.startsWith('hentaiocean-') ||
+        movie.genres?.some((g) => g.toLowerCase() === 'hentai')),
+  )
+  if (isHentaiTarget) {
+    try {
+      const { movies } = await fetchMatureCollection()
+      if (movies && movies.length > 0) {
+        return movies.filter((m) => m.id !== movie.id)
+      }
+    } catch {}
+  }
+
   // 5. Anime: fetch exact relations (Sequels, Prequels, Next Seasons, Side Stories) & Recommendations from AniList
   if (movie.isAnime || movie.anilistId || movie.id.startsWith('al-')) {
     const anilistId = movie.anilistId || (movie.id.startsWith('al-') ? Number(movie.id.replace('al-', '')) : undefined)
@@ -8415,7 +8436,10 @@ function WatchScreen({
   const isHentai = Boolean(
     !isJavVideo &&
       !isPhubVideo &&
-      (movie.isHentaiOcean ||
+      (isHentaiMovie(movie) ||
+        movie.isHentaiOcean ||
+        movie.id.startsWith('hentaiocean-') ||
+        movie.hentaiSlug?.startsWith('hentaiocean-') ||
         movie.genres.some((g) => g.toLowerCase() === 'hentai')),
   )
   const isTmdbTitle = !isHentai && !isJavVideo && !isPhubVideo && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
@@ -8554,6 +8578,25 @@ function WatchScreen({
     }
   }, [isJavVideo, movie.id, movie.genres])
 
+  const [hentaiRelated, setHentaiRelated] = useState<Movie[]>([])
+
+  useEffect(() => {
+    if (!isHentai) return
+    let active = true
+    async function loadHentaiRelated() {
+      try {
+        const { movies: matureMovies } = await fetchMatureCollection()
+        if (active && Array.isArray(matureMovies) && matureMovies.length > 0) {
+          setHentaiRelated(matureMovies.filter((m) => m.id !== movie.id))
+        }
+      } catch {}
+    }
+    void loadHentaiRelated()
+    return () => {
+      active = false
+    }
+  }, [isHentai, movie.id])
+
   const [phubRelated, setPhubRelated] = useState<Movie[]>([])
   const [resolvedPhubEmbed, setResolvedPhubEmbed] = useState<string | undefined>(movie.embedUrl)
 
@@ -8672,8 +8715,59 @@ function WatchScreen({
       return javRelated.slice(0, 8)
     }
 
+    if (isHentai) {
+      const candidates = (hentaiRelated.length > 0 ? hentaiRelated : (relatedMovies || []))
+        .filter((m) => m.id !== movie.id && (isHentaiMovie(m) || m.isHentaiOcean || m.id.startsWith('hentaiocean-')))
+
+      if (candidates.length > 0) {
+        const franchiseKey = extractFranchisePrefix(movie.title)
+        const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
+        const seenIds = new Set<string>([String(movie.id)])
+        const combined: Movie[] = []
+
+        if (franchiseKey && franchiseKey.length >= 3) {
+          for (const item of candidates) {
+            const otherKey = extractFranchisePrefix(item.title)
+            const idKey = String(item.id)
+            if (
+              !seenIds.has(idKey) &&
+              (otherKey === franchiseKey ||
+                item.title.toLowerCase().includes(franchiseKey) ||
+                movie.title.toLowerCase().includes(otherKey))
+            ) {
+              seenIds.add(idKey)
+              combined.push({
+                ...item,
+                label: item.label || 'Related',
+              })
+            }
+          }
+        }
+
+        const sortedFallback = [...candidates]
+          .filter((m) => !seenIds.has(String(m.id)))
+          .sort((a, b) => {
+            const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+            const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
+            return bMatches - aMatches
+          })
+
+        for (const item of sortedFallback) {
+          const idKey = String(item.id)
+          if (!seenIds.has(idKey)) {
+            seenIds.add(idKey)
+            combined.push(item)
+          }
+        }
+
+        if (combined.length > 0) {
+          return combined.slice(0, 8)
+        }
+      }
+    }
+
     const cleanRelated = (relatedMovies || []).filter(
-      (m) => m.id !== movie.id && !isAdultMovie(m),
+      (m) => m.id !== movie.id && (isHentai ? isHentaiMovie(m) : !isAdultMovie(m)),
     )
 
     const franchiseKey = extractFranchisePrefix(movie.title)
@@ -8719,7 +8813,7 @@ function WatchScreen({
     }
 
     return combined.slice(0, 8)
-  }, [liveRelated, isPhub3Video, isPhub2Video, isPhub1Video, phubRelated, isJavVideo, javRelated, movie.id, movie.title, movie.genres, relatedMovies])
+  }, [liveRelated, isPhub3Video, isPhub2Video, isPhub1Video, phubRelated, isJavVideo, javRelated, isHentai, hentaiRelated, movie.id, movie.title, movie.genres, relatedMovies])
 
   const renderYouTubeRelatedSidebar = () => {
     if (relatedList.length === 0) return null
@@ -8727,7 +8821,9 @@ function WatchScreen({
     return (
       <div className="youtube-related-sidebar">
         <div className="youtube-related-header">
-          <h3 className="youtube-related-header-title">Related & Next Parts</h3>
+          <h3 className="youtube-related-header-title">
+            {isHentai || isJavVideo || isPhubVideo ? 'Similar Videos' : 'Related & Next Parts'}
+          </h3>
         </div>
         <div className="youtube-related-list">
           {relatedList.map((item) => (
@@ -9922,6 +10018,7 @@ function WatchScreen({
           </div>
 
           {hasEpisodes && renderEpisodePanel(false)}
+          {renderYouTubeRelatedSidebar()}
           {renderCommentsSection()}
         </div>
 
