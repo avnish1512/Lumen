@@ -1306,7 +1306,8 @@ export function isPhub2Movie(m?: Movie | null): boolean {
     m.label === 'PHub 2' ||
     m.hentaiSlug?.startsWith('phub2-') ||
     m.embedUrl?.includes('upload18.net') ||
-    m.embedUrl?.includes('xvidapi')
+    m.embedUrl?.includes('xvidapi') ||
+    (m.label === 'PHub' && /^\d+$/.test((m.id || '').replace(/^phub-/, '')))
   )
 }
 
@@ -1977,26 +1978,9 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
       movie.label === 'JAV' ||
       movie.hentaiSlug?.startsWith('jav-'),
   )
-  const isPhub3 = Boolean(
-    movie.id.startsWith('phub3-') ||
-      movie.label === 'PHub 3' ||
-      movie.hentaiSlug?.startsWith('phub3-') ||
-      movie.embedUrl?.includes('eporner.com'),
-  )
-  const isPhub2 = Boolean(
-    !isPhub3 &&
-      (movie.embedUrl?.includes('upload18.net') ||
-        movie.embedUrl?.includes('xvidapi') ||
-        movie.hentaiSlug?.includes('xvidapi') ||
-        (movie.label === 'PHub' && /^\d+$/.test(movie.id.replace(/^phub-/, '')))),
-  )
-  const isPhub1 = Boolean(
-    !isPhub3 &&
-      !isPhub2 &&
-      (movie.id.startsWith('phub-') ||
-        movie.label === 'PHub' ||
-        movie.hentaiSlug?.startsWith('phub-')),
-  )
+  const isPhub3 = isPhub3Movie(movie)
+  const isPhub2 = isPhub2Movie(movie)
+  const isPhub1 = isPhub1Movie(movie)
 
   // 1. PHub 3 (Eporner API)
   if (isPhub3) {
@@ -8477,27 +8461,43 @@ function WatchScreen({
       movie.hentaiSlug?.startsWith('jav-'),
   )
   const isPhub3Video = Boolean(
-    movie.id.startsWith('phub3-') ||
+    isPhub3Movie(movie) ||
+      movie.id.startsWith('phub3-') ||
       movie.label === 'PHub 3' ||
       movie.hentaiSlug?.startsWith('phub3-') ||
       movie.embedUrl?.includes('eporner.com'),
   )
-  const isPhubVideo = Boolean(
-    isPhub3Video ||
-      movie.id.startsWith('phub-') ||
-      movie.label === 'PHub' ||
-      movie.hentaiSlug?.startsWith('phub-'),
-  )
   const isPhub2Video = Boolean(
     !isPhub3Video &&
-      isPhubVideo && (
+      (isPhub2Movie(movie) ||
+        movie.id.startsWith('phub2-') ||
+        movie.label === 'PHub 2' ||
+        movie.hentaiSlug?.startsWith('phub2-') ||
         movie.embedUrl?.includes('upload18.net') ||
         movie.embedUrl?.includes('xvidapi') ||
         movie.hentaiSlug?.includes('xvidapi') ||
-        /^\d+$/.test(movie.id.replace(/^phub-/, ''))
-      ),
+        (/^\d+$/.test(movie.id.replace(/^phub2?-/, '')) && !movie.embedUrl?.includes('eporner.com'))),
   )
-  const isPhub1Video = isPhubVideo && !isPhub2Video && !isPhub3Video
+  const isPhub1Video = Boolean(
+    !isPhub3Video &&
+      !isPhub2Video &&
+      (isPhub1Movie(movie) ||
+        movie.id.startsWith('phub-') ||
+        movie.label === 'PHub' ||
+        movie.hentaiSlug?.startsWith('phub-')),
+  )
+  const isPhubVideo = Boolean(
+    isPhubMovie(movie) ||
+      isPhub1Video ||
+      isPhub2Video ||
+      isPhub3Video ||
+      movie.id.startsWith('phub-') ||
+      movie.id.startsWith('phub2-') ||
+      movie.id.startsWith('phub3-') ||
+      movie.label === 'PHub' ||
+      movie.label === 'PHub 2' ||
+      movie.label === 'PHub 3',
+  )
   const isHentai = Boolean(
     !isJavVideo &&
       !isPhubVideo &&
@@ -8533,10 +8533,10 @@ function WatchScreen({
     ? 'apijav'
     : isPhub3Video
       ? 'eporner'
-      : isPhub1Video
-        ? 'phubplay'
-        : isPhub2Video
-          ? 'upload18'
+      : isPhub2Video
+        ? 'upload18'
+        : isPhub1Video
+          ? 'phubplay'
           : isHentai
             ? 'oceanplay'
         : isAnimeMovie
@@ -8672,7 +8672,7 @@ function WatchScreen({
     }
     if (!isPhubVideo) return
     let active = true
-    const slug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+    const slug = (movie.hentaiSlug || movie.id).replace(/^(?:phub2?|phub3)-/, '')
     if (isPhub2Video) {
       setResolvedPhubEmbed(`https://upload18.net/play/index/xvidapi-${slug}`)
       return
@@ -8729,13 +8729,18 @@ function WatchScreen({
   const relatedList = useMemo(() => {
     const isAdultMovie = (m: Movie) =>
       Boolean(
-        m.isJav ||
+        isPhubMovie(m) ||
+          isJavMovie(m) ||
+          isHentaiMovie(m) ||
+          m.isJav ||
           m.isHentaiOcean ||
           m.id.startsWith('jav-') ||
           m.id.startsWith('phub-') ||
+          m.id.startsWith('phub2-') ||
           m.id.startsWith('phub3-') ||
           m.label === 'JAV' ||
           m.label === 'PHub' ||
+          m.label === 'PHub 2' ||
           m.label === 'PHub 3' ||
           m.genres.some((g) => g.toLowerCase() === 'hentai'),
       )
@@ -9789,7 +9794,7 @@ function WatchScreen({
               : 'no-referrer'
           }
           sandbox={
-            streamSandboxEnabled && activeProviderId !== 'embedmaster' && activeProviderId !== 'phubplay' && activeProviderId !== 'eporner'
+            streamSandboxEnabled && activeProviderId !== 'embedmaster' && activeProviderId !== 'phubplay' && activeProviderId !== 'upload18' && activeProviderId !== 'eporner'
               ? 'allow-forms allow-presentation allow-same-origin allow-scripts'
               : undefined
           }
@@ -10023,10 +10028,10 @@ function WatchScreen({
                     ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
                     : isPhub3Video
                       ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
-                      : isPhub1Video
-                        ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
-                        : isPhub2Video
-                          ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+                      : isPhub2Video
+                        ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+                        : isPhub1Video
+                          ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
                           : isHentai
                             ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
                             : streamProviderOptions.filter((provider) => {
@@ -10158,10 +10163,10 @@ function WatchScreen({
                     ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
                     : isPhub3Video
                       ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
-                      : isPhub1Video
-                        ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
-                        : isPhub2Video
-                          ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+                      : isPhub2Video
+                        ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+                        : isPhub1Video
+                          ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
                           : isHentai
                             ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
                             : streamProviderOptions.filter((provider) => {

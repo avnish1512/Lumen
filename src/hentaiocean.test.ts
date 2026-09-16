@@ -959,6 +959,78 @@ describe('Hentai Ocean integration', () => {
     expect(sorted[0].id).toBe('hentaiocean-action-2')
     expect(sorted[1].id).toBe('hentaiocean-romance-1')
   })
+
+  it('properly detects PHub 2 videos and restricts available servers to upload18 without showing movie/tv servers', () => {
+    const phub2Movie1: Movie = {
+      id: 'phub2-73341265',
+      title: 'PHub 2 Video 1',
+      rank: 1,
+      logoTitle: '4K',
+      type: 'PHub Video',
+      genres: ['4K', 'Amateur'],
+      year: '2026',
+      runtime: '24:00',
+      rating: '★ 4.9',
+      maturity: '18+',
+      progress: 0,
+      hero: '',
+      poster: '',
+      still: '',
+      synopsis: 'PHub 2 demo',
+      cast: [],
+      director: 'PHub 2',
+      awards: '',
+      boxOffice: '',
+      ratings: [],
+      label: 'PHub 2',
+      hentaiSlug: 'phub2-73341265',
+    }
+
+    const phub2MovieLegacy: Movie = {
+      ...phub2Movie1,
+      id: 'phub-73341265',
+      label: 'PHub',
+      hentaiSlug: 'phub-73341265',
+    }
+
+    // Both new and legacy numeric items are identified as PHub 2
+    expect(isPhub2Movie(phub2Movie1)).toBe(true)
+    expect(isPhub2Movie(phub2MovieLegacy)).toBe(true)
+    expect(isPhub1Movie(phub2Movie1)).toBe(false)
+    expect(isPhub3Movie(phub2Movie1)).toBe(false)
+    expect(isPhubMovie(phub2Movie1)).toBe(true)
+
+    // Stream URL resolution resolves correctly to upload18
+    const streamUrl = buildStreamUrl(phub2Movie1, 'upload18')
+    expect(streamUrl).toBe('https://upload18.net/play/index/xvidapi-73341265')
+
+    // Server filtering logic in WatchScreen for PHub 2 video
+    const isPhub3Video = isPhub3Movie(phub2Movie1)
+    const isPhub2Video = isPhub2Movie(phub2Movie1)
+    const isPhub1Video = isPhub1Movie(phub2Movie1)
+    const isJavVideo = isJavMovie(phub2Movie1)
+    const isHentai = isHentaiMovie(phub2Movie1)
+
+    expect(isPhub2Video).toBe(true)
+    expect(isPhub3Video).toBe(false)
+    expect(isPhub1Video).toBe(false)
+
+    const filteredOptions = isJavVideo
+      ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
+      : isPhub3Video
+        ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
+        : isPhub2Video
+          ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+          : isPhub1Video
+            ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+            : isHentai
+              ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+              : streamProviderOptions
+
+    // Must strictly only have 'upload18' server
+    expect(filteredOptions.map((p) => p.id)).toEqual(['upload18'])
+    expect(filteredOptions.some((p) => p.id === 'rivestream' || p.id === 'filmu' || p.id === 'nhdapi' || p.id === 'cinesrc')).toBe(false)
+  })
 })
 
 

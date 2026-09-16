@@ -1019,13 +1019,16 @@ export function buildStreamUrl(
     (movie.hentaiSlug && (movie.hentaiSlug.startsWith('phub-') || movie.hentaiSlug.startsWith('phub2-')))
   ) {
     if (provider === 'upload18' || movie.embedUrl?.includes('upload18.net') || movie.embedUrl?.includes('xvidapi') || movie.label === 'PHub 2' || movie.id.startsWith('phub2-')) {
-      const cleanSlug = movie.hentaiSlug?.replace(/^phub2-|^phub-/, '') || movie.id.replace(/^phub2-|^phub-/, '')
+      if (movie.embedUrl && (movie.embedUrl.includes('upload18.net') || movie.embedUrl.includes('xvidapi'))) {
+        return movie.embedUrl
+      }
+      const cleanSlug = (movie.hentaiSlug || movie.id).replace(/^(?:phub2?|phub3)-/, '')
       return `https://upload18.net/play/index/xvidapi-${cleanSlug}`
     }
     if (movie.embedUrl) {
       return movie.embedUrl
     }
-    const cleanSlug = movie.hentaiSlug?.replace(/^phub2-|^phub-/, '') || movie.id.replace(/^phub2-|^phub-/, '')
+    const cleanSlug = (movie.hentaiSlug || movie.id).replace(/^(?:phub2?|phub3)-/, '')
     return `https://upload18.net/play/index/xvidapi-${cleanSlug}`
   }
 
@@ -1083,7 +1086,10 @@ export function buildStreamUrl(
   }
 
   if (provider === 'upload18') {
-    const slug = movie.hentaiSlug?.replace(/^phub-/, '') || movie.id.replace(/^phub-/, '')
+    if (movie.embedUrl && (movie.embedUrl.includes('upload18.net') || movie.embedUrl.includes('xvidapi'))) {
+      return movie.embedUrl
+    }
+    const slug = (movie.hentaiSlug || movie.id).replace(/^(?:phub2?|phub3)-/, '')
     return `https://upload18.net/play/index/xvidapi-${slug}`
   }
 
