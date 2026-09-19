@@ -14893,6 +14893,12 @@ body:has(.add-profile-screen),
     grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 440px);
     align-items: start;
   }
+
+  .anime-watch-main-grid.no-sidebar {
+    grid-template-columns: 1fr;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
 }
 
 .anime-watch-left-col {

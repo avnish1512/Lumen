@@ -8913,62 +8913,6 @@ function WatchScreen({
     return combined.slice(0, 16)
   }, [liveRelated, isPhub3Video, isPhub2Video, isPhub1Video, phubRelated, isJavVideo, javRelated, isHentai, hentaiRelated, movie.id, movie.title, movie.genres, relatedMovies])
 
-  const renderYouTubeRelatedSidebar = () => {
-    if (relatedList.length === 0) return null
-
-    return (
-      <div className="youtube-related-sidebar">
-        <div className="youtube-related-header">
-          <h3 className="youtube-related-header-title">
-            {isHentai || isJavVideo || isPhubVideo ? 'Similar Videos' : 'Related & Next Parts'}
-          </h3>
-        </div>
-        <div className="youtube-related-list">
-          {relatedList.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="youtube-related-card"
-              onClick={() => onSelectMovie?.(item)}
-            >
-              <div className="youtube-related-thumb">
-                <img src={item.still || item.hero || item.poster} alt="" loading="lazy" />
-                {item.label &&
-                  item.label !== 'Anime' &&
-                  item.label !== 'Movie' &&
-                  item.label !== 'Series' &&
-                  item.label !== 'Video' && (
-                    <span className="youtube-badge relation-badge">{item.label}</span>
-                  )}
-                {item.runtime && item.runtime !== '00:00:00' && (
-                  <span className="youtube-badge duration">{item.runtime}</span>
-                )}
-              </div>
-              <div className="youtube-related-info">
-                <h4 className="youtube-related-title" title={item.title}>
-                  {item.title}
-                </h4>
-                {item.director && (
-                  <p className="youtube-channel">
-                    <span>{item.director}</span>
-                    <span className="youtube-verified">✓</span>
-                  </p>
-                )}
-                <p className="youtube-related-meta">
-                  <span className="youtube-genre">{item.label || item.genres[0] || 'Related'}</span>
-                  {item.year && <span className="youtube-dot">• {item.year}</span>}
-                  {item.rating && item.rating !== 'N/A' && (
-                    <span className="youtube-rating">{item.rating}</span>
-                  )}
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
   const [episode, setEpisode] = useState(movie.streamEpisode ?? 1)
   const [season, setSeason] = useState(movie.streamSeason ?? 1)
   const [language, setLanguage] = useState<'sub' | 'dub'>(movie.streamLanguage ?? 'sub')
@@ -10125,7 +10069,6 @@ function WatchScreen({
               />
             </div>
           )}
-          {renderYouTubeRelatedSidebar()}
           {renderCommentsSection()}
         </div>
 
@@ -10149,7 +10092,7 @@ function WatchScreen({
     <section className="screen watch-screen anime-watch-screen">
       <DetailTopBar onBack={onBack} dark />
 
-      <div className="anime-watch-main-grid">
+      <div className={`anime-watch-main-grid${!hasEpisodes ? ' no-sidebar' : ''}`}>
         {/* LEFT COLUMN: Player -> Under-iframe Bar -> Control & Server bar -> Title/Synopsis/Metadata */}
         <div className="anime-watch-left-col">
           {renderPlayerSection()}
@@ -10390,16 +10333,11 @@ function WatchScreen({
         </div>
 
         {/* RIGHT COLUMN: Sidebar */}
-        <div className="anime-watch-right-col">
-          {hasEpisodes ? (
-            <>
-              {renderEpisodePanel(true)}
-              {renderYouTubeRelatedSidebar()}
-            </>
-          ) : (
-            renderYouTubeRelatedSidebar()
-          )}
-        </div>
+        {hasEpisodes && (
+          <div className="anime-watch-right-col">
+            {renderEpisodePanel(true)}
+          </div>
+        )}
       </div>
 
       {isWatchDownloadModalOpen && (
