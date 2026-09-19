@@ -14886,18 +14886,17 @@ body:has(.add-profile-screen),
   height: auto !important;
   min-height: 0 !important;
   margin-bottom: 0 !important;
+  max-width: 1400px;
+  margin: 0 auto !important;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 @media (min-width: 900px) {
   .anime-watch-main-grid {
-    grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 440px);
-    align-items: start;
-  }
-
-  .anime-watch-main-grid.no-sidebar {
     grid-template-columns: 1fr;
     max-width: 1400px;
-    margin: 0 auto;
+    margin: 0 auto !important;
   }
 }
 
@@ -14906,6 +14905,7 @@ body:has(.add-profile-screen),
   flex-direction: column;
   gap: 20px;
   min-width: 0;
+  width: 100%;
 }
 
 .anime-watch-left-col .stream-player-section {
@@ -14928,11 +14928,7 @@ body:has(.add-profile-screen),
 }
 
 .anime-watch-right-col {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-  align-self: start;
+  display: none !important;
 }
 
 .anime-server-row {
