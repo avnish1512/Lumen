@@ -14894,9 +14894,14 @@ body:has(.add-profile-screen),
 
 @media (min-width: 900px) {
   .anime-watch-main-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) clamp(290px, 25vw, 360px);
+    align-items: start;
     max-width: 1400px;
     margin: 0 auto !important;
+  }
+
+  .anime-watch-main-grid.no-sidebar {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -14905,7 +14910,6 @@ body:has(.add-profile-screen),
   flex-direction: column;
   gap: 20px;
   min-width: 0;
-  width: 100%;
 }
 
 .anime-watch-left-col .stream-player-section {
@@ -14928,7 +14932,19 @@ body:has(.add-profile-screen),
 }
 
 .anime-watch-right-col {
-  display: none !important;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  align-self: start;
+}
+
+.watch-full-width-section {
+  padding: 0 32px 32px !important;
+  max-width: 1400px;
+  margin: 0 auto !important;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .anime-server-row {
@@ -15085,9 +15101,9 @@ body:has(.add-profile-screen),
 .anime-episode-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 16px;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
   background: #13161d;
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
@@ -15095,7 +15111,7 @@ body:has(.add-profile-screen),
   flex: none;
   min-height: 0;
   height: auto;
-  max-height: clamp(720px, 85vh, 920px);
+  max-height: clamp(480px, 62vh, 600px);
   overflow: hidden;
   margin-bottom: 24px;
 }
@@ -15278,11 +15294,11 @@ body:has(.add-profile-screen),
 /* Thumbnail container on Left side */
 .anime-yt-thumb-container {
   position: relative;
-  width: 220px;
-  min-width: 220px;
+  width: 136px;
+  min-width: 136px;
   aspect-ratio: 16 / 9;
   flex-shrink: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
   background: #0d0d11;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -15290,15 +15306,15 @@ body:has(.add-profile-screen),
 
 @media (min-width: 1400px) {
   .anime-yt-thumb-container {
-    width: 236px;
-    min-width: 236px;
+    width: 144px;
+    min-width: 144px;
   }
 }
 
 @media (max-width: 600px) {
   .anime-yt-thumb-container {
-    width: 130px;
-    min-width: 130px;
+    width: 110px;
+    min-width: 110px;
   }
 }
 
@@ -15355,11 +15371,11 @@ body:has(.add-profile-screen),
 }
 
 .anime-yt-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #f1f1f1;
-  line-height: 1.3;
-  max-height: 2.6em;
+  line-height: 1.25;
+  max-height: 2.5em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -20223,7 +20239,7 @@ font-size: 11px;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
-  gap: 14px !important;
+  gap: 10px !important;
   background: transparent;
   border: 1px solid transparent;
   padding: 4px 6px !important;
@@ -20247,10 +20263,10 @@ font-size: 11px;
 
 .anime-yt-thumb-container {
   position: relative !important;
-  width: 220px !important;
-  min-width: 220px !important;
+  width: 136px !important;
+  min-width: 136px !important;
   aspect-ratio: 16 / 9 !important;
-  border-radius: 12px !important;
+  border-radius: 8px !important;
   overflow: hidden;
   background: #090d16;
   flex-shrink: 0 !important;

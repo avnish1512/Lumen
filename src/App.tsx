@@ -10092,7 +10092,7 @@ function WatchScreen({
     <section className="screen watch-screen anime-watch-screen">
       <DetailTopBar onBack={onBack} dark />
 
-      <div className="anime-watch-main-grid">
+      <div className={`anime-watch-main-grid${!hasEpisodes ? ' no-sidebar' : ''}`}>
         {/* LEFT COLUMN: Player -> Under-iframe Bar -> Control & Server bar -> Title/Synopsis/Metadata */}
         <div className="anime-watch-left-col">
           {renderPlayerSection()}
@@ -10318,21 +10318,29 @@ function WatchScreen({
             </p>
             <Metadata movie={movie} />
           </div>
-
-          {hasEpisodes && renderEpisodePanel(false)}
-
-          {relatedList.length > 0 && (
-            <div className="watch-similars-rail-section">
-              <DetailPosterRail
-                title="Similars"
-                movies={relatedList}
-                onOpenDetail={onSelectMovie}
-              />
-            </div>
-          )}
-
-          {renderCommentsSection()}
         </div>
+
+        {/* RIGHT COLUMN: Sidebar */}
+        {hasEpisodes && (
+          <div className="anime-watch-right-col">
+            {renderEpisodePanel(true)}
+          </div>
+        )}
+      </div>
+
+      {/* FULL-WIDTH LOWER SECTION: Similars rail and Comments */}
+      <div className="watch-full-width-section">
+        {relatedList.length > 0 && (
+          <div className="watch-similars-rail-section">
+            <DetailPosterRail
+              title="Similars"
+              movies={relatedList}
+              onOpenDetail={onSelectMovie}
+            />
+          </div>
+        )}
+
+        {renderCommentsSection()}
       </div>
 
       {isWatchDownloadModalOpen && (
