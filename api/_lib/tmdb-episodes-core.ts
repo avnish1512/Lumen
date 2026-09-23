@@ -22,6 +22,7 @@ export type TmdbEpisode = {
 export type TmdbSeasonInfo = {
   season: number
   episodeCount: number
+  name?: string
 }
 
 type TmdbSeasonResponse = {
@@ -43,6 +44,7 @@ type TmdbTvDetailResponse = {
   seasons?: Array<{
     season_number?: number
     episode_count?: number
+    name?: string
   }>
 }
 
@@ -149,8 +151,8 @@ export async function fetchTmdbSeasonEpisodes(
 }
 
 /** Real season list for a TV id (from TMDB), so the season dropdown and
- * per-season episode counts are accurate instead of guessed. Season 0
- * (Specials) is excluded. */
+ * per-season episode counts are accurate instead of guessed. Includes Season 0
+ * (Specials) when available. */
 export async function fetchTmdbTvSeasons(
   authChain: TmdbAuth[],
   tmdbId: number,
@@ -176,17 +178,26 @@ export async function fetchTmdbTvSeasons(
       }
 
       const body = (await response.json()) as TmdbTvDetailResponse
-      const seasons = (body.seasons ?? [])
+      const rawSeasons = (body.seasons ?? [])
         .filter(
           (season) =>
             typeof season.season_number === 'number' &&
-            season.season_number > 0 &&
+            season.season_number >= 0 &&
             (season.episode_count ?? 0) > 0,
         )
         .map((season) => ({
           season: season.season_number as number,
           episodeCount: season.episode_count as number,
+          name: season.name || (season.season_number === 0 ? 'Specials' : undefined),
         }))
+
+      // Regular seasons (1, 2, 3...) ordered first in ascending order,
+      // and Specials (season 0) placed at the end so Season 1 defaults cleanly.
+      const seasons = rawSeasons.sort((a, b) => {
+        if (a.season === 0) return 1
+        if (b.season === 0) return -1
+        return a.season - b.season
+      })
 
       seasonsCache.set(cacheKey, { value: seasons, expiresAt: Date.now() + CACHE_TTL })
       return seasons

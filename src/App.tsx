@@ -89,6 +89,7 @@ import {
   searchTmdb,
   fetchSeasonEpisodes,
   fetchTvSeasons,
+  type TvSeasonInfo,
   type DramaRails,
   type SeasonEpisode,
   streamProviderOptions,
@@ -1155,6 +1156,10 @@ function episodeSynopsis(movie?: Movie | null, season?: number, episode?: number
 
   if (cleanSynopsis && cleanSynopsis !== 'N/A') {
     return cleanSynopsis
+  }
+
+  if (season === 0) {
+    return `${movie.title || 'Title'} special episode ${episode ?? 1}.`
   }
 
   return `${movie.title || 'Title'} continues through season ${season ?? 1}, episode ${episode ?? 1}.`
@@ -7667,11 +7672,14 @@ function SeasonDropdown({
   const getLabel = (seasonNum: number) => {
     const custom = labels?.[seasonNum]
     if (custom) {
+      if (seasonNum === 0) {
+        return custom
+      }
       return custom.toLowerCase().startsWith('season')
         ? custom
         : `Season ${seasonNum} · ${custom}`
     }
-    return `Season ${seasonNum}`
+    return seasonNum === 0 ? 'Specials' : `Season ${seasonNum}`
   }
 
   return (
@@ -7733,12 +7741,14 @@ function SeasonEpisodeSection({
     return seasonsFor(movie)
   }, [movie, animeSeasons])
 
-  const [tmdbSeasons, setTmdbSeasons] = useState<{ season: number; episodeCount: number }[]>([])
+  const [tmdbSeasons, setTmdbSeasons] = useState<TvSeasonInfo[]>([])
   // Anime is always AniList-driven (never TMDB). For everything else, prefer the
   // real TMDB season list when available, otherwise the local guess.
   const seasons =
     !movie.isAnime && tmdbSeasons.length > 0 ? tmdbSeasons : fallbackSeasons
-  const initialSeason = movie.streamSeason ?? seasons[0]?.season ?? 1
+  const initialSeason =
+    movie.streamSeason ??
+    (seasons.find((s) => s.season > 0)?.season ?? seasons[0]?.season ?? 1)
   const [selectedSeason, setSelectedSeason] = useState(() => initialSeason)
   const [tmdbEpisodes, setTmdbEpisodes] = useState<SeasonEpisode[]>([])
   const [findEpisode, setFindEpisode] = useState('')
@@ -7790,7 +7800,7 @@ function SeasonEpisodeSection({
   // Keep the selected season valid once the real season list arrives.
   useEffect(() => {
     if (seasons.length > 0 && !seasons.some((s) => s.season === selectedSeason)) {
-      setSelectedSeason(seasons[0].season)
+      setSelectedSeason(seasons.find((s) => s.season > 0)?.season ?? seasons[0].season)
     }
   }, [seasons, selectedSeason])
 
@@ -7820,8 +7830,19 @@ function SeasonEpisodeSection({
       }
       return map
     }
+    if (tmdbSeasons.length > 0) {
+      const map: Record<number, string> = {}
+      for (const s of tmdbSeasons) {
+        if (s.name) {
+          map[s.season] = s.name
+        } else if (s.season === 0) {
+          map[0] = 'Specials'
+        }
+      }
+      return map
+    }
     return undefined
-  }, [movie.isAnime, animeSeasons])
+  }, [movie.isAnime, animeSeasons, tmdbSeasons])
 
   const activeSeason =
     seasons.find((season) => season.season === selectedSeason) ?? seasons[0]
@@ -8565,7 +8586,7 @@ function WatchScreen({
   const [isWatchDownloading, setIsWatchDownloading] = useState(false)
   const [isWatchDownloadModalOpen, setIsWatchDownloadModalOpen] = useState(false)
 
-  const currentDownloadKey = movie.streamSeason && movie.streamEpisode
+  const currentDownloadKey = movie.streamSeason !== undefined && movie.streamEpisode
     ? `${movie.id}-s${movie.streamSeason}e${movie.streamEpisode}`
     : movie.id
 
@@ -8606,7 +8627,11 @@ function WatchScreen({
           year: movie.year,
           season: movie.streamSeason,
           episode: movie.streamEpisode,
-          episodeTitle: movie.streamSeason && movie.streamEpisode ? `Season ${movie.streamSeason} Episode ${movie.streamEpisode}` : undefined,
+          episodeTitle: movie.streamSeason !== undefined && movie.streamEpisode
+            ? (movie.streamSeason === 0
+                ? `Special Episode ${movie.streamEpisode}`
+                : `Season ${movie.streamSeason} Episode ${movie.streamEpisode}`)
+            : undefined,
           poster: movie.poster,
           still: movie.still,
           runtime: movie.runtime,
@@ -8981,9 +9006,7 @@ function WatchScreen({
     return seasonsFor(movie)
   }, [movie, isAnimeMovie, watchAnimeSeasons])
 
-  const [tmdbWatchSeasons, setTmdbWatchSeasons] = useState<
-    { season: number; episodeCount: number }[]
-  >([])
+  const [tmdbWatchSeasons, setTmdbWatchSeasons] = useState<TvSeasonInfo[]>([])
   const watchSeasons =
     tmdbWatchSeasons.length > 0 ? tmdbWatchSeasons : fallbackWatchSeasons
 
@@ -8995,8 +9018,19 @@ function WatchScreen({
       }
       return map
     }
+    if (tmdbWatchSeasons.length > 0) {
+      const map: Record<number, string> = {}
+      for (const s of tmdbWatchSeasons) {
+        if (s.name) {
+          map[s.season] = s.name
+        } else if (s.season === 0) {
+          map[0] = 'Specials'
+        }
+      }
+      return map
+    }
     return undefined
-  }, [isAnimeMovie, watchAnimeSeasons])
+  }, [isAnimeMovie, watchAnimeSeasons, tmdbWatchSeasons])
 
   const [resolvedWatchTmdbId, setResolvedWatchTmdbId] = useState<number | undefined>(movie.tmdbId)
 

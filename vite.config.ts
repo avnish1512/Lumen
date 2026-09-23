@@ -856,7 +856,8 @@ function tmdbEpisodesDevProxy(authChain: TmdbWatchAuth[]): Plugin {
 
         const requestUrl = new URL(req.url ?? '/', 'http://localhost')
         const tmdbId = Number(requestUrl.searchParams.get('tmdbId') ?? 0)
-        const season = Number(requestUrl.searchParams.get('season') ?? 1)
+        const seasonParam = requestUrl.searchParams.get('season')
+        const season = seasonParam !== null && seasonParam !== '' ? Number(seasonParam) : 1
         const action = requestUrl.searchParams.get('action')
 
         if (!tmdbId) {
@@ -871,7 +872,8 @@ function tmdbEpisodesDevProxy(authChain: TmdbWatchAuth[]): Plugin {
             return
           }
 
-          const episodes = await fetchTmdbSeasonEpisodes(authChain, tmdbId, season || 1)
+          const seasonNum = Number.isNaN(season) ? 1 : season
+          const episodes = await fetchTmdbSeasonEpisodes(authChain, tmdbId, seasonNum)
           sendJson(res, 200, { Response: 'True', episodes })
         } catch (error) {
           const message =

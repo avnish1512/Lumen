@@ -173,7 +173,7 @@ export function DownloadOptionsModal({
 
   const estimatedBytes = estimateMediaSize(
     movie.runtime,
-    isAnime ? 'anime' : (movie.type === 'series' || season ? 'tv' : 'movie'),
+    isAnime ? 'anime' : (movie.type === 'series' || season !== undefined ? 'tv' : 'movie'),
     selectedQuality,
   )
 
@@ -216,9 +216,9 @@ export function DownloadOptionsModal({
           <div className="download-preview-meta">
             <h4>{movie.title || 'Unknown Title'}</h4>
             <div className="download-preview-tags">
-              {season && episode && (
+              {season !== undefined && episode && (
                 <span className="preview-badge highlight">
-                  Season {season} Episode {episode}
+                  {season === 0 ? `Special Ep ${episode}` : `Season ${season} Episode ${episode}`}
                 </span>
               )}
               {episodeTitle && <span className="preview-badge">{episodeTitle}</span>}

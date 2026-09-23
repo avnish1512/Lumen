@@ -557,7 +557,7 @@ export function buildVidRiftUrl(movie: Movie): string {
     movie.tmdbType === 'tv' ||
     movie.type === 'series' ||
     movie.type === 'Series' ||
-    Boolean(movie.streamSeason && movie.streamSeason > 0)
+    typeof movie.streamSeason === 'number'
   ) {
     const season = movie.streamSeason ?? 1
     const episode = movie.streamEpisode ?? 1
@@ -748,7 +748,7 @@ function buildNhdUrl(movie: Movie): string {
   const isTv =
     movie.tmdbType === 'tv' ||
     movie.type === 'series' ||
-    Boolean(movie.streamSeason && movie.streamSeason > 0)
+    typeof movie.streamSeason === 'number'
   const mediaId = movie.tmdbId
     ? String(movie.tmdbId)
     : movie.id && movie.id.startsWith('tt')
@@ -834,7 +834,7 @@ function buildFilmuUrl(movie: Movie): string {
   const isTv =
     movie.tmdbType === 'tv' ||
     movie.type === 'series' ||
-    Boolean(movie.streamSeason && movie.streamSeason > 0)
+    typeof movie.streamSeason === 'number'
   const mediaId = movie.tmdbId
     ? String(movie.tmdbId)
     : movie.id && movie.id.startsWith('tt')
@@ -885,6 +885,7 @@ export async function fetchSeasonEpisodes(
 export type TvSeasonInfo = {
   season: number
   episodeCount: number
+  name?: string
 }
 
 /** Accurate season list for a TV id (from TMDB) so the season dropdown and

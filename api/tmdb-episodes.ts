@@ -4,6 +4,8 @@ import {
 } from './_lib/tmdb-episodes-core.js'
 import { createTmdbWatchAuthChain } from './_lib/tmdb-watch-core.js'
 
+declare const process: { env: Record<string, string | undefined> }
+
 type QueryValue = string | string[] | undefined
 
 type ApiRequest = {
@@ -30,7 +32,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   res.setHeader('Cache-Control', 's-maxage=43200, stale-while-revalidate=604800')
 
   const tmdbId = Number(getQueryValue(req.query.tmdbId) ?? 0)
-  const season = Number(getQueryValue(req.query.season) ?? 1)
+  const seasonParam = getQueryValue(req.query.season)
+  const season = seasonParam !== undefined && seasonParam !== '' ? Number(seasonParam) : 1
   const action = getQueryValue(req.query.action)
 
   if (!tmdbId) {
@@ -49,7 +52,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return
     }
 
-    const episodes = await fetchTmdbSeasonEpisodes(authChain, tmdbId, season || 1)
+    const seasonNum = Number.isNaN(season) ? 1 : season
+    const episodes = await fetchTmdbSeasonEpisodes(authChain, tmdbId, seasonNum)
     res.status(200).json({ Response: 'True', episodes })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Could not reach TMDB.'
