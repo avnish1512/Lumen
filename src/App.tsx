@@ -297,6 +297,7 @@ const homeCacheKey = 'omdb.apple-tv-style.home-cache-v3'
 const currentUserKey = 'omdb.apple-tv-style.current-user'
 const profilesListKey = 'omdb.apple-tv-style.profiles-list'
 const activeScreenKey = 'omdb.apple-tv-style.active-screen'
+const selectedMovieKey = 'omdb.apple-tv-style.selected-movie'
 
 export function sanitizeMovieEmbed(movie: Movie): Movie {
   const isExplicitAdult = Boolean(

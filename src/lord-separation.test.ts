@@ -9,8 +9,8 @@ import {
   isLordAdultMovie,
   sanitizeMovieEmbed,
 } from './App'
-import { normalizeMovie } from './omdb'
-import { buildStreamUrl, streamProviderOptions, type Movie } from './tmdb'
+import { normalizeMovie, type Movie } from './omdb'
+import { buildStreamUrl, streamProviderOptions } from './tmdb'
 
 describe('Lord Section Separation from Apple and Netflix UI', () => {
   const badSisterMovie: Movie = {

@@ -1,4 +1,5 @@
 import type { MediaCollection, Movie } from './omdb'
+export type { MediaCollection, Movie }
 
 export type TmdbMediaType = 'movie' | 'tv'
 
