@@ -766,6 +766,32 @@ export function normalizeMovie(movie: Partial<Movie> | null | undefined): Movie 
   const hero = movie.hero || movie.still || poster
   const still = movie.still || hero || poster
 
+  const isExplicitAdult = Boolean(
+    movie.id?.startsWith('phub') ||
+    movie.id?.startsWith('jav-') ||
+    movie.id?.startsWith('hentaiocean-') ||
+    movie.label === 'PHub' ||
+    movie.label === 'PHub 2' ||
+    movie.label === 'PHub 3' ||
+    movie.label === 'JAV' ||
+    movie.isJav ||
+    movie.isHentaiOcean ||
+    movie.genres?.some((g) => typeof g === 'string' && g.toLowerCase() === 'hentai')
+  )
+  const isTmdbOrMainstream = Boolean(
+    movie.tmdbId ||
+    (!isExplicitAdult && movie.embedUrl && (
+      movie.embedUrl.includes('upload18.net') ||
+      movie.embedUrl.includes('xvidapi') ||
+      movie.embedUrl.includes('eporner.com') ||
+      movie.embedUrl.includes('apijav.com')
+    ))
+  )
+  let cleanEmbedUrl = movie.embedUrl
+  if (isTmdbOrMainstream && !isExplicitAdult) {
+    cleanEmbedUrl = undefined
+  }
+
   return {
     ...movie,
     id: String(movie.id ?? ''),
@@ -791,6 +817,7 @@ export function normalizeMovie(movie: Partial<Movie> | null | undefined): Movie 
     ratings: Array.isArray(movie.ratings) ? movie.ratings : [],
     badges: Array.isArray(movie.badges) ? movie.badges : [],
     isFull: Boolean(movie.isFull),
+    embedUrl: cleanEmbedUrl,
   }
 }
 

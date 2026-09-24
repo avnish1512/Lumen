@@ -296,13 +296,40 @@ const streamSandboxKey = 'omdb.apple-tv-style.stream-sandbox'
 const homeCacheKey = 'omdb.apple-tv-style.home-cache-v3'
 const currentUserKey = 'omdb.apple-tv-style.current-user'
 const profilesListKey = 'omdb.apple-tv-style.profiles-list'
-const selectedMovieKey = 'omdb.apple-tv-style.selected-movie'
 const activeScreenKey = 'omdb.apple-tv-style.active-screen'
+
+export function sanitizeMovieEmbed(movie: Movie): Movie {
+  const isExplicitAdult = Boolean(
+    movie.id?.startsWith('phub') ||
+    movie.id?.startsWith('jav-') ||
+    movie.id?.startsWith('hentaiocean-') ||
+    movie.label === 'PHub' ||
+    movie.label === 'PHub 2' ||
+    movie.label === 'PHub 3' ||
+    movie.label === 'JAV' ||
+    movie.isJav ||
+    movie.isHentaiOcean ||
+    movie.genres?.some((g) => typeof g === 'string' && g.toLowerCase() === 'hentai')
+  )
+  if (
+    !isExplicitAdult &&
+    movie.embedUrl &&
+    (movie.embedUrl.includes('upload18.net') ||
+      movie.embedUrl.includes('xvidapi') ||
+      movie.embedUrl.includes('eporner.com') ||
+      movie.embedUrl.includes('apijav.com'))
+  ) {
+    const { embedUrl, ...rest } = movie
+    return rest as Movie
+  }
+  return movie
+}
 
 function readSelectedMovie(): Movie | null {
   try {
     const saved = window.sessionStorage.getItem(selectedMovieKey)
-    return saved ? (JSON.parse(saved) as Movie) : null
+    if (!saved) return null
+    return sanitizeMovieEmbed(JSON.parse(saved) as Movie)
   } catch {
     return null
   }
@@ -841,7 +868,10 @@ function readWatchHistory(): WatchHistory {
     const cleaned: WatchHistory = {}
     for (const [k, entry] of Object.entries(history)) {
       if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt)) {
-        cleaned[k] = entry
+        cleaned[k] = {
+          ...entry,
+          movie: sanitizeMovieEmbed(normalizeMovie(entry.movie)),
+        }
       }
     }
     return cleaned
@@ -858,7 +888,10 @@ function mergeWatchHistory(a: WatchHistory, b: WatchHistory, removedMap?: Remove
 
   for (const [key, entry] of Object.entries(a)) {
     if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt)) {
-      merged[key] = entry
+      merged[key] = {
+        ...entry,
+        movie: sanitizeMovieEmbed(normalizeMovie(entry.movie)),
+      }
     }
   }
 
@@ -867,7 +900,10 @@ function mergeWatchHistory(a: WatchHistory, b: WatchHistory, removedMap?: Remove
     if (isMovieRemoved(entry.movie, removed, entry.updatedAt)) continue
     const existing = merged[key]
     if (!existing || (entry.updatedAt ?? 0) > (existing.updatedAt ?? 0)) {
-      merged[key] = entry
+      merged[key] = {
+        ...entry,
+        movie: sanitizeMovieEmbed(normalizeMovie(entry.movie)),
+      }
     }
   }
   return merged
@@ -1261,7 +1297,7 @@ function hasHomeBootstrapRails(rails: TmdbHomeRails) {
 }
 
 function mergeKnownMovie(base: Movie, update: Movie) {
-  return {
+  const merged = {
     ...base,
     ...update,
     rank: base.rank,
@@ -1270,6 +1306,7 @@ function mergeKnownMovie(base: Movie, update: Movie) {
     streamSeason: update.streamSeason ?? base.streamSeason,
     streamEpisode: update.streamEpisode ?? base.streamEpisode,
   }
+  return sanitizeMovieEmbed(merged)
 }
 
 function continueProgressFor(movie: Movie) {
@@ -1295,29 +1332,44 @@ function continueRuntimeLabel(movie: Movie) {
 
 export function isPhub3Movie(m?: Movie | null): boolean {
   if (!m) return false
+  if (m.tmdbId) return false
+  const isExplicitPhub = Boolean(
+    m.id?.startsWith('phub') ||
+    m.label?.startsWith('PHub') ||
+    m.type === 'PHub Video' ||
+    m.hentaiSlug?.includes('phub')
+  )
   return Boolean(
     m.id?.startsWith('phub3-') ||
     m.label === 'PHub 3' ||
     m.hentaiSlug?.startsWith('phub3-') ||
-    m.embedUrl?.includes('eporner.com')
+    (isExplicitPhub && m.embedUrl?.includes('eporner.com'))
   )
 }
 
 export function isPhub2Movie(m?: Movie | null): boolean {
   if (!m) return false
+  if (m.tmdbId) return false
   if (isPhub3Movie(m)) return false
+  const isExplicitPhub = Boolean(
+    m.id?.startsWith('phub') ||
+    m.label?.startsWith('PHub') ||
+    m.type === 'PHub Video' ||
+    m.hentaiSlug?.includes('phub') ||
+    m.hentaiSlug?.includes('xvidapi')
+  )
   return Boolean(
     m.id?.startsWith('phub2-') ||
     m.label === 'PHub 2' ||
     m.hentaiSlug?.startsWith('phub2-') ||
-    m.embedUrl?.includes('upload18.net') ||
-    m.embedUrl?.includes('xvidapi') ||
+    (isExplicitPhub && (m.embedUrl?.includes('upload18.net') || m.embedUrl?.includes('xvidapi') || m.hentaiSlug?.includes('xvidapi'))) ||
     (m.label === 'PHub' && /^\d+$/.test((m.id || '').replace(/^phub-/, '')))
   )
 }
 
 export function isPhub1Movie(m?: Movie | null): boolean {
   if (!m) return false
+  if (m.tmdbId) return false
   if (isPhub3Movie(m) || isPhub2Movie(m)) return false
   return Boolean(
     m.id?.startsWith('phub-') ||
@@ -1329,11 +1381,13 @@ export function isPhub1Movie(m?: Movie | null): boolean {
 
 export function isPhubMovie(m?: Movie | null): boolean {
   if (!m) return false
+  if (m.tmdbId) return false
   return isPhub1Movie(m) || isPhub2Movie(m) || isPhub3Movie(m)
 }
 
 export function isJavMovie(m?: Movie | null): boolean {
   if (!m) return false
+  if (m.tmdbId) return false
   return Boolean(
     m.id?.startsWith('jav-') ||
     m.label === 'JAV' ||
@@ -1344,12 +1398,14 @@ export function isJavMovie(m?: Movie | null): boolean {
 
 export function isHentaiMovie(m?: Movie | null): boolean {
   if (!m) return false
+  if (m.tmdbId) return false
   return (
     !isPhubMovie(m) &&
     !isJavMovie(m) &&
     Boolean(
       m.isHentaiOcean ||
       m.id?.startsWith('hentaiocean-') ||
+      m.hentaiSlug?.startsWith('hentaiocean-') ||
       m.genres?.some((g) => g.toLowerCase() === 'hentai')
     )
   )
@@ -1357,6 +1413,7 @@ export function isHentaiMovie(m?: Movie | null): boolean {
 
 export function isLordAdultMovie(movie?: Movie | null): boolean {
   if (!movie) return false
+  if (movie.tmdbId) return false
   return isJavMovie(movie) || isPhubMovie(movie) || isHentaiMovie(movie)
 }
 
@@ -4159,7 +4216,7 @@ function App() {
 
   const openWatch = useCallback(
     (movie: Movie) => {
-      const safeMovie = normalizeMovie(movie)
+      const safeMovie = sanitizeMovieEmbed(normalizeMovie(movie))
       const isAdultOrLord = isLordAdultMovie(safeMovie) || screen === 'lord'
       const backTo = isAdultOrLord
         ? 'lord'
@@ -4225,7 +4282,7 @@ function App() {
 
   const openDetail = useCallback(
     (movie: Movie) => {
-      const safeMovie = normalizeMovie(movie)
+      const safeMovie = sanitizeMovieEmbed(normalizeMovie(movie))
       if (isLordAdultMovie(safeMovie) || screen === 'lord') {
         openWatch(safeMovie)
         return
@@ -5036,9 +5093,10 @@ function App() {
             return true
           })
 
-          setSearchResults(finalResults)
+          const filteredResults = finalResults.filter((m) => !isLordAdultMovie(m))
+          setSearchResults(filteredResults)
 
-          if (finalResults.length === 0) {
+          if (filteredResults.length === 0) {
             setSearchError('No results found. Try another title.')
           }
         } else {
@@ -5055,9 +5113,10 @@ function App() {
             return true
           })
 
-          setSearchResults(finalResults)
+          const filteredResults = finalResults.filter((m) => !isLordAdultMovie(m))
+          setSearchResults(filteredResults)
 
-          if (finalResults.length === 0) {
+          if (filteredResults.length === 0) {
             setSearchError('No results found. Try another title.')
           }
         }
@@ -5077,9 +5136,10 @@ function App() {
           return true
         })
 
-        setSearchResults(finalResults)
+        const filteredResults = finalResults.filter((m) => !isLordAdultMovie(m))
+        setSearchResults(filteredResults)
 
-        if (finalResults.length === 0) {
+        if (filteredResults.length === 0) {
           setSearchError('No titles found. Try another title.')
         }
       }
@@ -8475,59 +8535,12 @@ function WatchScreen({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const isJavVideo = Boolean(
-    movie.id.startsWith('jav-') ||
-      movie.label === 'JAV' ||
-      movie.isJav ||
-      movie.hentaiSlug?.startsWith('jav-'),
-  )
-  const isPhub3Video = Boolean(
-    isPhub3Movie(movie) ||
-      movie.id.startsWith('phub3-') ||
-      movie.label === 'PHub 3' ||
-      movie.hentaiSlug?.startsWith('phub3-') ||
-      movie.embedUrl?.includes('eporner.com'),
-  )
-  const isPhub2Video = Boolean(
-    !isPhub3Video &&
-      (isPhub2Movie(movie) ||
-        movie.id.startsWith('phub2-') ||
-        movie.label === 'PHub 2' ||
-        movie.hentaiSlug?.startsWith('phub2-') ||
-        movie.embedUrl?.includes('upload18.net') ||
-        movie.embedUrl?.includes('xvidapi') ||
-        movie.hentaiSlug?.includes('xvidapi') ||
-        (/^\d+$/.test(movie.id.replace(/^phub2?-/, '')) && !movie.embedUrl?.includes('eporner.com'))),
-  )
-  const isPhub1Video = Boolean(
-    !isPhub3Video &&
-      !isPhub2Video &&
-      (isPhub1Movie(movie) ||
-        movie.id.startsWith('phub-') ||
-        movie.label === 'PHub' ||
-        movie.hentaiSlug?.startsWith('phub-')),
-  )
-  const isPhubVideo = Boolean(
-    isPhubMovie(movie) ||
-      isPhub1Video ||
-      isPhub2Video ||
-      isPhub3Video ||
-      movie.id.startsWith('phub-') ||
-      movie.id.startsWith('phub2-') ||
-      movie.id.startsWith('phub3-') ||
-      movie.label === 'PHub' ||
-      movie.label === 'PHub 2' ||
-      movie.label === 'PHub 3',
-  )
-  const isHentai = Boolean(
-    !isJavVideo &&
-      !isPhubVideo &&
-      (isHentaiMovie(movie) ||
-        movie.isHentaiOcean ||
-        movie.id.startsWith('hentaiocean-') ||
-        movie.hentaiSlug?.startsWith('hentaiocean-') ||
-        movie.genres.some((g) => g.toLowerCase() === 'hentai')),
-  )
+  const isJavVideo = isJavMovie(movie)
+  const isPhub3Video = isPhub3Movie(movie)
+  const isPhub2Video = isPhub2Movie(movie)
+  const isPhub1Video = isPhub1Movie(movie)
+  const isPhubVideo = isPhubMovie(movie)
+  const isHentai = isHentaiMovie(movie)
   const isTmdbTitle = !isHentai && !isJavVideo && !isPhubVideo && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
   const isAnimeMovie =
     !isTmdbTitle &&
@@ -8691,11 +8704,14 @@ function WatchScreen({
   const [resolvedPhubEmbed, setResolvedPhubEmbed] = useState<string | undefined>(movie.embedUrl)
 
   useEffect(() => {
+    if (!isPhubVideo) {
+      setResolvedPhubEmbed(undefined)
+      return
+    }
     if (movie.embedUrl) {
       setResolvedPhubEmbed(movie.embedUrl)
       return
     }
-    if (!isPhubVideo) return
     let active = true
     const slug = (movie.hentaiSlug || movie.id).replace(/^(?:phub2?|phub3)-/, '')
     if (isPhub2Video) {
@@ -8965,9 +8981,11 @@ function WatchScreen({
       streamEpisode: episode,
       streamSeason: season,
       streamLanguage: language,
-      embedUrl: resolvedPhubEmbed || movie.embedUrl,
+      embedUrl: isPhubVideo
+        ? (resolvedPhubEmbed || movie.embedUrl)
+        : (isJavVideo || isHentai ? movie.embedUrl : undefined),
     }),
-    [movie, activeWatchAnimeSeason?.anilistId, episode, season, language, resolvedPhubEmbed],
+    [movie, activeWatchAnimeSeason?.anilistId, episode, season, language, resolvedPhubEmbed, isPhubVideo, isJavVideo, isHentai],
   )
 
   // Persist the current season/episode to continue-watching history whenever

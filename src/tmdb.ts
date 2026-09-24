@@ -998,11 +998,12 @@ export function buildStreamUrl(
 ) {
   // 1. Explicit PHub 3 / Eporner videos
   if (
-    movie.label === 'PHub 3' ||
-    movie.id.startsWith('phub3-') ||
-    (movie.hentaiSlug && movie.hentaiSlug.startsWith('phub3-')) ||
-    provider === 'eporner' ||
-    movie.embedUrl?.includes('eporner.com')
+    !movie.tmdbId &&
+    (movie.label === 'PHub 3' ||
+      movie.id.startsWith('phub3-') ||
+      (movie.hentaiSlug && movie.hentaiSlug.startsWith('phub3-')) ||
+      provider === 'eporner' ||
+      movie.embedUrl?.includes('eporner.com'))
   ) {
     if (movie.embedUrl) {
       return movie.embedUrl
@@ -1013,11 +1014,12 @@ export function buildStreamUrl(
 
   // 2. Explicit PHub (1 & 2) videos
   if (
-    movie.label === 'PHub' ||
-    movie.label === 'PHub 2' ||
-    movie.id.startsWith('phub-') ||
-    movie.id.startsWith('phub2-') ||
-    (movie.hentaiSlug && (movie.hentaiSlug.startsWith('phub-') || movie.hentaiSlug.startsWith('phub2-')))
+    !movie.tmdbId &&
+    (movie.label === 'PHub' ||
+      movie.label === 'PHub 2' ||
+      movie.id.startsWith('phub-') ||
+      movie.id.startsWith('phub2-') ||
+      (movie.hentaiSlug && (movie.hentaiSlug.startsWith('phub-') || movie.hentaiSlug.startsWith('phub2-'))))
   ) {
     if (provider === 'upload18' || movie.embedUrl?.includes('upload18.net') || movie.embedUrl?.includes('xvidapi') || movie.label === 'PHub 2' || movie.id.startsWith('phub2-')) {
       if (movie.embedUrl && (movie.embedUrl.includes('upload18.net') || movie.embedUrl.includes('xvidapi'))) {
@@ -1034,7 +1036,7 @@ export function buildStreamUrl(
   }
 
   // 3. Explicit JAV videos
-  if (movie.isJav || movie.label === 'JAV' || movie.id.startsWith('jav-') || (movie.hentaiSlug && movie.hentaiSlug.startsWith('jav-'))) {
+  if (!movie.tmdbId && (movie.isJav || movie.label === 'JAV' || movie.id.startsWith('jav-') || (movie.hentaiSlug && movie.hentaiSlug.startsWith('jav-')))) {
     if (movie.embedUrl) {
       return movie.embedUrl
     }
@@ -1042,7 +1044,12 @@ export function buildStreamUrl(
     return `https://server.apijav.com/?mvapm_embed=${cleanSlug}`
   }
 
-  if (movie.isHentaiOcean || movie.hentaiSlug || movie.embedUrl) {
+  if (
+    !movie.tmdbId &&
+    (movie.isHentaiOcean ||
+      (movie.hentaiSlug && movie.hentaiSlug.startsWith('hentaiocean-')) ||
+      (movie.embedUrl && (movie.embedUrl.includes('hentaiocean.com') || movie.embedUrl.includes('sex-api.com'))))
+  ) {
     let rawUrl = ''
     if (movie.hentaiEpisodes && movie.hentaiEpisodes.length > 0) {
       const targetEpNum = movie.streamEpisode ?? 1
@@ -1086,7 +1093,11 @@ export function buildStreamUrl(
     return `${rawUrl}${separator}la=${laValue}`
   }
 
-  if (provider === 'upload18') {
+  if (
+    provider === 'upload18' &&
+    !movie.tmdbId &&
+    (movie.id.startsWith('phub') || movie.label?.startsWith('PHub') || movie.type === 'PHub Video' || movie.hentaiSlug?.includes('phub') || movie.hentaiSlug?.includes('xvidapi'))
+  ) {
     if (movie.embedUrl && (movie.embedUrl.includes('upload18.net') || movie.embedUrl.includes('xvidapi'))) {
       return movie.embedUrl
     }
