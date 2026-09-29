@@ -12145,16 +12145,19 @@ body:has(.add-profile-screen),
 .account-shell {
   display: flex;
   min-height: 100%;
-  max-width: 1200px;
+  width: 100%;
+  max-width: 1680px;
   margin: 0 auto;
+  padding: 0 clamp(24px, 4vw, 72px);
+  box-sizing: border-box;
 }
 
 .account-sidebar {
-  flex: 0 0 240px;
-  padding: 28px 20px;
+  flex: 0 0 280px;
+  padding: 44px 28px 60px 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
 }
 
 .account-back {
@@ -12163,33 +12166,38 @@ body:has(.add-profile-screen),
   gap: 8px;
   background: transparent;
   border: 0;
-  color: #fff;
-  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 6px 0;
+  transition: color 0.15s ease;
+}
+
+.account-back:hover {
+  color: #fff;
 }
 
 .account-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .account-nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 14px;
+  padding: 12px 16px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 600;
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .account-nav-item:hover {
@@ -12199,6 +12207,7 @@ body:has(.add-profile-screen),
 
 .account-nav-item.active {
   color: #fff;
+  background: rgba(255, 255, 255, 0.12);
   font-weight: 800;
 }
 
@@ -12208,90 +12217,104 @@ body:has(.add-profile-screen),
 
 .account-main {
   flex: 1;
-  padding: 28px 40px 60px;
+  padding: 44px 0 80px 48px;
   min-width: 0;
+  max-width: 960px;
 }
 
 .account-title {
   margin: 0;
-  font-size: 34px;
-  font-weight: 800;
+  font-size: clamp(32px, 3.5vw, 42px);
+  font-weight: 850;
   letter-spacing: -0.02em;
 }
 
 .account-subtitle {
-  margin: 4px 0 28px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 15px;
+  margin: 6px 0 32px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 16px;
 }
 
 .account-card {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  padding: 22px 24px;
-  max-width: 560px;
-  background: #141414;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 28px 32px 24px;
+  width: 100%;
+  max-width: 840px;
+  background: #151519;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  transition: border-color 0.2s ease;
+}
+
+.account-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .account-badge {
   display: inline-block;
   background: linear-gradient(135deg, #5b3df5, #7c3aed);
   color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 750;
+  padding: 6px 14px;
   border-radius: 999px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  letter-spacing: 0.02em;
 }
 
 .account-plan {
   margin: 0;
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 24px;
+  font-weight: 850;
+  letter-spacing: -0.01em;
 }
 
 .account-plan-sub {
-  margin: 4px 0 0;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 15px;
 }
 
 .account-plan-email {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 10px 0 4px;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 14px;
+  gap: 10px;
+  margin: 14px 0 8px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 15px;
 }
 
 .account-email-avatar {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   overflow: hidden;
   display: grid;
   place-items: center;
   background: #7c3aed;
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   flex: 0 0 auto;
 }
 
 .account-links-title {
-  margin: 30px 0 10px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 15px;
+  margin: 36px 0 14px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .account-links {
-  max-width: 560px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
+  width: 100%;
+  max-width: 840px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
   overflow: hidden;
-  background: #141414;
+  background: #151519;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
 }
 
 .account-row {
@@ -12299,13 +12322,13 @@ body:has(.add-profile-screen),
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 16px 20px;
+  padding: 18px 24px;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: transparent;
   color: #fff;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 15.5px;
+  font-weight: 650;
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease;
@@ -12331,10 +12354,11 @@ body:has(.add-profile-screen),
 }
 
 .account-card-row {
-  margin: 16px -24px -22px;
-  width: calc(100% + 48px);
+  margin: 20px -32px -24px;
+  width: calc(100% + 64px);
+  padding: 18px 32px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 16px 16px;
 }
 
 .account-signout {
@@ -12359,6 +12383,12 @@ body:has(.add-profile-screen),
   .account-shell {
     flex-direction: column;
     max-width: none;
+    padding: 0;
+  }
+
+  .account-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
 
   .account-sidebar {
@@ -17877,19 +17907,20 @@ body:has(.add-profile-screen),
 .account-profiles-card {
   display: flex;
   flex-wrap: wrap;
-  gap: 22px;
+  gap: 24px;
   padding: 0;
-  margin-bottom: 28px;
+  margin-bottom: 32px;
   background: transparent;
   border: 0;
+  max-width: 840px;
 }
 
 .account-profile-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  width: 140px;
+  gap: 12px;
+  width: 148px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -17898,25 +17929,29 @@ body:has(.add-profile-screen),
 }
 
 .account-profile-tile .account-profile-avatar {
-  width: 140px;
-  height: 140px;
-  border-radius: 16px;
-  border: 2px solid transparent;
-  transition: border-color 0.15s ease, transform 0.12s ease;
+  width: 148px;
+  height: 148px;
+  border-radius: 18px;
+  border: 3px solid transparent;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .account-profile-tile:hover .account-profile-avatar {
-  transform: scale(1.05);
-  border-color: rgba(255, 255, 255, 0.6);
+  transform: scale(1.06);
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
 }
 
 .account-profile-name {
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.8);
-  max-width: 140px;
+  font-size: 15.5px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.85);
+  max-width: 148px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: center;
 }
 
 /* ===== Account: Membership plans ===== */
@@ -17924,16 +17959,18 @@ body:has(.add-profile-screen),
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
+  max-width: 840px;
 }
 
 .account-plan-card {
   position: relative;
-  flex: 1 1 220px;
-  min-width: 220px;
-  padding: 22px;
+  flex: 1 1 240px;
+  min-width: 240px;
+  padding: 24px;
   border-radius: 16px;
-  background: #1c1c1e;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #151519;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
 }
@@ -18000,6 +18037,7 @@ body:has(.add-profile-screen),
   display: flex;
   flex-direction: column;
   gap: 18px;
+  max-width: 840px;
 }
 
 .account-empty {
@@ -18010,29 +18048,41 @@ body:has(.add-profile-screen),
 /* ===== Account overview: at-a-glance stats ===== */
 .account-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  width: 100%;
+  max-width: 840px;
 }
 
 .account-stat {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 18px;
-  border-radius: 14px;
-  background: #1c1c1e;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 6px;
+  padding: 22px 24px;
+  border-radius: 16px;
+  background: #151519;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.account-stat:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: #1b1b22;
 }
 
 .account-stat-value {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 850;
   color: #fff;
+  letter-spacing: -0.02em;
 }
 
 .account-stat-label {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 13.5px;
+  font-weight: 550;
+  color: rgba(255, 255, 255, 0.62);
 }
 
 /* ===================== Manga reader ===================== */
