@@ -496,7 +496,9 @@ button {
 
 .poster-card {
   position: relative;
-  height: 238px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
   padding: 0;
   overflow: hidden;
   color: #fff;
@@ -1883,7 +1885,8 @@ button {
 
 .result-grid .poster-card {
   width: 100%;
-  height: 246px;
+  height: auto;
+  aspect-ratio: 2 / 3;
 }
 
 .empty-state,
@@ -2302,7 +2305,8 @@ button:focus-visible {
   }
 
   .poster-card {
-    height: 320px;
+    height: auto;
+    aspect-ratio: 2 / 3;
   }
 
   .poster-row.compact .poster-card {
@@ -2441,7 +2445,8 @@ button:focus-visible {
   }
 
   .result-grid .poster-card {
-    height: 318px;
+    height: auto;
+    aspect-ratio: 2 / 3;
   }
 
   .stream-player-section {
@@ -2605,7 +2610,8 @@ button:focus-visible {
   }
 
   .poster-card {
-    height: 238px;
+    height: auto;
+    aspect-ratio: 2 / 3;
   }
 
   .poster-row.compact .poster-card {
@@ -2740,7 +2746,8 @@ button:focus-visible {
   }
 
   .poster-card {
-    height: 318px;
+    height: auto;
+    aspect-ratio: 2 / 3;
   }
 
   .poster-row.compact .poster-card {
@@ -2824,6 +2831,7 @@ button:focus-visible {
   grid-auto-flow: column;
   grid-template-columns: none;
   gap: 20px;
+  align-items: start;
   margin-top: 20px;
   margin-right: -26px;
   padding: 0 26px 8px 0;
@@ -2847,8 +2855,8 @@ button:focus-visible {
 .home-screen .poster-card {
   width: 100%;
   height: auto;
-  aspect-ratio: 0.72;
-  border-radius: 20px;
+  aspect-ratio: 2 / 3;
+  border-radius: 16px;
   scroll-snap-align: start;
 }
 
@@ -2957,6 +2965,7 @@ button:focus-visible {
     grid-auto-columns: clamp(220px, 19vw, 260px);
     grid-template-columns: none;
     gap: 26px;
+    align-items: start;
     margin-right: min(-30px, calc((1180px - 100vw) / 2));
     padding: 0 30px 18px 0;
     overflow-x: auto;
@@ -2973,8 +2982,9 @@ button:focus-visible {
   }
 
   .home-screen .poster-card {
-    height: 318px;
-    aspect-ratio: auto;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2 / 3;
     border-radius: 14px;
   }
 
@@ -3040,6 +3050,7 @@ button:focus-visible {
   grid-auto-flow: column;
   grid-template-columns: none;
   gap: 20px;
+  align-items: start;
   margin-top: 20px;
   margin-right: -26px;
   padding: 0 26px 8px 0;
@@ -3063,8 +3074,8 @@ button:focus-visible {
 .browse-screen .poster-card {
   width: 100%;
   height: auto;
-  aspect-ratio: 0.72;
-  border-radius: 20px;
+  aspect-ratio: 2 / 3;
+  border-radius: 16px;
   scroll-snap-align: start;
 }
 
@@ -3139,6 +3150,7 @@ button:focus-visible {
     grid-auto-columns: clamp(220px, 19vw, 260px);
     grid-template-columns: none;
     gap: 26px;
+    align-items: start;
     margin-right: min(-30px, calc((1180px - 100vw) / 2));
     padding: 0 30px 18px 0;
     overflow-x: auto;
@@ -3155,8 +3167,9 @@ button:focus-visible {
   }
 
   .browse-screen .poster-card {
-    height: 318px;
-    aspect-ratio: auto;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2 / 3;
     border-radius: 14px;
   }
 
@@ -4540,7 +4553,8 @@ button:focus-visible {
 }
 
 .detail-poster-row {
-  grid-auto-columns: clamp(150px, 40vw, 220px);
+  grid-auto-columns: clamp(154px, 43vw, 214px);
+  gap: 20px;
   align-items: start;
 }
 
@@ -4569,8 +4583,9 @@ button:focus-visible {
 .detail-related-poster-wrap {
   position: relative;
   width: 100%;
+  height: auto;
   aspect-ratio: 2 / 3;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   background: #151515;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -4896,10 +4911,17 @@ a.watch-option-card {
   }
 
   .detail-poster-row {
-    grid-auto-columns: clamp(180px, 14vw, 240px);
+    grid-auto-columns: clamp(220px, 19vw, 260px);
     gap: 26px;
     margin-right: -44px;
     padding-right: 44px;
+  }
+
+  .detail-related-poster-wrap {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2 / 3;
+    border-radius: 14px;
   }
 
   .watch-option-grid {
@@ -22224,6 +22246,11 @@ font-size: 11px;
 
 .watch-similars-rail-section .detail-poster-viewport {
   margin-right: 0 !important;
+}
+
+.watch-similars-rail-section .detail-poster-row {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
 }
 
 
