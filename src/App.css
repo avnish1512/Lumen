@@ -14877,31 +14877,54 @@ body:has(.add-profile-screen),
   margin-bottom: 0 !important;
 }
 
+.anime-watch-screen .top-actions {
+  padding: 16px 20px 0 !important;
+}
+
 .anime-watch-main-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 24px;
-  padding: 18px 32px 24px !important;
+  gap: 20px;
+  padding: 10px 20px 24px !important;
   background: #000;
   height: auto !important;
   min-height: 0 !important;
   margin-bottom: 0 !important;
-  max-width: 1400px;
-  margin: 0 auto !important;
-  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  width: 100% !important;
   box-sizing: border-box;
 }
 
 @media (min-width: 900px) {
   .anime-watch-main-grid {
-    grid-template-columns: minmax(0, 1fr) clamp(290px, 25vw, 360px);
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 420px);
     align-items: start;
-    max-width: 1400px;
-    margin: 0 auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    padding: 10px 20px 24px !important;
   }
 
   .anime-watch-main-grid.no-sidebar {
     grid-template-columns: 1fr;
+    max-width: 1800px !important;
+    margin: 0 auto !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .anime-watch-main-grid {
+    padding: 10px 14px 20px !important;
+    gap: 16px;
+  }
+
+  .anime-watch-screen .top-actions {
+    padding: 12px 14px 0 !important;
+  }
+
+  .watch-full-width-section {
+    padding: 0 14px 24px !important;
   }
 }
 
@@ -14937,13 +14960,15 @@ body:has(.add-profile-screen),
   gap: 16px;
   min-width: 0;
   align-self: start;
+  position: sticky;
+  top: 16px;
 }
 
 .watch-full-width-section {
-  padding: 0 32px 32px !important;
-  max-width: 1400px;
-  margin: 0 auto !important;
-  width: 100%;
+  padding: 0 20px 32px !important;
+  max-width: none !important;
+  margin: 0 !important;
+  width: 100% !important;
   box-sizing: border-box;
 }
 
@@ -15111,7 +15136,7 @@ body:has(.add-profile-screen),
   flex: none;
   min-height: 0;
   height: auto;
-  max-height: clamp(480px, 62vh, 600px);
+  max-height: clamp(520px, calc(100vh - 110px), 840px);
   overflow: hidden;
   margin-bottom: 24px;
 }
