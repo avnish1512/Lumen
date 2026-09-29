@@ -1971,7 +1971,12 @@ function cleanImageUrl(value?: string) {
 }
 
 function posterImageFor(movie: Movie) {
-  return cleanImageUrl(movie.poster) || fallbackPosterForRank(movie.rank)
+  return (
+    cleanImageUrl(movie.poster) ||
+    cleanImageUrl(movie.still) ||
+    cleanImageUrl(movie.hero) ||
+    fallbackPosterForRank(movie.rank)
+  )
 }
 
 function heroImageFor(movie: Movie) {
@@ -13059,13 +13064,15 @@ function LibraryScreen({
               <>
                 <h2>Saved Movies</h2>
                 <div className="result-grid library-grid">
-                  {savedMovies.map((movie) => (
-                    <PosterCard
-                      key={movie.id}
-                      movie={movie}
-                      onOpenDetail={onOpenDetail}
-                    />
-                  ))}
+                  {savedMovies
+                    .filter((movie) => Boolean(movie && movie.id && (movie.title || movie.poster || movie.still || movie.hero)))
+                    .map((movie, index) => (
+                      <PosterCard
+                        key={movie.id}
+                        movie={{ ...movie, rank: movie.rank || index + 1 }}
+                        onOpenDetail={onOpenDetail}
+                      />
+                    ))}
                 </div>
               </>
             ) : (
@@ -13630,6 +13637,14 @@ function PosterImage({
       if (direct) {
         list.push(direct)
       }
+      const altStill = cleanImageUrl(movie.still)
+      if (altStill && !list.includes(altStill)) {
+        list.push(altStill)
+      }
+      const altHero = cleanImageUrl(movie.hero)
+      if (altHero && !list.includes(altHero)) {
+        list.push(altHero)
+      }
     }
 
     if (fallback) {
@@ -13637,7 +13652,7 @@ function PosterImage({
     }
 
     return list.filter((entry, index) => Boolean(entry) && list.indexOf(entry) === index)
-  }, [movie.id, movie.tmdbId, movie.isAnime, movie.poster, fallback])
+  }, [movie.id, movie.tmdbId, movie.isAnime, movie.poster, movie.still, movie.hero, fallback])
 
   const [index, setIndex] = useState(0)
 
