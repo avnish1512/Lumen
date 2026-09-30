@@ -8905,40 +8905,68 @@ function WatchScreen({
       }
     }
 
-    // 2. Live related videos from provider / AniList / TMDB
-    if (liveRelated.length > 0) {
-      return liveRelated.slice(0, 16)
-    }
-
-    // 3. Provider-specific fallbacks matching current video's category/genre
+    // 2. PHub (PHub 1, PHub 2, PHub 3) related recommendations
     if (isPhub3Video) {
       const currentKeywords = (movie.genres || []).map((g) => g.toLowerCase())
-      return EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
+      const fallback = EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
         .filter((m) => m.id !== movie.id)
         .sort((a, b) => {
           const aMatches = (a.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
           const bMatches = (b.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
           return bMatches - aMatches
         })
-        .slice(0, 16)
+      const pool = [...liveRelated.filter((m) => isPhub3Movie(m) && m.id !== movie.id), ...fallback]
+      const seen = new Set<string>()
+      const result: Movie[] = []
+      for (const item of pool) {
+        if (!seen.has(String(item.id))) {
+          seen.add(String(item.id))
+          result.push(item)
+        }
+      }
+      return result.slice(0, 18)
     }
 
     if (isPhub2Video) {
       const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
-      return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
+      const fallback = INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
         .filter((m) => m.id !== movie.id)
         .sort((a, b) => {
           const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
           const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
           return bMatches - aMatches
         })
-        .slice(0, 16)
+      const pool = [...liveRelated.filter((m) => isPhub2Movie(m) && m.id !== movie.id), ...fallback]
+      const seen = new Set<string>()
+      const result: Movie[] = []
+      for (const item of pool) {
+        if (!seen.has(String(item.id))) {
+          seen.add(String(item.id))
+          result.push(item)
+        }
+      }
+      return result.slice(0, 18)
     }
 
-    if (isPhub1Video) {
-      if (phubRelated.length > 0) {
-        return phubRelated.slice(0, 16)
+    if (isPhub1Video || isPhubVideo) {
+      const pool = [...phubRelated, ...liveRelated.filter((m) => isPhubMovie(m) && m.id !== movie.id)]
+      const seen = new Set<string>()
+      const result: Movie[] = []
+      for (const item of pool) {
+        if (!seen.has(String(item.id))) {
+          seen.add(String(item.id))
+          result.push(item)
+        }
       }
+      if (result.length > 0) {
+        return result.slice(0, 18)
+      }
+      return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper).filter((m) => m.id !== movie.id).slice(0, 18)
+    }
+
+    // 3. Live related videos from provider / AniList / TMDB
+    if (liveRelated.length > 0) {
+      return liveRelated.slice(0, 16)
     }
 
     if (isJavVideo && javRelated.length > 0) {
@@ -9554,6 +9582,95 @@ function WatchScreen({
     </div>
   )
 
+  const renderSimilarsOrMoreVideos = () => {
+    if (relatedList.length === 0) return null
+
+    if (isPhubVideo) {
+      // Exactly 3 columns and 3 rows = 9 videos
+      const moreVideos = relatedList.slice(0, 9)
+      return (
+        <section className="watch-phub-more-section" aria-label="More Videos">
+          <div className="watch-phub-more-header">
+            <h2 className="watch-phub-more-title">
+              More Videos
+              <span className="watch-phub-more-count">({moreVideos.length})</span>
+            </h2>
+          </div>
+          <div className="watch-phub-grid">
+            {moreVideos.map((m, idx) => {
+              const thumb = m.poster || m.hero || m.still || ''
+              const quality = m.logoTitle || m.awards || '4K'
+              const duration = m.runtime && m.runtime !== '4K' && m.runtime !== 'HD' ? m.runtime : null
+              const studio = m.genres?.[0] || m.label || 'PHub'
+              return (
+                <div
+                  key={`phub-more-${m.id || idx}`}
+                  className="jav-card"
+                  onClick={() => onSelectMovie?.(m)}
+                >
+                  <div className="jav-thumb-container">
+                    <img
+                      src={thumb}
+                      referrerPolicy="no-referrer"
+                      alt={m.title}
+                      loading="lazy"
+                      onError={(event) => {
+                        const target = event.target as HTMLImageElement
+                        target.onerror = null
+                        target.src =
+                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80'
+                      }}
+                    />
+                    <span className="jav-hd-badge">{quality}</span>
+                    {duration && (
+                      <span className="jav-duration-badge">{duration}</span>
+                    )}
+                    <div className="jav-play-overlay">
+                      <button
+                        type="button"
+                        className="jav-play-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onSelectMovie?.(m)
+                        }}
+                        title="Play Video"
+                      >
+                        <Play fill="#fff" size={24} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="jav-card-body">
+                    <h3 className="jav-card-title" title={m.title}>
+                      {cleanHtmlEntities(m.title)}
+                    </h3>
+                    <div className="jav-card-footer">
+                      <span className="jav-studio">{cleanHtmlEntities(studio)}</span>
+                      {m.boxOffice ? (
+                        <span className="jav-views">👁 {m.boxOffice}</span>
+                      ) : m.rating ? (
+                        <span className="jav-views">{m.rating}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )
+    }
+
+    return (
+      <div className="watch-similars-rail-section">
+        <DetailPosterRail
+          title="Similars"
+          movies={relatedList}
+          onOpenDetail={onSelectMovie}
+        />
+      </div>
+    )
+  }
+
   const renderEpisodePanel = (_isAnimeLayout = true) => {
     if (!isSeries) return null
     return (
@@ -10152,15 +10269,7 @@ function WatchScreen({
           </div>
 
           {hasEpisodes && renderEpisodePanel(false)}
-          {relatedList.length > 0 && (
-            <div className="watch-similars-rail-section">
-              <DetailPosterRail
-                title="Similars"
-                movies={relatedList}
-                onOpenDetail={onSelectMovie}
-              />
-            </div>
-          )}
+          {renderSimilarsOrMoreVideos()}
           {renderCommentsSection()}
         </div>
 
@@ -10420,17 +10529,9 @@ function WatchScreen({
         )}
       </div>
 
-      {/* FULL-WIDTH LOWER SECTION: Similars rail and Comments */}
+      {/* FULL-WIDTH LOWER SECTION: Similars rail or More Videos and Comments */}
       <div className="watch-full-width-section">
-        {relatedList.length > 0 && (
-          <div className="watch-similars-rail-section">
-            <DetailPosterRail
-              title="Similars"
-              movies={relatedList}
-              onOpenDetail={onSelectMovie}
-            />
-          </div>
-        )}
+        {renderSimilarsOrMoreVideos()}
 
         {renderCommentsSection()}
       </div>

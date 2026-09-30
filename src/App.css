@@ -22390,5 +22390,69 @@ font-size: 11px;
   padding-right: 0 !important;
 }
 
+/* Watch Screen PHub More Videos Section (3 columns x 3 rows) */
+.watch-phub-more-section {
+  width: 100%;
+  margin-top: 28px;
+  margin-bottom: 32px;
+  box-sizing: border-box;
+}
+
+.watch-phub-more-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.watch-phub-more-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+}
+
+.watch-phub-more-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(244, 63, 94, 0.18);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  padding: 3px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.3px;
+}
+
+.watch-phub-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.watch-phub-grid .jav-card {
+  height: 100%;
+}
+
+@media (max-width: 900px) {
+  .watch-phub-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 580px) {
+  .watch-phub-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+
 
 
