@@ -1013,7 +1013,23 @@ export function buildStreamUrl(
     return `https://www.eporner.com/embed/${cleanSlug}/`
   }
 
-  // 2. Explicit PHub (1 & 2) videos
+  // 1b. Explicit PHub 1 videos
+  if (
+    !movie.tmdbId &&
+    (movie.label === 'PHub 1' ||
+      movie.id.startsWith('phub1-') ||
+      (movie.hentaiSlug && movie.hentaiSlug.startsWith('phub1-')) ||
+      provider === 'phubplay' ||
+      movie.embedUrl?.includes('phub1-player'))
+  ) {
+    if (movie.embedUrl && !movie.embedUrl.includes('upload18.net')) {
+      return movie.embedUrl
+    }
+    const poster = movie.poster || movie.hero || ''
+    return `/phub1-player.html?title=${encodeURIComponent(movie.title)}&poster=${encodeURIComponent(poster)}`
+  }
+
+  // 2. Explicit PHub 2 videos
   if (
     !movie.tmdbId &&
     (movie.label === 'PHub' ||
@@ -1026,13 +1042,13 @@ export function buildStreamUrl(
       if (movie.embedUrl && (movie.embedUrl.includes('upload18.net') || movie.embedUrl.includes('xvidapi'))) {
         return movie.embedUrl
       }
-      const cleanSlug = (movie.hentaiSlug || movie.id).replace(/^(?:phub2?|phub3)-/, '')
+      const cleanSlug = (movie.hentaiSlug || movie.id).replace(/^(?:phub1?|phub2?|phub3)-/, '')
       return `https://upload18.net/play/index/xvidapi-${cleanSlug}`
     }
-    if (movie.embedUrl) {
+    if (movie.embedUrl && !movie.embedUrl.includes('upload18.net')) {
       return movie.embedUrl
     }
-    const cleanSlug = (movie.hentaiSlug || movie.id).replace(/^(?:phub2?|phub3)-/, '')
+    const cleanSlug = (movie.hentaiSlug || movie.id).replace(/^(?:phub1?|phub2?|phub3)-/, '')
     return `https://upload18.net/play/index/xvidapi-${cleanSlug}`
   }
 

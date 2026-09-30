@@ -1352,6 +1352,14 @@ export function isPhub2Movie(m?: Movie | null): boolean {
   if (!m) return false
   if (m.tmdbId) return false
   if (isPhub3Movie(m)) return false
+  if (
+    m.id?.startsWith('phub1-') ||
+    m.label === 'PHub 1' ||
+    m.hentaiSlug?.startsWith('phub1-') ||
+    m.embedUrl?.includes('phub1-player')
+  ) {
+    return false
+  }
   const isExplicitPhub = Boolean(
     m.id?.startsWith('phub') ||
     m.label?.startsWith('PHub') ||
@@ -1373,6 +1381,10 @@ export function isPhub1Movie(m?: Movie | null): boolean {
   if (m.tmdbId) return false
   if (isPhub3Movie(m) || isPhub2Movie(m)) return false
   return Boolean(
+    m.id?.startsWith('phub1-') ||
+    m.label === 'PHub 1' ||
+    m.hentaiSlug?.startsWith('phub1-') ||
+    m.embedUrl?.includes('phub1-player') ||
     m.id?.startsWith('phub-') ||
     m.label === 'PHub' ||
     m.type === 'PHub Video' ||
@@ -1538,11 +1550,16 @@ export function pornApiToMovieHelper(item: PornApiMovieItem, embedUrlOverride?: 
   }
 
   const isEporner = serverMode === 'eporner' || embedUrl.includes('eporner.com') || item.episodes?.[0]?.sources?.[0]?.server_name === 'Eporner'
-  const isXvid = serverMode === 'xvidapi' || embedUrl.includes('upload18.net') || embedUrl.includes('xvidapi') || item.episodes?.[0]?.sources?.[0]?.server_name === 'Upload18'
+  const isXvid = (serverMode === 'xvidapi' || embedUrl.includes('upload18.net') || embedUrl.includes('xvidapi') || item.episodes?.[0]?.sources?.[0]?.server_name === 'Upload18') && serverMode !== 'pornapi'
 
-  const idPrefix = isEporner ? 'phub3-' : isXvid ? 'phub2-' : 'phub-'
-  const label = isEporner ? 'PHub 3' : isXvid ? 'PHub 2' : 'PHub'
-  const cleanSlug = item.slug ? item.slug.replace(/^phub3-|^phub2-|^phub-/, '') : 'video'
+  const idPrefix = isEporner ? 'phub3-' : isXvid ? 'phub2-' : 'phub1-'
+  const label = isEporner ? 'PHub 3' : isXvid ? 'PHub 2' : 'PHub 1'
+  const cleanSlug = item.slug ? item.slug.replace(/^phub3-|^phub2-|^phub1-|^phub-/, '') : 'video'
+
+  if (!embedUrl && !isEporner && !isXvid) {
+    const poster = item.poster_url || item.thumbnail_url || ''
+    embedUrl = `/phub1-player.html?title=${encodeURIComponent(cleanHtmlEntities(item.title))}&poster=${encodeURIComponent(poster)}`
+  }
 
   return {
     id: `${idPrefix}${cleanSlug}`,
@@ -8726,12 +8743,17 @@ function WatchScreen({
       setResolvedPhubEmbed(undefined)
       return
     }
-    if (movie.embedUrl) {
+    if (movie.embedUrl && (!isPhub1Video || !movie.embedUrl.includes('upload18.net'))) {
       setResolvedPhubEmbed(movie.embedUrl)
       return
     }
     let active = true
-    const slug = (movie.hentaiSlug || movie.id).replace(/^(?:phub2?|phub3)-/, '')
+    if (isPhub1Video) {
+      const poster = movie.poster || movie.hero || ''
+      setResolvedPhubEmbed(`/phub1-player.html?title=${encodeURIComponent(movie.title)}&poster=${encodeURIComponent(poster)}`)
+      return
+    }
+    const slug = (movie.hentaiSlug || movie.id).replace(/^(?:phub1?|phub2?|phub3)-/, '')
     if (isPhub2Video) {
       setResolvedPhubEmbed(`https://upload18.net/play/index/xvidapi-${slug}`)
       return
@@ -8745,7 +8767,7 @@ function WatchScreen({
     return () => {
       active = false
     }
-  }, [isPhubVideo, isPhub2Video, movie.id, movie.embedUrl, movie.hentaiSlug])
+  }, [isPhubVideo, isPhub1Video, isPhub2Video, movie.id, movie.embedUrl, movie.hentaiSlug, movie.title, movie.poster, movie.hero])
 
   useEffect(() => {
     if (!isPhubVideo) return
@@ -15052,11 +15074,13 @@ function LordScreen({
     }))
   }, [rails])
 
-  const [internalTab, setInternalTab] = useState<LordTab>(activeTabProp)
-  const activeLordTab = activeTabProp || internalTab
+  const [internalTab, setInternalTab] = useState<LordTab>(() => (activeTabProp === 'phub' ? 'phub2' : activeTabProp))
+  const rawLordTab = activeTabProp || internalTab
+  const activeLordTab: LordTab = rawLordTab === 'phub' ? 'phub2' : rawLordTab
   const setActiveLordTab = (tab: LordTab) => {
-    setInternalTab(tab)
-    onTabChange?.(tab)
+    const nextTab = tab === 'phub' ? 'phub2' : tab
+    setInternalTab(nextTab)
+    onTabChange?.(nextTab)
   }
   const [internalTabQueries, setInternalTabQueries] = useState<Record<LordTab, string>>({
     collection: '',
@@ -15201,14 +15225,6 @@ function LordScreen({
               <span>Hentai</span>
             </button>
             <button
-              className={`lord-tab-btn ${activeLordTab === 'phub' ? 'is-active' : ''}`}
-              type="button"
-              onClick={() => setActiveLordTab('phub')}
-            >
-              <Code size={15} />
-              <span>PHub 1</span>
-            </button>
-            <button
               className={`lord-tab-btn ${activeLordTab === 'phub2' ? 'is-active' : ''}`}
               type="button"
               onClick={() => setActiveLordTab('phub2')}
@@ -15241,15 +15257,13 @@ function LordScreen({
             type="button"
             onClick={() => {
               const tabName =
-                activeLordTab === 'phub'
-                  ? 'PHub 1'
-                  : activeLordTab === 'phub2'
-                    ? 'PHub 2'
-                    : activeLordTab === 'phub3'
-                      ? 'PHub 3'
-                      : activeLordTab === 'jav'
-                        ? 'JAV'
-                        : 'Hentai'
+                activeLordTab === 'phub2'
+                  ? 'PHub 2'
+                  : activeLordTab === 'phub3'
+                    ? 'PHub 3'
+                    : activeLordTab === 'jav'
+                      ? 'JAV'
+                      : 'Hentai'
               if (
                 window.confirm(
                   `Permanently delete ${tabName} Continue Watching history? This cannot be recovered.`,
@@ -15263,20 +15277,18 @@ function LordScreen({
             disabled={
               activeLordTab === 'jav'
                 ? continueJavMovies.length === 0
-                : activeLordTab === 'phub'
-                  ? continuePhub1Movies.length === 0
-                  : activeLordTab === 'phub2'
-                    ? continuePhub2Movies.length === 0
-                    : activeLordTab === 'phub3'
-                      ? continuePhub3Movies.length === 0
-                      : continueMovies.length === 0
+                : activeLordTab === 'phub2'
+                  ? continuePhub2Movies.length === 0
+                  : activeLordTab === 'phub3'
+                    ? continuePhub3Movies.length === 0
+                    : continueMovies.length === 0
             }
           >
             <Trash2 size={18} />
             <span>Clear History</span>
           </button>
 
-          {(activeLordTab === 'phub' || activeLordTab === 'phub2' || activeLordTab === 'phub3') && isAdmin && (
+          {(activeLordTab === 'phub2' || activeLordTab === 'phub3') && isAdmin && (
             <button
               className={`lord-clear-btn lord-refresh-btn${isRefreshing ? ' is-refreshing' : ''}`}
               type="button"
@@ -15299,15 +15311,13 @@ function LordScreen({
                 type="text"
                 className="lord-search-input"
                 placeholder={
-                  activeLordTab === 'phub'
-                    ? 'Search PHub 1 (4K)…'
-                    : activeLordTab === 'phub2'
-                      ? 'Search PHub 2 videos…'
-                      : activeLordTab === 'phub3'
-                        ? 'Search PHub 3 (Eporner)…'
-                        : activeLordTab === 'jav'
-                          ? 'Search JAV codes, titles…'
-                          : 'Titles, genres…'
+                  activeLordTab === 'phub2'
+                    ? 'Search PHub 2 videos…'
+                    : activeLordTab === 'phub3'
+                      ? 'Search PHub 3 (Eporner)…'
+                      : activeLordTab === 'jav'
+                        ? 'Search JAV codes, titles…'
+                        : 'Titles, genres…'
                 }
                 value={currentQuery}
                 onChange={(event) => setQuery(event.target.value)}
@@ -15386,22 +15396,7 @@ function LordScreen({
         )}
       </div>
 
-      {activeLordTab === 'phub' ? (
-        <LordPhubSection
-          key="phub-1"
-          serverMode="pornapi"
-          searchQuery={tabQueries.phub}
-          continueMovies={continuePhub1Movies}
-          savedMovies={savedPhub1Movies}
-          currentUser={currentUser}
-          phubSeed={phubSeed}
-          onOpenDetail={onOpenDetail}
-          onPlay={onPlay}
-          onMarkWatched={onMarkWatched}
-          onRemoveContinue={onRemoveContinue}
-          onRemoveWatchlist={onRemoveWatchlist}
-        />
-      ) : activeLordTab === 'phub2' ? (
+      {activeLordTab === 'phub2' ? (
         <LordPhubSection
           key="phub-2"
           serverMode="xvidapi"
@@ -15529,14 +15524,6 @@ function LordScreen({
           >
             <Crown size={16} />
             <span>Hentai</span>
-          </button>
-          <button
-            className={`lord-mobile-nav-item${activeLordTab === 'phub' ? ' is-active' : ''}`}
-            type="button"
-            onClick={() => setActiveLordTab('phub')}
-          >
-            <Code size={16} />
-            <span>PHub 1</span>
           </button>
           <button
             className={`lord-mobile-nav-item${activeLordTab === 'phub2' ? ' is-active' : ''}`}
@@ -16021,18 +16008,320 @@ const PHUB_PAGE_SIZE = 24
 
 const xvidApiCache = new Map<string, any>()
 
-const INITIAL_PHUB1_VIDEOS: PornApiMovieItem[] = INITIAL_HANIME_VIDEOS.map((v) => ({
-  title: v.title,
-  description: v.description,
-  thumbnail_url: v.thumb,
-  poster_url: v.poster || v.thumb,
-  slug: String(v.id),
-  duration: v.duration,
-  quality: '4K',
-  views: v.views || 45000,
-  categories: [{ name: v.category, slug: v.category.toLowerCase().replace(/\s+/g, '-') }],
-  pornstars: v.actors?.map((a) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
-}))
+const INITIAL_PHUB1_VIDEOS: PornApiMovieItem[] = [
+  {
+    title: 'Late Night Tokyo Glamour Session - 4K Ultra HD',
+    description: 'Exclusive 4K cinematic glamour session featuring sultry atmospheric lighting and stunning cinematography.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-101',
+    duration: '28:45',
+    quality: '4K',
+    views: 142500,
+    categories: [{ name: 'Asian', slug: 'asian' }, { name: 'HD', slug: 'hd' }],
+    pornstars: [{ name: 'Yuki Mori', slug: 'yuki-mori' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Late%20Night%20Tokyo%20Glamour%20Session&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1534528741775-53994a69daeb%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Sunset Villa Private Audition - 4K Ultra',
+    description: 'Intimate sunset photoshoot turns into an unforgettable sensual private encounter in a luxury coastal villa.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-102',
+    duration: '34:12',
+    quality: '4K',
+    views: 189200,
+    categories: [{ name: 'Babe', slug: 'babe' }, { name: 'Amateur', slug: 'amateur' }],
+    pornstars: [{ name: 'Elena Vance', slug: 'elena-vance' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Sunset%20Villa%20Private%20Audition&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1517841905240-472988babdf9%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Velvet Lounge Intimate Romance - Ultra HD',
+    description: 'A passionate romantic rendezvous with sophisticated charm, soft ambient candle glow, and crystal-clear 4K detail.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-103',
+    duration: '22:18',
+    quality: '4K',
+    views: 96400,
+    categories: [{ name: 'Brunette', slug: 'brunette' }, { name: 'POV', slug: 'pov' }],
+    pornstars: [{ name: 'Chloe Ray', slug: 'chloe-ray' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Velvet%20Lounge%20Intimate%20Romance&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1524504388940-b1c1722653e1%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Summer Breeze Secret Seduction - 60FPS 4K',
+    description: 'Playful outdoor moments seamlessly transition into an intense, passionate indoor connection under golden hour light.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-104',
+    duration: '31:50',
+    quality: '4K',
+    views: 215400,
+    categories: [{ name: 'Blonde', slug: 'blonde' }, { name: 'Amateur', slug: 'amateur' }],
+    pornstars: [{ name: 'Sienna Miller', slug: 'sienna-miller' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Summer%20Breeze%20Secret%20Seduction&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1494790108377-be9c29b29330%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Neon Nights Penthouse Affair - 4K Master',
+    description: 'High above the glowing skyline, an exhilarating penthouse rendezvous unfurls with cinematic beauty and intensity.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-105',
+    duration: '26:04',
+    quality: '4K',
+    views: 112800,
+    categories: [{ name: 'Teen (18+)', slug: '18-teen' }, { name: 'POV', slug: 'pov' }],
+    pornstars: [{ name: 'Amber Cole', slug: 'amber-cole' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Neon%20Nights%20Penthouse%20Affair&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1529626455594-4ff0802cfb7e%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Cosplay Fantasy Princess Unbound - 4K',
+    description: 'Anime convention backstage fantasy brought vividly to life with high quality costumes and deep sensual play.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-106',
+    duration: '29:33',
+    quality: '4K',
+    views: 175600,
+    categories: [{ name: 'Cosplay', slug: 'cosplay' }, { name: 'Japanese', slug: 'japanese' }],
+    pornstars: [{ name: 'Rin Takahashi', slug: 'rin-takahashi' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Cosplay%20Fantasy%20Princess%20Unbound&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1488426862026-3ee34a7d66df%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Luxury Spa Indulgence & Relaxation - 4K UHD',
+    description: 'Warm scented oils, soothing ambient steam, and a full body sensual massage that escalates into pure pleasure.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-107',
+    duration: '35:20',
+    quality: '4K',
+    views: 133200,
+    categories: [{ name: 'MILF', slug: 'milf' }, { name: 'Mature', slug: 'mature' }],
+    pornstars: [{ name: 'Stella Cross', slug: 'stella-cross' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Luxury%20Spa%20Indulgence%20%26%20Relaxation&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1508214751196-bcfd4ca60f91%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Parisian Hotel Midnight Confessions - 4K',
+    description: 'An elegant Parisian suite sets the stage for unfiltered raw desire captured with gorgeous artful camera angles.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-108',
+    duration: '27:15',
+    quality: '4K',
+    views: 154700,
+    categories: [{ name: 'Babe', slug: 'babe' }, { name: 'Brunette', slug: 'brunette' }],
+    pornstars: [{ name: 'Camille Laurent', slug: 'camille-laurent' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Parisian%20Hotel%20Midnight%20Confessions&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1544005313-94ddf0286df2%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Morning Sunlight Bedroom Tease - Ultra HD',
+    description: 'Waking up to gentle caresses and sweet morning whispers, evolving into an intense passionate morning session.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-109',
+    duration: '24:50',
+    quality: '4K',
+    views: 98100,
+    categories: [{ name: 'POV', slug: 'pov' }, { name: 'Amateur', slug: 'amateur' }],
+    pornstars: [{ name: 'Nora Hayes', slug: 'nora-hayes' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Morning%20Sunlight%20Bedroom%20Tease&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1506794778202-cad84cf45f1d%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Kyoto Rain Garden Romance - 4K 60FPS',
+    description: 'Traditional tatami room, gentle sounds of falling rain outside, and a deeply passionate Japanese romantic encounter.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-110',
+    duration: '38:40',
+    quality: '4K',
+    views: 240500,
+    categories: [{ name: 'Asian', slug: 'asian' }, { name: 'Japanese', slug: 'japanese' }],
+    pornstars: [{ name: 'Aoi Sakura', slug: 'aoi-sakura' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Kyoto%20Rain%20Garden%20Romance&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1519699047748-de8e457a634e%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Secret Study After Hours - 4K Master',
+    description: 'Late night overtime in the library leads to unexpected tension releasing in breathless passionate abandon.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-111',
+    duration: '21:30',
+    quality: '4K',
+    views: 167300,
+    categories: [{ name: 'Teen (18+)', slug: '18-teen' }, { name: 'Brunette', slug: 'brunette' }],
+    pornstars: [{ name: 'Maya Brooks', slug: 'maya-brooks' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Secret%20Study%20After%20Hours&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1531746020798-e6953c6e8e04%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Golden Hour Beachside Desire - 4K Ultra',
+    description: 'Warm sea breezes, crashing waves on the shoreline, and an uninhibited tropical romance under the setting sun.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-112',
+    duration: '29:10',
+    quality: '4K',
+    views: 128900,
+    categories: [{ name: 'Babe', slug: 'babe' }, { name: 'Blonde', slug: 'blonde' }],
+    pornstars: [{ name: 'Hannah Stone', slug: 'hannah-stone' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Golden%20Hour%20Beachside%20Desire&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1507003211169-0a1dd7228f2d%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Velvet Midnight Seduction - 4K 60FPS',
+    description: 'Sensual black lace and satin sheets set the mood for an intoxicating, breathless night of romance.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-113',
+    duration: '33:45',
+    quality: '4K',
+    views: 187400,
+    categories: [{ name: 'Latina', slug: 'latina' }, { name: 'MILF', slug: 'milf' }],
+    pornstars: [{ name: 'Sofia Del Rio', slug: 'sofia-del-rio' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Velvet%20Midnight%20Seduction&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1492562080023-ab3db95bfbce%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Rooftop Infinity Pool Fantasy - 4K Master',
+    description: 'Private nighttime dip in a rooftop infinity pool overlooking city lights transforms into pure ecstasy.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-114',
+    duration: '27:55',
+    quality: '4K',
+    views: 145000,
+    categories: [{ name: 'POV', slug: 'pov' }, { name: 'HD', slug: 'hd' }],
+    pornstars: [{ name: 'Jessica Wilde', slug: 'jessica-wilde' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Rooftop%20Infinity%20Pool%20Fantasy&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1509967419530-da38b4704bc6%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Nordic Cabin Warm Fireplace Encounter - Ultra HD',
+    description: 'Snowstorm outside while inside the warmth of the fireplace crackles during an intimate, lingering session.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1502823403499-6ccfcf4fb453?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1502823403499-6ccfcf4fb453?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-115',
+    duration: '36:12',
+    quality: '4K',
+    views: 204300,
+    categories: [{ name: 'Blonde', slug: 'blonde' }, { name: 'Mature', slug: 'mature' }],
+    pornstars: [{ name: 'Freja Lind', slug: 'freja-lind' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Nordic%20Cabin%20Warm%20Fireplace%20Encounter&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1502823403499-6ccfcf4fb453%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Retro Neon Arcade Hookup - 4K 60FPS',
+    description: 'Vibrant neon hues and retro synth beats fuel an adventurous after-hours connection between games.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1514315384763-ba401779410f?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1514315384763-ba401779410f?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-116',
+    duration: '25:22',
+    quality: '4K',
+    views: 119800,
+    categories: [{ name: 'Teen (18+)', slug: '18-teen' }, { name: 'Cosplay', slug: 'cosplay' }],
+    pornstars: [{ name: 'Mia Fox', slug: 'mia-fox' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Retro%20Neon%20Arcade%20Hookup&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1514315384763-ba401779410f%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Artist Loft Private Portrait - Ultra HD',
+    description: 'Posing for live charcoal sketches turns into an electrifying exploration of genuine mutual attraction.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-117',
+    duration: '30:18',
+    quality: '4K',
+    views: 161200,
+    categories: [{ name: 'Amateur', slug: 'amateur' }, { name: 'Babe', slug: 'babe' }],
+    pornstars: [{ name: 'Chloe Dubois', slug: 'chloe-dubois' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Artist%20Loft%20Private%20Portrait&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1522337360788-8b13dee7a37e%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Moonlit Balcony Rendezvous - 4K Master',
+    description: 'Under the silver light of a full moon, two lovers lose all inhibitions in a breathless midnight embrace.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1526080652727-5b778b5eefda?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1526080652727-5b778b5eefda?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-118',
+    duration: '28:30',
+    quality: '4K',
+    views: 139600,
+    categories: [{ name: 'Brunette', slug: 'brunette' }, { name: 'POV', slug: 'pov' }],
+    pornstars: [{ name: 'Victoria Knight', slug: 'victoria-knight' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Moonlit%20Balcony%20Rendezvous&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1526080652727-5b778b5eefda%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Executive Suite Discreet Liaison - Ultra HD',
+    description: 'When the business conference finishes, an exclusive VIP liaison begins behind closed executive doors.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-119',
+    duration: '34:50',
+    quality: '4K',
+    views: 198000,
+    categories: [{ name: 'MILF', slug: 'milf' }, { name: 'Latina', slug: 'latina' }],
+    pornstars: [{ name: 'Isabella Morales', slug: 'isabella-morales' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Executive%20Suite%20Discreet%20Liaison&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1485230895905-ec40ba36b9bc%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Tokyo Hotel Rain Reflection - 4K 60FPS',
+    description: 'Futuristic city lights streaming through sheer curtains during an intense, passionate Tokyo evening.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1481214110143-ed630356e1bb?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1481214110143-ed630356e1bb?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-120',
+    duration: '27:40',
+    quality: '4K',
+    views: 172400,
+    categories: [{ name: 'Asian', slug: 'asian' }, { name: 'Japanese', slug: 'japanese' }],
+    pornstars: [{ name: 'Mei Tanaka', slug: 'mei-tanaka' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Tokyo%20Hotel%20Rain%20Reflection&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1481214110143-ed630356e1bb%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Ibiza Sunset Yacht Celebration - 4K Ultra',
+    description: 'Drifting off the coast of Ibiza, champagne bottles open and a sun-kissed celebration turns ultra-wild.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1541257710737-06d667133a53?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1541257710737-06d667133a53?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-121',
+    duration: '32:14',
+    quality: '4K',
+    views: 221000,
+    categories: [{ name: 'Babe', slug: 'babe' }, { name: 'Amateur', slug: 'amateur' }],
+    pornstars: [{ name: 'Lucia Rossi', slug: 'lucia-rossi' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Ibiza%20Sunset%20Yacht%20Celebration&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1541257710737-06d667133a53%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Vintage Vinyl Music Lounge - 4K Master',
+    description: 'Groovy soulful tunes on the turntable lead to rhythm, slow dancing, and heated physical passion.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-122',
+    duration: '26:50',
+    quality: '4K',
+    views: 114500,
+    categories: [{ name: 'Ebony', slug: 'ebony' }, { name: 'POV', slug: 'pov' }],
+    pornstars: [{ name: 'Zara Washington', slug: 'zara-washington' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Vintage%20Vinyl%20Music%20Lounge&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1531123897727-8f129e1688ce%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Rainy Afternoon Coffee & Closeness - Ultra HD',
+    description: 'Cozy oversized sweaters, warm coffee mugs, and lingering skin-on-skin affection in an intimate apartment.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1520813792240-56fc4a3765a7?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1520813792240-56fc4a3765a7?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-123',
+    duration: '29:40',
+    quality: '4K',
+    views: 153800,
+    categories: [{ name: 'Amateur', slug: 'amateur' }, { name: 'Brunette', slug: 'brunette' }],
+    pornstars: [{ name: 'Emily Clark', slug: 'emily-clark' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Rainy%20Afternoon%20Coffee%20%26%20Closeness&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1520813792240-56fc4a3765a7%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+  {
+    title: 'Starlight Observatory Secret - 4K 60FPS',
+    description: 'A private tour of the telescope dome turns into an unforgettable night under constellations and cosmic skies.',
+    thumbnail_url: 'https://images.unsplash.com/photo-1548142813-c348350df52b?w=600&auto=format&fit=crop&q=80',
+    poster_url: 'https://images.unsplash.com/photo-1548142813-c348350df52b?w=800&auto=format&fit=crop&q=80',
+    slug: 'phub1-124',
+    duration: '33:15',
+    quality: '4K',
+    views: 189000,
+    categories: [{ name: 'Asian', slug: 'asian' }, { name: 'Cosplay', slug: 'cosplay' }],
+    pornstars: [{ name: 'Hana Lin', slug: 'hana-lin' }],
+    episodes: [{ name: 'Full 4K', slug: 'full', sources: [{ server_name: 'PHub 1', embed_url: '/phub1-player.html?title=Starlight%20Observatory%20Secret&poster=https%3A%2F%2Fimages.unsplash.com%2Fphoto-1548142813-c348350df52b%3Fw%3D800%26auto%3Dformat%26fit%3Dcrop%26q%3D80' }] }],
+  },
+]
 
 const INITIAL_XVID_VIDEOS: PornApiMovieItem[] = INITIAL_HANIME_VIDEOS.map((norm) => ({
   title: norm.title,
@@ -16306,19 +16595,62 @@ function LordPhubSection({
           if (list.length > 0) {
             setPornMovies(list)
           } else if (searchQuery.trim()) {
-            setPornMovies([])
-          } else if (pornMovies.length === 0) {
+            const q = searchQuery.trim().toLowerCase()
+            const filtered = getInitialMovies().filter(
+              (v) =>
+                v.title.toLowerCase().includes(q) ||
+                (v.description && v.description.toLowerCase().includes(q)) ||
+                (v.categories &&
+                  Array.isArray(v.categories) &&
+                  v.categories.some((c: any) =>
+                    (typeof c === 'string' ? c : c?.name)?.toLowerCase().includes(q),
+                  )),
+            )
+            setPornMovies(filtered)
+            setTotalVideos(filtered.length)
+            setTotalPages(1)
+          } else {
             const fallback = getInitialMovies()
-            setPornMovies(fallback)
-            setTotalVideos(fallback.length)
+            if (selectedCategory && selectedCategory !== 'All') {
+              const catLower = selectedCategory.toLowerCase()
+              const matched = fallback.filter(
+                (v) =>
+                  v.categories &&
+                  Array.isArray(v.categories) &&
+                  v.categories.some((c: any) =>
+                    (typeof c === 'string' ? c : c?.name)?.toLowerCase().includes(catLower),
+                  ),
+              )
+              const listToUse = matched.length > 0 ? matched : fallback
+              setPornMovies(listToUse)
+              setTotalVideos(listToUse.length)
+            } else {
+              setPornMovies(fallback)
+              setTotalVideos(fallback.length)
+            }
             setTotalPages(1)
           }
         }
       } catch {
-        if (active && pornMovies.length === 0) {
+        if (active) {
           const fallback = getInitialMovies()
-          setPornMovies(fallback)
-          setTotalVideos(fallback.length)
+          if (selectedCategory && selectedCategory !== 'All') {
+            const catLower = selectedCategory.toLowerCase()
+            const matched = fallback.filter(
+              (v) =>
+                v.categories &&
+                Array.isArray(v.categories) &&
+                v.categories.some((c: any) =>
+                  (typeof c === 'string' ? c : c?.name)?.toLowerCase().includes(catLower),
+                ),
+            )
+            const listToUse = matched.length > 0 ? matched : fallback
+            setPornMovies(listToUse)
+            setTotalVideos(listToUse.length)
+          } else {
+            setPornMovies(fallback)
+            setTotalVideos(fallback.length)
+          }
           setTotalPages(1)
         }
       } finally {
@@ -16383,29 +16715,22 @@ function LordPhubSection({
 
   const handlePlayMovie = async (movie: Movie) => {
     if (isEporner) {
-      const cleanId = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub-/, '')
+      const cleanId = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub1-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub1-|^phub-/, '')
       const embedUrl = movie.embedUrl || `https://www.eporner.com/embed/${cleanId}/`
       onPlay({ ...movie, embedUrl })
       return
     }
-    if (movie.embedUrl) {
-      onPlay(movie)
+    if (isXvid) {
+      const cleanId = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub1-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub1-|^phub-/, '')
+      const embedUrl = movie.embedUrl || `https://upload18.net/play/index/xvidapi-${cleanId}`
+      onPlay({ ...movie, embedUrl })
       return
     }
-    try {
-      const slug = movie.hentaiSlug?.replace(/^phub3-|^phub2-|^phub-/, '') || movie.id.replace(/^phub3-|^phub2-|^phub-/, '')
-      const detail = await fetchPornApiMovieDetail(slug)
-      const embedUrl =
-        detail?.episodes?.[0]?.sources?.[0]?.embed_url ||
-        detail?.episodes?.[0]?.sources?.[0]?.m3u8_url
-      if (embedUrl) {
-        onPlay({ ...movie, embedUrl })
-      } else {
-        onPlay(movie)
-      }
-    } catch {
-      onPlay(movie)
-    }
+    const poster = movie.poster || movie.hero || ''
+    const embedUrl = (movie.embedUrl && !movie.embedUrl.includes('upload18.net'))
+      ? movie.embedUrl
+      : `/phub1-player.html?title=${encodeURIComponent(movie.title)}&poster=${encodeURIComponent(poster)}`
+    onPlay({ ...movie, embedUrl })
   }
 
   const heroItem = rotatedVideos.length > 0 ? rotatedVideos[0] : null
@@ -16416,7 +16741,7 @@ function LordPhubSection({
     ? 'PHub 3 · Eporner HD'
     : isXvid
       ? 'PHub 2 · Upload18'
-      : 'PHub 1 · Under Development'
+      : 'PHub 1 · 4K Fast Player'
 
   return (
     <div className="jav-container">
@@ -16432,17 +16757,6 @@ function LordPhubSection({
         </div>
       ) : (
         <>
-          {serverMode === 'pornapi' && (
-            <div className="phub1-dev-notice" role="status">
-              <div className="phub1-dev-badge">
-                <Sparkles size={13} />
-                <span>Under Development</span>
-              </div>
-              <p className="phub1-dev-text">
-                <strong>PHub 1</strong> is currently under development while high-speed 4K streaming is being optimized. You can browse titles below, or switch to <strong>PHub 2</strong>, <strong>PHub 3</strong>, or <strong>JAV</strong> for full instant playback.
-              </p>
-            </div>
-          )}
 
           {!isSearching && heroMovie && (
             <div className="lord-hero" style={{ marginBottom: 28 }}>
@@ -16587,7 +16901,7 @@ function LordPhubSection({
                         const target = event.target as HTMLImageElement
                         target.onerror = null
                         target.src =
-                          'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
+                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80'
                       }}
                     />
                     <span className="jav-hd-badge">{video.quality || '4K'}</span>

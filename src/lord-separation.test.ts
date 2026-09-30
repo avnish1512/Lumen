@@ -202,4 +202,42 @@ describe('Lord Section Separation from Apple and Netflix UI', () => {
     const url = buildStreamUrl(genuinePhub2Movie, 'upload18')
     expect(url).toBe('https://upload18.net/play/index/xvidapi-73341265')
   })
+
+  it('preserves Lord PHub 1 videos, does NOT identify them as PHub 2, and resolves to phub1-player', () => {
+    const phub1Movie: Movie = {
+      id: 'phub1-101',
+      title: 'Late Night Tokyo Glamour Session - 4K Ultra HD',
+      rank: 1,
+      logoTitle: '4K',
+      type: 'PHub Video',
+      genres: ['Asian', 'HD'],
+      year: '2026',
+      runtime: '28:45',
+      rating: '★ 4.9',
+      maturity: '18+',
+      progress: 0,
+      hero: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
+      poster: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
+      still: '',
+      synopsis: 'Exclusive 4K cinematic glamour session',
+      cast: ['Yuki Mori'],
+      director: 'PHub 1',
+      awards: '4K',
+      boxOffice: '',
+      ratings: [],
+      label: 'PHub 1',
+      hentaiSlug: 'phub1-101',
+    }
+
+    expect(isPhub1Movie(phub1Movie)).toBe(true)
+    expect(isPhub2Movie(phub1Movie)).toBe(false)
+    expect(isPhub3Movie(phub1Movie)).toBe(false)
+    expect(isPhubMovie(phub1Movie)).toBe(true)
+    expect(isLordAdultMovie(phub1Movie)).toBe(true)
+
+    const url = buildStreamUrl(phub1Movie, 'phubplay')
+    expect(url).toContain('/phub1-player.html')
+    expect(url).not.toContain('upload18.net')
+    expect(url).not.toContain('xvidapi')
+  })
 })

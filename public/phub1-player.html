@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PHub 1 · 4K Fast Player</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #fff;
+    }
+    .player-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #07080a;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      outline: none;
+    }
+    /* Controls Overlay */
+    .controls-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px 24px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.85) 100%);
+      opacity: 1;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .controls-overlay.is-hidden {
+      opacity: 0;
+      cursor: none;
+    }
+    .controls-overlay > * {
+      pointer-events: auto;
+    }
+    /* Top Bar */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .video-title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 80%;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+    }
+    .badge-4k {
+      background: rgba(255, 180, 0, 0.2);
+      border: 1px solid rgba(255, 180, 0, 0.5);
+      color: #ffb400;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    /* Center Play/Pause button */
+    .center-button {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: rgba(20, 20, 25, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1.5px solid rgba(255, 255, 255, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.15s ease;
+      color: #fff;
+    }
+    .center-button:hover {
+      transform: translate(-50%, -50%) scale(1.1);
+      background: rgba(255, 180, 0, 0.85);
+      color: #000;
+    }
+    /* Bottom Bar */
+    .bottom-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .progress-bar-wrap {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+      transition: height 0.15s ease;
+    }
+    .progress-bar-wrap:hover {
+      height: 9px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #ffb400;
+      border-radius: 3px;
+      width: 0%;
+      position: relative;
+    }
+    .progress-bar-fill::after {
+      content: '';
+      position: absolute;
+      right: -5px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 6px rgba(0,0,0,0.5);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .progress-bar-wrap:hover .progress-bar-fill::after {
+      opacity: 1;
+    }
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .left-controls, .right-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .btn-icon {
+      background: transparent;
+      border: 0;
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s ease, transform 0.1s ease;
+    }
+    .btn-icon:hover {
+      color: #ffb400;
+      transform: scale(1.1);
+    }
+    .time-display {
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      color: rgba(255, 255, 255, 0.85);
+      font-weight: 500;
+    }
+    .volume-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .volume-slider {
+      width: 70px;
+      height: 4px;
+      appearance: none;
+      -webkit-appearance: none;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    .volume-slider::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ffb400;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="player-wrapper" id="playerWrap">
+    <video
+      id="videoPlayer"
+      playsinline
+      crossorigin="anonymous"
+      preload="auto"
+    ></video>
+
+    <div class="controls-overlay" id="controlsOverlay">
+      <!-- Top Title -->
+      <div class="top-bar">
+        <div class="video-title" id="videoTitle">PHub 1 Video</div>
+        <div class="badge-4k">PHub 1 · 4K Fast Player</div>
+      </div>
+
+      <!-- Center Play/Pause -->
+      <button class="center-button" id="centerBtn" aria-label="Play/Pause">
+        <svg id="centerPlayIcon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <svg id="centerPauseIcon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" style="display:none;">
+          <rect x="6" y="4" width="4" height="16"></rect>
+          <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+      </button>
+
+      <!-- Bottom Controls -->
+      <div class="bottom-bar">
+        <div class="progress-bar-wrap" id="progressWrap">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+
+        <div class="controls-row">
+          <div class="left-controls">
+            <button class="btn-icon" id="playPauseBtn" title="Play (Space)">
+              <svg id="playIcon" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <svg id="pauseIcon" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display:none;">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+              </svg>
+            </button>
+
+            <div class="volume-wrap">
+              <button class="btn-icon" id="muteBtn" title="Mute (M)">
+                <svg id="volHighIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                </svg>
+                <svg id="volMuteIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <line x1="23" y1="9" x2="17" y2="15"></line>
+                  <line x1="17" y1="9" x2="23" y2="15"></line>
+                </svg>
+              </button>
+              <input type="range" class="volume-slider" id="volSlider" min="0" max="1" step="0.05" value="1" />
+            </div>
+
+            <div class="time-display">
+              <span id="currentTime">0:00</span> / <span id="duration">0:00</span>
+            </div>
+          </div>
+
+          <div class="right-controls">
+            <button class="btn-icon" id="fsBtn" title="Fullscreen (F)">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const title = params.get('title') || 'PHub 1 · 4K Fast Video';
+      const poster = params.get('poster') || '';
+      const videoSrc = params.get('video') || '/loading.mp4';
+
+      const video = document.getElementById('videoPlayer');
+      const titleEl = document.getElementById('videoTitle');
+      const overlay = document.getElementById('controlsOverlay');
+      const centerBtn = document.getElementById('centerBtn');
+      const centerPlayIcon = document.getElementById('centerPlayIcon');
+      const centerPauseIcon = document.getElementById('centerPauseIcon');
+      const playPauseBtn = document.getElementById('playPauseBtn');
+      const playIcon = document.getElementById('playIcon');
+      const pauseIcon = document.getElementById('pauseIcon');
+      const progressWrap = document.getElementById('progressWrap');
+      const progressFill = document.getElementById('progressFill');
+      const currentTimeEl = document.getElementById('currentTime');
+      const durationEl = document.getElementById('duration');
+      const muteBtn = document.getElementById('muteBtn');
+      const volHighIcon = document.getElementById('volHighIcon');
+      const volMuteIcon = document.getElementById('volMuteIcon');
+      const volSlider = document.getElementById('volSlider');
+      const fsBtn = document.getElementById('fsBtn');
+      const playerWrap = document.getElementById('playerWrap');
+
+      titleEl.textContent = title;
+      if (poster) video.poster = poster;
+      video.src = videoSrc;
+
+      function formatTime(s) {
+        if (!s || isNaN(s)) return '0:00';
+        const mins = Math.floor(s / 60);
+        const secs = Math.floor(s % 60);
+        return mins + ':' + (secs < 10 ? '0' : '') + secs;
+      }
+
+      function updatePlayState() {
+        const isPaused = video.paused;
+        playIcon.style.display = isPaused ? 'block' : 'none';
+        pauseIcon.style.display = isPaused ? 'none' : 'block';
+        centerPlayIcon.style.display = isPaused ? 'block' : 'none';
+        centerPauseIcon.style.display = isPaused ? 'none' : 'block';
+      }
+
+      function togglePlay() {
+        if (video.paused) {
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+        updatePlayState();
+      }
+
+      centerBtn.addEventListener('click', togglePlay);
+      playPauseBtn.addEventListener('click', togglePlay);
+      video.addEventListener('click', togglePlay);
+      video.addEventListener('play', updatePlayState);
+      video.addEventListener('pause', updatePlayState);
+
+      video.addEventListener('timeupdate', function() {
+        if (video.duration) {
+          const pct = (video.currentTime / video.duration) * 100;
+          progressFill.style.width = pct + '%';
+          currentTimeEl.textContent = formatTime(video.currentTime);
+        }
+      });
+
+      video.addEventListener('loadedmetadata', function() {
+        durationEl.textContent = formatTime(video.duration);
+      });
+
+      progressWrap.addEventListener('click', function(e) {
+        const rect = progressWrap.getBoundingClientRect();
+        const pos = (e.clientX - rect.left) / rect.width;
+        video.currentTime = pos * (video.duration || 0);
+      });
+
+      volSlider.addEventListener('input', function(e) {
+        video.volume = parseFloat(e.target.value);
+        video.muted = video.volume === 0;
+        volHighIcon.style.display = video.muted ? 'none' : 'block';
+        volMuteIcon.style.display = video.muted ? 'block' : 'none';
+      });
+
+      muteBtn.addEventListener('click', function() {
+        video.muted = !video.muted;
+        volHighIcon.style.display = video.muted ? 'none' : 'block';
+        volMuteIcon.style.display = video.muted ? 'block' : 'none';
+        if (!video.muted && video.volume === 0) {
+          video.volume = 0.5;
+          volSlider.value = 0.5;
+        }
+      });
+
+      fsBtn.addEventListener('click', function() {
+        if (!document.fullscreenElement) {
+          playerWrap.requestFullscreen?.().catch(() => {});
+        } else {
+          document.exitFullscreen?.().catch(() => {});
+        }
+      });
+
+      let hideTimer = null;
+      function showControls() {
+        overlay.classList.remove('is-hidden');
+        clearTimeout(hideTimer);
+        if (!video.paused) {
+          hideTimer = setTimeout(() => overlay.classList.add('is-hidden'), 2500);
+        }
+      }
+
+      playerWrap.addEventListener('mousemove', showControls);
+      playerWrap.addEventListener('touchstart', showControls);
+
+      window.addEventListener('keydown', function(e) {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          togglePlay();
+        } else if (e.code === 'ArrowRight') {
+          video.currentTime = Math.min((video.duration || 0), video.currentTime + 5);
+        } else if (e.code === 'ArrowLeft') {
+          video.currentTime = Math.max(0, video.currentTime - 5);
+        } else if (e.code === 'KeyM') {
+          muteBtn.click();
+        } else if (e.code === 'KeyF') {
+          fsBtn.click();
+        }
+      });
+
+      // Auto play attempt
+      video.play().catch(() => {
+        updatePlayState();
+      });
+    })();
+  </script>
+</body>
+</html>
