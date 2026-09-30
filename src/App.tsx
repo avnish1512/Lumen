@@ -2066,6 +2066,62 @@ function extractFranchisePrefix(title: string): string {
   return clean.length >= 3 ? clean : title.trim().toLowerCase()
 }
 
+export function calculatePhubRelevanceScore(candidate: Movie, current: Movie): number {
+  if (!candidate || !current || candidate.id === current.id) return -9999
+  let score = 0
+
+  // 1. Cast / Actor match (+60 points each)
+  const currentActors = (current.cast || [])
+    .map((a) => a.toLowerCase().trim())
+    .filter((a) => a && a !== 'unknown' && a !== 'phub' && a !== 'eporner' && a !== 'jav')
+  const candidateActors = (candidate.cast || [])
+    .map((a) => a.toLowerCase().trim())
+    .filter((a) => a && a !== 'unknown' && a !== 'phub' && a !== 'eporner' && a !== 'jav')
+  for (const act of candidateActors) {
+    if (currentActors.includes(act)) score += 60
+  }
+
+  // 2. Meaningful Title Word matches (+30 points each)
+  const stopWords = new Set([
+    'the', 'and', 'with', 'from', 'for', 'part', 'episode', 'series', 'video',
+    'full', 'watch', 'online', 'free', 'best', 'new', 'official', 'ultra', 'clip',
+    'scenes', 'has', 'her', 'his', 'their', 'she', 'just', 'turned', 'little', 'who',
+    'this', 'that', 'you', 'are', 'was', 'not', 'out', 'all', 'hd', '4k'
+  ])
+  const getWords = (str: string) =>
+    (str || '')
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !stopWords.has(w))
+
+  const currentWords = getWords(current.title)
+  const candidateWords = getWords(candidate.title)
+  for (const w of candidateWords) {
+    if (currentWords.includes(w)) {
+      score += 30
+    }
+  }
+
+  // 3. Category / Genre match (+20 points each)
+  const currentGenres = (current.genres || []).map((g) => g.toLowerCase().trim()).filter(Boolean)
+  const candidateGenres = (candidate.genres || []).map((g) => g.toLowerCase().trim()).filter(Boolean)
+  for (const g of candidateGenres) {
+    if (currentGenres.includes(g)) {
+      score += 20
+    }
+  }
+
+  // 4. Exact Category Match in title (+10 points)
+  for (const g of currentGenres) {
+    if (candidate.title.toLowerCase().includes(g)) {
+      score += 10
+    }
+  }
+
+  return score
+}
+
 async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
   if (!movie) return []
 
@@ -2090,10 +2146,10 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
         .filter((w) => w.length > 2 && !['the', 'and', 'with', 'from', 'for', 'hd', 'video'].includes(w.toLowerCase()))
         .slice(0, 2)
         .join(' ')
-      const query = actor || (genre && genre !== 'PHub 3' && genre !== 'HD Video' ? genre : '') || titleWords || 'all'
+      const query = actor || titleWords || (genre && genre !== 'PHub 3' && genre !== 'HD Video' ? genre : '') || 'all'
       const data = await fetchEpornerApi({
         query,
-        per_page: 12,
+        per_page: 16,
         order: 'most-popular',
         thumbsize: 'big',
       })
@@ -2101,16 +2157,12 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
         return data.videos
           .map(epornerToMovieHelper)
           .filter((m: Movie) => m.id !== movie.id)
+          .sort((a: Movie, b: Movie) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
       }
     } catch {}
-    const currentKeywords = (movie.genres || []).map((g) => g.toLowerCase())
     return EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
       .filter((m) => m.id !== movie.id)
-      .sort((a, b) => {
-        const aMatches = (a.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
-        const bMatches = (b.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
-        return bMatches - aMatches
-      })
+      .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
   }
 
   // 2. PHub 2 (XVidAPI / Upload18)
@@ -2124,7 +2176,7 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
         .filter((w) => w.length > 2 && !['the', 'and', 'with', 'from', 'for', 'hd', 'video'].includes(w.toLowerCase()))
         .slice(0, 2)
         .join(' ')
-      const query = actor || (genre && genre !== 'PHub' && genre !== 'PHub 2' && genre !== '4K' ? genre : '') || titleWords || 'teen'
+      const query = actor || titleWords || (genre && genre !== 'PHub' && genre !== 'PHub 2' && genre !== '4K' ? genre : '') || 'teen'
       const res = await fetch(`https://xvidapi.com/api.php/provide/vod?ac=detail&at=json&wd=${encodeURIComponent(query)}`)
       if (res.ok) {
         const data = await res.json()
@@ -2132,17 +2184,13 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
           return data.list
             .map((item: any, idx: number) => hanimeToMovieHelper(normalizeVideoItem(item, idx)))
             .filter((m: Movie) => m.id !== movie.id)
+            .sort((a: Movie, b: Movie) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
         }
       }
     } catch {}
-    const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
     return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
       .filter((m) => m.id !== movie.id)
-      .sort((a, b) => {
-        const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
-        const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
-        return bMatches - aMatches
-      })
+      .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
   }
 
   // 3. PHub 1 (Porn API 4K)
@@ -2161,6 +2209,7 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
         return list
           .map((item) => pornApiToMovieHelper(item))
           .filter((m) => m.id !== movie.id)
+          .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
       }
     } catch {}
   }
@@ -3299,6 +3348,13 @@ function App() {
     phub3: '',
     jav: '',
   })
+  const [lordTabPages, setLordTabPages] = useState<Record<LordTab, number>>({
+    collection: 1,
+    phub: 1,
+    phub2: 1,
+    phub3: 1,
+    jav: 1,
+  })
 
   const isHentaiSelectedMovie = Boolean(
     selectedMovie &&
@@ -3364,6 +3420,51 @@ function App() {
                 ? 'Anime'
                 : 'Movies'
 
+  const lastScrollPositionsRef = useRef<Record<string, number>>({})
+
+  const getScrollPosition = useCallback((): number => {
+    return (
+      appShellRef.current?.scrollTop ||
+      document.getElementById('root')?.scrollTop ||
+      window.scrollY ||
+      document.documentElement?.scrollTop ||
+      document.body?.scrollTop ||
+      0
+    )
+  }, [])
+
+  const restoreScrollPosition = useCallback((top: number) => {
+    if (top <= 0) return
+    const applyScroll = () => {
+      const shell = appShellRef.current
+      if (shell) {
+        if (typeof shell.scrollTo === 'function') shell.scrollTo({ top, behavior: 'auto' })
+        shell.scrollTop = top
+      }
+      const root = document.getElementById('root')
+      if (root) {
+        if (typeof root.scrollTo === 'function') root.scrollTo({ top, behavior: 'auto' })
+        root.scrollTop = top
+      }
+      if (document.documentElement) {
+        if (typeof document.documentElement.scrollTo === 'function') document.documentElement.scrollTo({ top, behavior: 'auto' })
+        document.documentElement.scrollTop = top
+      }
+      if (document.body) {
+        if (typeof document.body.scrollTo === 'function') document.body.scrollTo({ top, behavior: 'auto' })
+        document.body.scrollTop = top
+      }
+      if (typeof window.scrollTo === 'function') {
+        window.scrollTo({ top, behavior: 'auto' })
+      }
+    }
+    applyScroll()
+    window.requestAnimationFrame(applyScroll)
+    setTimeout(applyScroll, 40)
+    setTimeout(applyScroll, 120)
+    setTimeout(applyScroll, 300)
+  }, [])
+
   const resetScroll = useCallback(() => {
     const shell = appShellRef.current
     if (shell) {
@@ -3397,10 +3498,17 @@ function App() {
   }, [])
 
   const setScreen = useCallback(
-    (nextScreen: Screen, options?: { replace?: boolean; movie?: Movie | null }) => {
+    (nextScreen: Screen, options?: { replace?: boolean; movie?: Movie | null; restoreScroll?: boolean }) => {
+      const savedScroll = lastScrollPositionsRef.current[nextScreen]
+      const shouldRestore = Boolean(options?.restoreScroll && typeof savedScroll === 'number' && savedScroll > 0)
+
       if (nextScreen === screen && !options?.movie) {
-        resetScroll()
-        window.requestAnimationFrame(resetScroll)
+        if (shouldRestore) {
+          restoreScrollPosition(savedScroll)
+        } else {
+          resetScroll()
+          window.requestAnimationFrame(resetScroll)
+        }
         return
       }
 
@@ -3462,10 +3570,14 @@ function App() {
 
       notifyNativeNavState(historyIndexRef.current > 0, nextScreen)
 
-      resetScroll()
-      window.requestAnimationFrame(resetScroll)
+      if (shouldRestore) {
+        restoreScrollPosition(savedScroll)
+      } else {
+        resetScroll()
+        window.requestAnimationFrame(resetScroll)
+      }
     },
-    [screen, selectedMovie, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, resetScroll],
+    [screen, selectedMovie, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, resetScroll, restoreScrollPosition],
   )
 
   const openProfileOrLogin = () => {
@@ -4251,6 +4363,12 @@ function App() {
 
   const openWatch = useCallback(
     (movie: Movie) => {
+      if (screen !== 'watch') {
+        const currentScroll = getScrollPosition()
+        if (currentScroll > 0) {
+          lastScrollPositionsRef.current[screen] = currentScroll
+        }
+      }
       const safeMovie = sanitizeMovieEmbed(normalizeMovie(movie))
       const isAdultOrLord = isLordAdultMovie(safeMovie) || screen === 'lord'
       const backTo = isAdultOrLord
@@ -4443,8 +4561,13 @@ function App() {
         } catch {}
 
         notifyNativeNavState(historyIndexRef.current > 0, state.screen)
-        resetScroll()
-        window.requestAnimationFrame(resetScroll)
+        const savedScroll = lastScrollPositionsRef.current[state.screen]
+        if (typeof savedScroll === 'number' && savedScroll > 0) {
+          restoreScrollPosition(savedScroll)
+        } else {
+          resetScroll()
+          window.requestAnimationFrame(resetScroll)
+        }
       } else {
         const hash = window.location.hash.replace(/^#/, '') as Screen
         const validScreens: Screen[] = [
@@ -4485,8 +4608,9 @@ function App() {
         } else if (screen === 'watch' && selectedMovie) {
           // If popped from watch and state is null (e.g. iframe history pop), restore lord for adult or detail!
           if (watchBackScreen === 'lord' || isLordAdultMovie(selectedMovie)) {
-            setScreenState('lord')
+            setScreen('lord', { restoreScroll: true })
             notifyNativeNavState(true, 'lord')
+            return
           } else {
             setScreenState('detail')
             void hydrateMovie(selectedMovie)
@@ -4503,7 +4627,7 @@ function App() {
 
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [screen, selectedMovie, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, hydrateMovie, hydrateStreamingMovie, markContinueWatching, resetScroll])
+  }, [screen, selectedMovie, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, hydrateMovie, hydrateStreamingMovie, markContinueWatching, resetScroll, setScreen])
 
   // Expose hardware back handler for mobile shells (ExpoWebShell / React Native WebView)
   useEffect(() => {
@@ -4511,11 +4635,11 @@ function App() {
     ;(window as any).__handleLumenBack = () => {
       if (screen === 'watch') {
         if (watchBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
-          setScreen('lord')
+          setScreen('lord', { restoreScroll: true })
         } else if (selectedMovie) {
           openDetail(selectedMovie)
         } else if (detailBackScreen && detailBackScreen !== 'watch') {
-          setScreen(detailBackScreen)
+          setScreen(detailBackScreen, { restoreScroll: true })
         } else {
           setScreen('home')
         }
@@ -4524,11 +4648,11 @@ function App() {
 
       if (screen === 'detail') {
         if (detailBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
-          setScreen('lord')
+          setScreen('lord', { restoreScroll: true })
         } else if (detailBackScreen && detailBackScreen !== 'detail' && detailBackScreen !== 'watch') {
-          setScreen(detailBackScreen)
+          setScreen(detailBackScreen, { restoreScroll: true })
         } else {
-          setScreen('home')
+          setScreen('home', { restoreScroll: true })
         }
         return true
       }
@@ -5483,9 +5607,9 @@ function App() {
             error={detailError}
             onBack={() => {
               if (detailBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
-                setScreen('lord')
+                setScreen('lord', { restoreScroll: true })
               } else if (detailBackScreen && detailBackScreen !== 'detail' && detailBackScreen !== 'watch') {
-                setScreen(detailBackScreen)
+                setScreen(detailBackScreen, { restoreScroll: true })
               } else {
                 setScreen('home')
               }
@@ -5543,11 +5667,11 @@ function App() {
             streamSandboxEnabled={streamSandboxEnabled}
             onBack={() => {
               if (watchBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
-                setScreen('lord')
+                setScreen('lord', { restoreScroll: true })
               } else if (selectedMovie) {
                 openDetail(selectedMovie)
               } else if (detailBackScreen && detailBackScreen !== 'watch') {
-                setScreen(detailBackScreen)
+                setScreen(detailBackScreen, { restoreScroll: true })
               } else {
                 setScreen('home')
               }
@@ -5791,6 +5915,9 @@ function App() {
             onTabChange={setActiveLordTab}
             tabQueries={lordTabQueries}
             onTabQueriesChange={setLordTabQueries}
+            tabPages={lordTabPages}
+            onTabPageChange={(tab, p) => setLordTabPages((prev) => ({ ...prev, [tab]: p }))}
+            savedScroll={lastScrollPositionsRef.current['lord']}
             onOpenDetail={openWatch}
             onPlay={openWatch}
             onSelectProfile={switchToProfile}
@@ -8774,6 +8901,56 @@ function WatchScreen({
     let active = true
     async function loadPhubRelated() {
       try {
+        if (isPhub2Video) {
+          const actor = movie.cast?.[0]?.trim()
+          const genre = movie.genres?.[0]?.trim()
+          const titleWords = (movie.title || '')
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter((w) => w.length > 2 && !['the', 'and', 'with', 'from', 'for', 'hd', 'video', 'full'].includes(w.toLowerCase()))
+            .slice(0, 2)
+            .join(' ')
+          const query = actor || titleWords || (genre && genre !== 'PHub' && genre !== 'PHub 2' && genre !== '4K' ? genre : '') || 'teen'
+          const res = await fetch(`https://xvidapi.com/api.php/provide/vod?ac=detail&at=json&wd=${encodeURIComponent(query)}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (active && Array.isArray(data.list) && data.list.length > 0) {
+              setPhubRelated(
+                data.list
+                  .map((item: any, idx: number) => hanimeToMovieHelper(normalizeVideoItem(item, idx)))
+                  .filter((m: Movie) => m.id !== movie.id)
+                  .sort((a: Movie, b: Movie) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
+              )
+              return
+            }
+          }
+        }
+        if (isPhub3Video) {
+          const actor = movie.cast?.[0]?.trim()
+          const genre = movie.genres?.[0]?.trim()
+          const titleWords = (movie.title || '')
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter((w) => w.length > 2 && !['the', 'and', 'with', 'from', 'for', 'hd', 'video', 'full'].includes(w.toLowerCase()))
+            .slice(0, 2)
+            .join(' ')
+          const query = actor || titleWords || (genre && genre !== 'PHub 3' && genre !== 'HD Video' ? genre : '') || 'all'
+          const data = await fetchEpornerApi({
+            query,
+            per_page: 16,
+            order: 'most-popular',
+            thumbsize: 'big',
+          })
+          if (active && data && Array.isArray(data.videos) && data.videos.length > 0) {
+            setPhubRelated(
+              data.videos
+                .map(epornerToMovieHelper)
+                .filter((m: Movie) => m.id !== movie.id)
+                .sort((a: Movie, b: Movie) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
+            )
+            return
+          }
+        }
         const cat = movie.genres?.[0]
         const catSlug = cat ? cat.toLowerCase().replace(/\s+/g, '-') : 'amateur'
         const json = await fetchPornApi(`/categories/${encodeURIComponent(catSlug)}/movies`, { page: 1, limit: 12 })
@@ -8781,7 +8958,12 @@ function WatchScreen({
           const payload = json?.data || json
           const list: PornApiMovieItem[] = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : []
           if (active && list.length > 0) {
-            setPhubRelated(list.map((item) => pornApiToMovieHelper(item)).filter((m) => m.id !== movie.id))
+            setPhubRelated(
+              list
+                .map((item) => pornApiToMovieHelper(item))
+                .filter((m) => m.id !== movie.id)
+                .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
+            )
           }
         }
       } catch {}
@@ -8790,7 +8972,7 @@ function WatchScreen({
     return () => {
       active = false
     }
-  }, [isPhubVideo, movie.id, movie.genres])
+  }, [isPhubVideo, isPhub2Video, isPhub3Video, movie.id, movie.title, movie.cast, movie.genres])
 
   const [liveRelated, setLiveRelated] = useState<Movie[]>([])
 
@@ -8907,15 +9089,8 @@ function WatchScreen({
 
     // 2. PHub (PHub 1, PHub 2, PHub 3) related recommendations
     if (isPhub3Video) {
-      const currentKeywords = (movie.genres || []).map((g) => g.toLowerCase())
-      const fallback = EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
-        .filter((m) => m.id !== movie.id)
-        .sort((a, b) => {
-          const aMatches = (a.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
-          const bMatches = (b.genres || []).filter((g) => currentKeywords.includes(g.toLowerCase())).length
-          return bMatches - aMatches
-        })
-      const pool = [...liveRelated.filter((m) => isPhub3Movie(m) && m.id !== movie.id), ...fallback]
+      const fallback = EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper).filter((m) => m.id !== movie.id)
+      const pool = [...phubRelated, ...liveRelated.filter((m) => isPhub3Movie(m) && m.id !== movie.id), ...fallback]
       const seen = new Set<string>()
       const result: Movie[] = []
       for (const item of pool) {
@@ -8924,19 +9099,14 @@ function WatchScreen({
           result.push(item)
         }
       }
-      return result.slice(0, 18)
+      return result
+        .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
+        .slice(0, 18)
     }
 
     if (isPhub2Video) {
-      const currentGenres = (movie.genres || []).map((g) => g.toLowerCase())
-      const fallback = INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
-        .filter((m) => m.id !== movie.id)
-        .sort((a, b) => {
-          const aMatches = (a.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
-          const bMatches = (b.genres || []).filter((g) => currentGenres.includes(g.toLowerCase())).length
-          return bMatches - aMatches
-        })
-      const pool = [...liveRelated.filter((m) => isPhub2Movie(m) && m.id !== movie.id), ...fallback]
+      const fallback = INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper).filter((m) => m.id !== movie.id)
+      const pool = [...phubRelated, ...liveRelated.filter((m) => isPhub2Movie(m) && m.id !== movie.id), ...fallback]
       const seen = new Set<string>()
       const result: Movie[] = []
       for (const item of pool) {
@@ -8945,11 +9115,14 @@ function WatchScreen({
           result.push(item)
         }
       }
-      return result.slice(0, 18)
+      return result
+        .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
+        .slice(0, 18)
     }
 
     if (isPhub1Video || isPhubVideo) {
-      const pool = [...phubRelated, ...liveRelated.filter((m) => isPhubMovie(m) && m.id !== movie.id)]
+      const fallback = INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper).filter((m) => m.id !== movie.id)
+      const pool = [...phubRelated, ...liveRelated.filter((m) => isPhubMovie(m) && m.id !== movie.id), ...fallback]
       const seen = new Set<string>()
       const result: Movie[] = []
       for (const item of pool) {
@@ -8958,10 +9131,9 @@ function WatchScreen({
           result.push(item)
         }
       }
-      if (result.length > 0) {
-        return result.slice(0, 18)
-      }
-      return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper).filter((m) => m.id !== movie.id).slice(0, 18)
+      return result
+        .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
+        .slice(0, 18)
     }
 
     // 3. Live related videos from provider / AniList / TMDB
@@ -15120,6 +15292,9 @@ type LordScreenProps = {
   onTabChange?: (tab: LordTab) => void
   tabQueries?: Record<LordTab, string>
   onTabQueriesChange?: React.Dispatch<React.SetStateAction<Record<LordTab, string>>>
+  tabPages?: Record<LordTab, number>
+  onTabPageChange?: (tab: LordTab, page: number) => void
+  savedScroll?: number
   onOpenDetail?: (movie: Movie) => void
   onPlay: (movie: Movie) => void
   onSelectProfile?: (name: string) => void
@@ -15153,6 +15328,9 @@ function LordScreen({
   onTabChange,
   tabQueries: tabQueriesProp,
   onTabQueriesChange,
+  tabPages: tabPagesProp,
+  onTabPageChange,
+  savedScroll,
   onOpenDetail,
   onPlay,
   onSelectProfile: _onSelectProfile,
@@ -15192,6 +15370,41 @@ function LordScreen({
   })
   const tabQueries = tabQueriesProp ?? internalTabQueries
   const setTabQueries = onTabQueriesChange ?? setInternalTabQueries
+  const [internalTabPages, setInternalTabPages] = useState<Record<LordTab, number>>({
+    collection: 1,
+    phub: 1,
+    phub2: 1,
+    phub3: 1,
+    jav: 1,
+  })
+  const tabPages = tabPagesProp ?? internalTabPages
+  const handleTabPageChange = (tab: LordTab, pageNum: number) => {
+    setInternalTabPages((prev) => ({ ...prev, [tab]: pageNum }))
+    onTabPageChange?.(tab, pageNum)
+  }
+
+  useEffect(() => {
+    if (savedScroll && savedScroll > 0) {
+      const applyScroll = () => {
+        if (typeof window.scrollTo === 'function') {
+          window.scrollTo({ top: savedScroll, behavior: 'auto' })
+        }
+        if (document.documentElement) document.documentElement.scrollTop = savedScroll
+        if (document.body) document.body.scrollTop = savedScroll
+        const shell = document.querySelector('.app-shell') as HTMLElement
+        if (shell) shell.scrollTop = savedScroll
+      }
+      applyScroll()
+      const t1 = setTimeout(applyScroll, 40)
+      const t2 = setTimeout(applyScroll, 140)
+      const t3 = setTimeout(applyScroll, 320)
+      return () => {
+        clearTimeout(t1)
+        clearTimeout(t2)
+        clearTimeout(t3)
+      }
+    }
+  }, [savedScroll])
   const isAdmin = currentUser?.email?.toLowerCase() === 'avnishpc00@gmail.com'
   const [phubSeed, setPhubSeed] = useState<number>(() => {
     try {
@@ -15487,6 +15700,9 @@ function LordScreen({
         {(visitedJav || activeLordTab === 'jav') && (
           <LordJavSection
             searchQuery={tabQueries.jav}
+            page={tabPages.jav || 1}
+            onPageChange={(p) => handleTabPageChange('jav', p)}
+            savedScroll={savedScroll}
             continueMovies={continueJavMovies}
             savedMovies={savedJavMovies}
             onPlay={onPlay}
@@ -15502,6 +15718,9 @@ function LordScreen({
           key="phub-2"
           serverMode="xvidapi"
           searchQuery={tabQueries.phub2}
+          page={tabPages.phub2 || 1}
+          onPageChange={(p) => handleTabPageChange('phub2', p)}
+          savedScroll={savedScroll}
           continueMovies={continuePhub2Movies}
           savedMovies={savedPhub2Movies}
           currentUser={currentUser}
@@ -15517,6 +15736,9 @@ function LordScreen({
           key="phub-3"
           serverMode="eporner"
           searchQuery={tabQueries.phub3}
+          page={tabPages.phub3 || 1}
+          onPageChange={(p) => handleTabPageChange('phub3', p)}
+          savedScroll={savedScroll}
           continueMovies={continuePhub3Movies}
           savedMovies={savedPhub3Movies}
           currentUser={currentUser}
@@ -16442,6 +16664,9 @@ const INITIAL_XVID_VIDEOS: PornApiMovieItem[] = INITIAL_HANIME_VIDEOS.map((norm)
 
 function LordPhubSection({
   searchQuery = '',
+  page: pageProp = 1,
+  onPageChange,
+  savedScroll,
   continueMovies = [],
   savedMovies = [],
   currentUser: _currentUser,
@@ -16454,6 +16679,9 @@ function LordPhubSection({
   serverMode = 'pornapi',
 }: {
   searchQuery?: string
+  page?: number
+  onPageChange?: (page: number) => void
+  savedScroll?: number
   continueMovies?: Movie[]
   savedMovies?: Movie[]
   currentUser?: UserInfo | null
@@ -16468,6 +16696,14 @@ function LordPhubSection({
   const isXvid = serverMode === 'xvidapi'
   const isEporner = serverMode === 'eporner'
   const activeCategories = isEporner ? PHUB3_CATEGORIES : isXvid ? PHUB2_CATEGORIES : PHUB1_CATEGORIES
+
+  const [internalPage, setInternalPage] = useState(pageProp)
+  const page = pageProp ?? internalPage
+  const setPage = (updater: number | ((prev: number) => number)) => {
+    const nextPage = typeof updater === 'function' ? updater(page) : updater
+    setInternalPage(nextPage)
+    onPageChange?.(nextPage)
+  }
 
   const [localPhubSeed, setLocalPhubSeed] = useState<number>(() => {
     try {
@@ -16536,16 +16772,31 @@ function LordPhubSection({
   const [loading, setLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [orderBy, setOrderBy] = useState<'views' | 'date' | 'duration'>('views')
-  const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalVideos, setTotalVideos] = useState(() => getInitialMovies().length)
 
+  const prevCategoryRef = useRef(selectedCategory)
+  const prevOrderByRef = useRef(orderBy)
+  const prevQueryRef = useRef(searchQuery)
+  const prevServerModeRef = useRef(serverMode)
+
   useEffect(() => {
-    setPage(1)
-    if (!searchQuery.trim()) {
-      const init = getInitialMovies()
-      setPornMovies(init)
-      setTotalVideos(init.length)
+    const isCatChange = prevCategoryRef.current !== selectedCategory
+    const isOrdChange = prevOrderByRef.current !== orderBy
+    const isQChange = prevQueryRef.current !== searchQuery
+    const isSrvChange = prevServerModeRef.current !== serverMode
+
+    if (isCatChange || isOrdChange || isQChange || isSrvChange) {
+      prevCategoryRef.current = selectedCategory
+      prevOrderByRef.current = orderBy
+      prevQueryRef.current = searchQuery
+      prevServerModeRef.current = serverMode
+      setPage(1)
+      if (!searchQuery.trim()) {
+        const init = getInitialMovies()
+        setPornMovies(init)
+        setTotalVideos(init.length)
+      }
     }
   }, [serverMode, selectedCategory, orderBy, searchQuery, getInitialMovies])
 
@@ -16799,6 +17050,27 @@ function LordPhubSection({
   const displayVideos = isSearching
     ? (searchResults.length > 0 ? searchResults : pornMovies)
     : rotatedVideos
+
+  useEffect(() => {
+    if (savedScroll && savedScroll > 0 && !loading && displayVideos.length > 0) {
+      const apply = () => {
+        if (typeof window.scrollTo === 'function') {
+          window.scrollTo({ top: savedScroll, behavior: 'auto' })
+        }
+        if (document.documentElement) document.documentElement.scrollTop = savedScroll
+        if (document.body) document.body.scrollTop = savedScroll
+        const shell = document.querySelector('.app-shell') as HTMLElement
+        if (shell) shell.scrollTop = savedScroll
+      }
+      apply()
+      const t1 = setTimeout(apply, 40)
+      const t2 = setTimeout(apply, 120)
+      return () => {
+        clearTimeout(t1)
+        clearTimeout(t2)
+      }
+    }
+  }, [savedScroll, loading, displayVideos.length])
 
   const handlePrevPage = () => {
     if (page > 1) {
@@ -17128,6 +17400,9 @@ const JAV_CATEGORIES = [
 
 function LordJavSection({
   searchQuery = '',
+  page: pageProp = 1,
+  onPageChange,
+  savedScroll,
   continueMovies = [],
   savedMovies = [],
   onPlay,
@@ -17136,6 +17411,9 @@ function LordJavSection({
   onRemoveWatchlist,
 }: {
   searchQuery?: string
+  page?: number
+  onPageChange?: (page: number) => void
+  savedScroll?: number
   continueMovies?: Movie[]
   savedMovies?: Movie[]
   onPlay: (movie: Movie) => void
@@ -17145,7 +17423,30 @@ function LordJavSection({
 }) {
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [orderBy, setOrderBy] = useState<'date' | 'views' | 'title'>('views')
-  const [page, setPage] = useState(1)
+  const [internalPage, setInternalPage] = useState(pageProp)
+  const page = pageProp ?? internalPage
+  const setPage = (updater: number | ((prev: number) => number)) => {
+    const nextPage = typeof updater === 'function' ? updater(page) : updater
+    setInternalPage(nextPage)
+    onPageChange?.(nextPage)
+  }
+
+  const prevCategoryRef = useRef(selectedCategory)
+  const prevOrderByRef = useRef(orderBy)
+  const prevQueryRef = useRef(searchQuery)
+
+  useEffect(() => {
+    const isCatChange = prevCategoryRef.current !== selectedCategory
+    const isOrdChange = prevOrderByRef.current !== orderBy
+    const isQChange = prevQueryRef.current !== searchQuery
+
+    if (isCatChange || isOrdChange || isQChange) {
+      prevCategoryRef.current = selectedCategory
+      prevOrderByRef.current = orderBy
+      prevQueryRef.current = searchQuery
+      setPage(1)
+    }
+  }, [selectedCategory, orderBy, searchQuery])
 
   // Synchronous cache read for instantaneous 0ms perceived latency
   const initialData = useMemo(() => {
@@ -17162,10 +17463,6 @@ function LordJavSection({
   const [error, setError] = useState('')
   const [totalPages, setTotalPages] = useState(initialData?.totalPages || 500)
   const [totalPosts, setTotalPosts] = useState(initialData?.totalPosts || 12000)
-
-  useEffect(() => {
-    setPage(1)
-  }, [selectedCategory, orderBy, searchQuery])
 
   useEffect(() => {
     let active = true
@@ -17233,6 +17530,27 @@ function LordJavSection({
     if (searchQuery.trim()) return posts
     return rotateByDailySeed(posts, (getDailySeed() % 13) + 5)
   }, [posts, searchQuery])
+
+  useEffect(() => {
+    if (savedScroll && savedScroll > 0 && !loading && posts.length > 0) {
+      const apply = () => {
+        if (typeof window.scrollTo === 'function') {
+          window.scrollTo({ top: savedScroll, behavior: 'auto' })
+        }
+        if (document.documentElement) document.documentElement.scrollTop = savedScroll
+        if (document.body) document.body.scrollTop = savedScroll
+        const shell = document.querySelector('.app-shell') as HTMLElement
+        if (shell) shell.scrollTop = savedScroll
+      }
+      apply()
+      const t1 = setTimeout(apply, 40)
+      const t2 = setTimeout(apply, 120)
+      return () => {
+        clearTimeout(t1)
+        clearTimeout(t2)
+      }
+    }
+  }, [savedScroll, loading, posts.length])
 
   const heroPost = rotatedPosts.length > 0 ? rotatedPosts[0] : null
   const heroMovie = heroPost ? javToMovieHelper(heroPost) : null
