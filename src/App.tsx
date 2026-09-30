@@ -14576,7 +14576,7 @@ function LordPinModal({
     if (slots.length === 0 || typeof slots[0].animate !== 'function') {
       orbitHub.classList.add('is-verified')
       setStatusMessage('Password verified successfully')
-      setTimeout(() => onSuccess(), 400)
+      setTimeout(() => onSuccess(), 160)
       return
     }
 
@@ -14603,7 +14603,7 @@ function LordPinModal({
           { transform: `rotate(450deg) translate(${dx}px, ${dy}px)` },
         ],
         {
-          duration: 800,
+          duration: 360,
           easing: WIND_UP_BRAKE,
           fill: 'forwards',
         },
@@ -14617,7 +14617,7 @@ function LordPinModal({
             { transform: `rotate(540deg) translate(0px, 0px) scale(0)`, opacity: 0 },
           ],
           {
-            duration: 320,
+            duration: 160,
             easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
             fill: 'forwards',
           },
@@ -14631,8 +14631,8 @@ function LordPinModal({
             setStatusMessage('Password verified successfully')
             setTimeout(() => {
               onSuccess()
-            }, 650)
-          }, 240)
+            }, 220)
+          }, 80)
         }
       }
     })
@@ -14662,7 +14662,7 @@ function LordPinModal({
           setError(false)
           setStatusMessage('')
           inputsRef.current[0]?.focus()
-        }, 600)
+        }, 360)
       }
     },
     [expectedPin, runVerificationAnimation],
