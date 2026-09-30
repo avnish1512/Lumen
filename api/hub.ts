@@ -928,5 +928,98 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return
   }
 
+  // ---- phub (proxy for porn-api.com) ----
+  if (kind === 'phub') {
+    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400')
+    const endpoint = qv(req.query.endpoint) ?? '/movies'
+    const query = new URLSearchParams()
+    for (const [k, v] of Object.entries(req.query)) {
+      if (k !== 'kind' && k !== 'endpoint' && v) {
+        query.set(k, String(v))
+      }
+    }
+    try {
+      const apiKey = process.env.PHUB_API_KEY || '2ceb712d93165c1f69e2ff70948aa09705f7da4610ffb0caec764f224ef1b8f1'
+      const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+      const targetUrl = `https://porn-api.com/api/v1/public${cleanEndpoint}${query.toString() ? `?${query.toString()}` : ''}`
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 3500)
+      const upstream = await fetch(targetUrl, {
+        headers: { 'X-API-Key': apiKey },
+        signal: controller.signal,
+      })
+      clearTimeout(timer)
+      if (upstream.ok) {
+        const json = await upstream.json()
+        res.status(200).json(json)
+        return
+      }
+      res.status(upstream.status).json({ error: 'Upstream error' })
+    } catch (err) {
+      res.status(502).json({ error: 'PHub proxy error' })
+    }
+    return
+  }
+
+  // ---- eporner (proxy for eporner.com) ----
+  if (kind === 'eporner') {
+    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400')
+    const query = new URLSearchParams()
+    for (const [k, v] of Object.entries(req.query)) {
+      if (k !== 'kind' && v) {
+        query.set(k, String(v))
+      }
+    }
+    if (!query.has('format')) {
+      query.set('format', 'json')
+    }
+    try {
+      const targetUrl = `https://www.eporner.com/api/v2/video/search/?${query.toString()}`
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 3500)
+      const upstream = await fetch(targetUrl, { signal: controller.signal })
+      clearTimeout(timer)
+      if (upstream.ok) {
+        const json = await upstream.json()
+        res.status(200).json(json)
+        return
+      }
+      res.status(upstream.status).json({ error: 'Upstream error' })
+    } catch (err) {
+      res.status(502).json({ error: 'Eporner proxy error' })
+    }
+    return
+  }
+
+  // ---- xvid (proxy for xvidapi.com) ----
+  if (kind === 'xvid') {
+    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=86400')
+    const query = new URLSearchParams()
+    for (const [k, v] of Object.entries(req.query)) {
+      if (k !== 'kind' && v) {
+        query.set(k, String(v))
+      }
+    }
+    if (!query.has('ac')) query.set('ac', 'detail')
+    if (!query.has('at')) query.set('at', 'json')
+    if (!query.has('pagesize')) query.set('pagesize', '24')
+    try {
+      const targetUrl = `https://xvidapi.com/api.php/provide/vod?${query.toString()}`
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 3500)
+      const upstream = await fetch(targetUrl, { signal: controller.signal })
+      clearTimeout(timer)
+      if (upstream.ok) {
+        const json = await upstream.json()
+        res.status(200).json(json)
+        return
+      }
+      res.status(upstream.status).json({ error: 'Upstream error' })
+    } catch (err) {
+      res.status(502).json({ error: 'Xvid proxy error' })
+    }
+    return
+  }
+
   res.status(400).json({ ok: false, error: 'Unknown kind.' })
 }

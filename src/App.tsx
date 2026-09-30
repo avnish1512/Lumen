@@ -1442,6 +1442,8 @@ export interface PornApiMovieItem {
   }[]
 }
 
+const pornApiCache = new Map<string, any>()
+
 export async function fetchPornApi(
   endpoint: string,
   params: Record<string, string | number> = {},
@@ -1453,45 +1455,55 @@ export async function fetchPornApi(
     }
   }
 
-  // 1. Try dev/local proxy /api/phub
-  try {
-    const proxyUrl = `/api/phub?endpoint=${encodeURIComponent(endpoint)}&${query.toString()}`
-    const res = await fetch(proxyUrl)
-    if (res.ok) {
-      const json = await res.json()
-      if (json?.data || json?.success || Array.isArray(json)) return json
-    }
-  } catch {}
+  const cacheKey = `${endpoint}?${query.toString()}`
+  if (pornApiCache.has(cacheKey)) {
+    return pornApiCache.get(cacheKey)
+  }
 
-  // 2. Try Vercel hub proxy /api/hub?kind=phub
-  try {
-    const hubUrl = `/api/hub?kind=phub&endpoint=${encodeURIComponent(endpoint)}&${query.toString()}`
-    const res = await fetch(hubUrl)
-    if (res.ok) {
+  const fetchJsonWithTimeout = async (
+    url: string,
+    headers?: Record<string, string>,
+    timeoutMs = 1800,
+  ): Promise<any> => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const res = await fetch(url, { headers, signal: controller.signal })
+      clearTimeout(timer)
+      if (!res.ok) throw new Error('Status not ok')
       const json = await res.json()
       if (json?.data || json?.success || Array.isArray(json)) return json
+      throw new Error('Invalid payload')
+    } catch (err) {
+      clearTimeout(timer)
+      throw err
     }
-  } catch {}
+  }
 
-  // 3. Try direct fetch with X-API-Key
+  let directUrl = `${PORN_API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
+  if (query.toString()) {
+    directUrl += (directUrl.includes('?') ? '&' : '?') + query.toString()
+  }
+
+  const candidateUrls: { url: string; headers?: Record<string, string> }[] = [
+    { url: `/api/phub?endpoint=${encodeURIComponent(endpoint)}&${query.toString()}` },
+    { url: `/api/hub?kind=phub&endpoint=${encodeURIComponent(endpoint)}&${query.toString()}` },
+    { url: directUrl, headers: { 'X-API-Key': PORN_API_KEY } },
+  ]
+
   try {
-    let directUrl = `${PORN_API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
-    if (query.toString()) {
-      directUrl += (directUrl.includes('?') ? '&' : '?') + query.toString()
-    }
-    const res = await fetch(directUrl, {
-      headers: {
-        'X-API-Key': PORN_API_KEY,
-      },
-    })
-    if (res.ok) {
-      const json = await res.json()
-      if (json?.data || json?.success || Array.isArray(json)) return json
+    const result = await Promise.any(
+      candidateUrls.map((c) => fetchJsonWithTimeout(c.url, c.headers, 1800)),
+    )
+    if (result) {
+      pornApiCache.set(cacheKey, result)
+      return result
     }
   } catch {}
 
   return null
 }
+
 
 export async function fetchPornApiMovieDetail(slug: string): Promise<PornApiMovieItem | null> {
   try {
@@ -1754,7 +1766,7 @@ export async function fetchEpornerApi(
     return epornerApiCache.get(cacheKey)
   }
 
-  const fetchJsonWithTimeout = async (url: string, timeoutMs = 2000): Promise<any> => {
+  const fetchJsonWithTimeout = async (url: string, timeoutMs = 1500): Promise<any> => {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
@@ -1780,7 +1792,7 @@ export async function fetchEpornerApi(
   ]
 
   try {
-    const result = await Promise.any(candidateUrls.map((url) => fetchJsonWithTimeout(url, 2200)))
+    const result = await Promise.any(candidateUrls.map((url) => fetchJsonWithTimeout(url, 1500)))
     if (result) {
       epornerApiCache.set(cacheKey, result)
       return result
@@ -16007,6 +16019,37 @@ const PHUB3_CATEGORIES: { name: string; slug: string }[] = [
 
 const PHUB_PAGE_SIZE = 24
 
+const xvidApiCache = new Map<string, any>()
+
+const INITIAL_PHUB1_VIDEOS: PornApiMovieItem[] = INITIAL_HANIME_VIDEOS.map((v) => ({
+  title: v.title,
+  description: v.description,
+  thumbnail_url: v.thumb,
+  poster_url: v.poster || v.thumb,
+  slug: String(v.id),
+  duration: v.duration,
+  quality: '4K',
+  views: v.views || 45000,
+  categories: [{ name: v.category, slug: v.category.toLowerCase().replace(/\s+/g, '-') }],
+  pornstars: v.actors?.map((a) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
+}))
+
+const INITIAL_XVID_VIDEOS: PornApiMovieItem[] = INITIAL_HANIME_VIDEOS.map((norm) => ({
+  title: norm.title,
+  description: norm.description,
+  thumbnail_url: norm.thumb,
+  poster_url: norm.poster,
+  slug: String(norm.code || norm.id),
+  duration: norm.duration,
+  quality: 'HD',
+  views: 50000,
+  categories: [{ name: norm.category, slug: norm.category.toLowerCase().replace(/\s+/g, '-') }],
+  pornstars: norm.actors?.map((a: string) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
+  episodes: norm.embedUrl
+    ? [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Upload18', embed_url: norm.embedUrl }] }]
+    : undefined,
+}))
+
 function LordPhubSection({
   searchQuery = '',
   continueMovies = [],
@@ -16093,41 +16136,26 @@ function LordPhubSection({
         }
       })
     }
-    return []
-  }, [isEporner])
-
-  const [pornMovies, setPornMovies] = useState<PornApiMovieItem[]>(() => {
-    if (serverMode === 'eporner') {
-      return EPORNER_INITIAL_VIDEOS.map((item) => {
-        const thumb = item.default_thumb?.src || item.thumbs?.[0]?.src || ''
-        const rawKeywords = item.keywords ? item.keywords.split(',').map((k) => k.trim()).filter(Boolean) : []
-        return {
-          title: item.title,
-          description: item.title,
-          thumbnail_url: thumb,
-          poster_url: thumb,
-          slug: item.id,
-          duration: item.length_min || 'HD',
-          quality: 'HD',
-          views: item.views || 50000,
-          categories: rawKeywords.slice(0, 3).map((k) => ({ name: k, slug: k.toLowerCase().replace(/\s+/g, '-') })),
-          episodes: [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Eporner', embed_url: item.embed || `https://www.eporner.com/embed/${item.id}/` }] }],
-        }
-      })
+    if (isXvid) {
+      return INITIAL_XVID_VIDEOS
     }
-    return []
-  })
-  const [loading, setLoading] = useState(serverMode !== 'eporner')
+    return INITIAL_PHUB1_VIDEOS
+  }, [isEporner, isXvid])
+
+  const [pornMovies, setPornMovies] = useState<PornApiMovieItem[]>(() => getInitialMovies())
+  const [loading, setLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [orderBy, setOrderBy] = useState<'views' | 'date' | 'duration'>('views')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
-  const [totalVideos, setTotalVideos] = useState(serverMode === 'eporner' ? EPORNER_INITIAL_VIDEOS.length : 0)
+  const [totalVideos, setTotalVideos] = useState(() => getInitialMovies().length)
 
   useEffect(() => {
     setPage(1)
-    if (serverMode === 'eporner') {
-      setPornMovies(getInitialMovies())
+    if (!searchQuery.trim()) {
+      const init = getInitialMovies()
+      setPornMovies(init)
+      setTotalVideos(init.length)
     }
   }, [serverMode, selectedCategory, orderBy, searchQuery, getInitialMovies])
 
@@ -16181,43 +16209,63 @@ function LordPhubSection({
         }
 
         if (isXvid) {
-          let url = `https://xvidapi.com/api.php/provide/vod?ac=detail&at=json&pg=${page}`
+          const cacheKey = `xvid-${page}-${searchQuery.trim()}-${selectedCategory}`
+          if (xvidApiCache.has(cacheKey)) {
+            const cached = xvidApiCache.get(cacheKey)
+            if (active && cached && Array.isArray(cached.list) && cached.list.length > 0) {
+              setPornMovies(cached.list)
+              setTotalPages(cached.totalPages || 1)
+              setTotalVideos(cached.totalVideos || cached.list.length)
+              return
+            }
+          }
+
+          let url = `https://xvidapi.com/api.php/provide/vod?ac=detail&at=json&pg=${page}&pagesize=${PHUB_PAGE_SIZE}`
           if (searchQuery.trim()) {
             url += `&wd=${encodeURIComponent(searchQuery.trim())}`
+          } else if (selectedCategory && selectedCategory !== 'All') {
+            url += `&wd=${encodeURIComponent(selectedCategory)}`
           }
-          const res = await fetch(url)
-          if (res.ok) {
-            const data = await res.json()
-            if (active && data) {
-              if (data.pagecount) {
-                setTotalPages(Math.max(1, Number(data.pagecount) || 1))
-              }
-              if (data.total) {
-                setTotalVideos(Number(data.total) || 0)
-              }
-              if (Array.isArray(data.list) && data.list.length > 0) {
-                const parsed: PornApiMovieItem[] = data.list.map((item: any, idx: number) => {
-                  const norm = normalizeVideoItem(item, idx)
-                  return {
-                    title: norm.title,
-                    description: norm.description,
-                    thumbnail_url: norm.thumb,
-                    poster_url: norm.poster,
-                    slug: String(norm.code || norm.id),
-                    duration: norm.duration,
-                    quality: 'HD',
-                    views: 50000,
-                    categories: [{ name: norm.category, slug: norm.category.toLowerCase().replace(/\s+/g, '-') }],
-                    pornstars: norm.actors?.map((a: string) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
-                    episodes: norm.embedUrl
-                      ? [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Upload18', embed_url: norm.embedUrl }] }]
-                      : undefined,
-                  }
-                })
-                setPornMovies(parsed)
-                return
+
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), 3500)
+          try {
+            const res = await fetch(url, { signal: controller.signal })
+            clearTimeout(timer)
+            if (res.ok) {
+              const data = await res.json()
+              if (active && data) {
+                const totalP = Math.max(1, Number(data.pagecount) || 1)
+                const totalV = Number(data.total) || (Array.isArray(data.list) ? data.list.length : 0)
+                if (Array.isArray(data.list) && data.list.length > 0) {
+                  const parsed: PornApiMovieItem[] = data.list.map((item: any, idx: number) => {
+                    const norm = normalizeVideoItem(item, idx)
+                    return {
+                      title: norm.title,
+                      description: norm.description,
+                      thumbnail_url: norm.thumb,
+                      poster_url: norm.poster,
+                      slug: String(norm.code || norm.id),
+                      duration: norm.duration,
+                      quality: 'HD',
+                      views: 50000,
+                      categories: [{ name: norm.category, slug: norm.category.toLowerCase().replace(/\s+/g, '-') }],
+                      pornstars: norm.actors?.map((a: string) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
+                      episodes: norm.embedUrl
+                        ? [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Upload18', embed_url: norm.embedUrl }] }]
+                        : undefined,
+                    }
+                  })
+                  xvidApiCache.set(cacheKey, { list: parsed, totalPages: totalP, totalVideos: totalV })
+                  setPornMovies(parsed)
+                  setTotalPages(totalP)
+                  setTotalVideos(totalV)
+                  return
+                }
               }
             }
+          } catch {
+            clearTimeout(timer)
           }
         }
 
@@ -16260,54 +16308,18 @@ function LordPhubSection({
           } else if (searchQuery.trim()) {
             setPornMovies([])
           } else if (pornMovies.length === 0) {
-            if (isEporner) {
-              const fallbackEporner = getInitialMovies()
-              setPornMovies(fallbackEporner)
-              setTotalVideos(fallbackEporner.length)
-              setTotalPages(1)
-            } else {
-              const fallbackPorn = INITIAL_HANIME_VIDEOS.map((v) => ({
-                title: v.title,
-                description: v.description,
-                thumbnail_url: v.thumb,
-                poster_url: v.poster || v.thumb,
-                slug: String(v.id),
-                duration: v.duration,
-                quality: '4K',
-                views: v.views || 45000,
-                categories: [{ name: v.category, slug: v.category.toLowerCase().replace(/\s+/g, '-') }],
-                pornstars: v.actors?.map((a) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
-              }))
-              setPornMovies(fallbackPorn)
-              setTotalVideos(fallbackPorn.length)
-              setTotalPages(1)
-            }
+            const fallback = getInitialMovies()
+            setPornMovies(fallback)
+            setTotalVideos(fallback.length)
+            setTotalPages(1)
           }
         }
       } catch {
         if (active && pornMovies.length === 0) {
-          if (isEporner) {
-            const fallbackEporner = getInitialMovies()
-            setPornMovies(fallbackEporner)
-            setTotalVideos(fallbackEporner.length)
-            setTotalPages(1)
-          } else {
-            const fallbackPorn = INITIAL_HANIME_VIDEOS.map((v) => ({
-              title: v.title,
-              description: v.description,
-              thumbnail_url: v.thumb,
-              poster_url: v.poster || v.thumb,
-              slug: String(v.id),
-              duration: v.duration,
-              quality: '4K',
-              views: v.views || 45000,
-              categories: [{ name: v.category, slug: v.category.toLowerCase().replace(/\s+/g, '-') }],
-              pornstars: v.actors?.map((a) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
-            }))
-            setPornMovies(fallbackPorn)
-            setTotalVideos(fallbackPorn.length)
-            setTotalPages(1)
-          }
+          const fallback = getInitialMovies()
+          setPornMovies(fallback)
+          setTotalVideos(fallback.length)
+          setTotalPages(1)
         }
       } finally {
         if (active) setLoading(false)
@@ -16408,7 +16420,7 @@ function LordPhubSection({
 
   return (
     <div className="jav-container">
-      {loading ? (
+      {loading && displayVideos.length === 0 ? (
         <div className="jav-loading">
           <LoaderCircle className="spin-icon" size={32} />
           <p>Loading {sectionLabel} videos...</p>

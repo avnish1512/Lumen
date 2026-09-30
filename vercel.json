@@ -41,6 +41,9 @@
     { "source": "/api/devices", "destination": "/api/hub?kind=devices" },
     { "source": "/api/lord-pin", "destination": "/api/hub?kind=lord-pin" },
     { "source": "/api/phub-refresh", "destination": "/api/hub?kind=phub-refresh" },
+    { "source": "/api/phub", "destination": "/api/hub?kind=phub" },
+    { "source": "/api/eporner", "destination": "/api/hub?kind=eporner" },
+    { "source": "/api/xvid", "destination": "/api/hub?kind=xvid" },
     { "source": "/api/stream-resolver", "destination": "/api/hub?kind=stream-resolver" },
     { "source": "/api/stream-proxy", "destination": "/api/hub?kind=stream-proxy" },
     {
