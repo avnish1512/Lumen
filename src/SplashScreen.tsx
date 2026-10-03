@@ -68,6 +68,11 @@ export function SplashScreen({ onFinish, durationMs = 3000 }: SplashScreenProps)
         playsInline
         muted
         preload="auto"
+        disablePictureInPicture
+        disableRemotePlayback
+        onCanPlay={(e) => {
+          e.currentTarget.play().catch(() => {})
+        }}
         onEnded={startFadeOut}
         onError={() => {
           startFadeOut()

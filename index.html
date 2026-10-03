@@ -9,8 +9,9 @@
     <!-- Speed up the first anime cover-art requests (AniList CDN + image host). -->
     <link rel="preconnect" href="https://s4.anilist.co" crossorigin />
     <link rel="dns-prefetch" href="https://s4.anilist.co" />
-    <link rel="preconnect" href="https://image.tmdb.org" crossorigin />
-    <link rel="dns-prefetch" href="https://image.tmdb.org" />
+    <!-- Immediately preload splash/login video and backdrop for instantaneous playback -->
+    <link rel="preload" href="/loading.mp4" as="video" type="video/mp4" />
+    <link rel="preload" href="/login-bg.jpeg" as="image" />
     <title>Lumen</title>
   </head>
   <body>
