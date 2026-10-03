@@ -2447,7 +2447,13 @@ function rotateByDailySeed<T>(items: T[], seedOffset = 0): T[] {
   if (!items || items.length === 0) return items
   const seed = getDailySeed() + seedOffset
   const shift = Math.abs(seed) % items.length
-  return [...items.slice(shift), ...items.slice(0, shift)]
+  const rotated = [...items.slice(shift), ...items.slice(0, shift)]
+  return rotated.map((item, index) => {
+    if (item && typeof item === 'object' && 'rank' in item && typeof (item as any).rank === 'number') {
+      return { ...item, rank: index + 1 }
+    }
+    return item
+  })
 }
 
 async function fetchAniListHomeCollection(): Promise<MediaCollection> {
@@ -6482,11 +6488,11 @@ function HomeScreen({
     ],
   )
   const newReleaseItems = useMemo(
-    () => rotateByDailySeed(buildRail(tmdbHomeRails.newReleases, newReleaseFallback), 2),
+    () => rankRail(rotateByDailySeed(buildRail(tmdbHomeRails.newReleases, newReleaseFallback), 2)),
     [newReleaseFallback, tmdbHomeRails.newReleases],
   )
   const trendingNowItems = useMemo(
-    () => rotateByDailySeed(buildRail(tmdbHomeRails.trendingNow, trendingNowFallback), 5),
+    () => rankRail(rotateByDailySeed(buildRail(tmdbHomeRails.trendingNow, trendingNowFallback), 5)),
     [tmdbHomeRails.trendingNow, trendingNowFallback],
   )
   const activeHeroIndex = Math.max(
@@ -13376,7 +13382,8 @@ function LibraryScreen({
                     .map((movie, index) => (
                       <PosterCard
                         key={movie.id}
-                        movie={{ ...movie, rank: movie.rank || index + 1 }}
+                        movie={{ ...movie, rank: index + 1 }}
+                        rank={index + 1}
                         onOpenDetail={onOpenDetail}
                       />
                     ))}
@@ -13521,10 +13528,11 @@ function MovieRail({ title, movies, compact, landscape, onOpenDetail }: MovieRai
           <ChevronLeft />
         </button>
         <div ref={rowRef} className={compact ? 'poster-row compact' : 'poster-row'}>
-          {movies.map((movie) => (
+          {movies.map((movie, index) => (
             <PosterCard
               key={movie.id}
-              movie={movie}
+              movie={{ ...movie, rank: index + 1 }}
+              rank={index + 1}
               onOpenDetail={onOpenDetail}
             />
           ))}
@@ -13983,11 +13991,15 @@ function PosterImage({
 
 function PosterCard({
   movie,
+  rank,
   onOpenDetail,
 }: {
   movie: Movie
+  rank?: number
   onOpenDetail: (movie: Movie) => void
 }) {
+  const displayRank = rank ?? movie.rank
+
   return (
     <button
       className="poster-card"
@@ -13996,7 +14008,7 @@ function PosterCard({
       onClick={() => onOpenDetail(movie)}
     >
       <PosterImage movie={movie} fallback={posterImageFor(movie)} />
-      <span className="rank">{movie.rank}</span>
+      {displayRank !== undefined && <span className="rank">{displayRank}</span>}
       <span className="poster-card-title">{movie.title}</span>
     </button>
   )
