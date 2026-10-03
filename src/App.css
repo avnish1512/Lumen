@@ -14729,15 +14729,18 @@ body:has(.add-profile-screen),
     padding: 10px 12px;
     gap: 8px;
   }
+
   .player-under-btn {
     padding: 0 12px;
     height: 42px;
     font-size: 13px;
     gap: 6px;
   }
+
   .player-under-btn span {
     display: inline;
   }
+
   .player-under-ep-title {
     display: none;
   }
@@ -16681,6 +16684,7 @@ body:has(.add-profile-screen),
     opacity: 0;
     transform: scale(0.95);
   }
+
   100% {
     opacity: 1;
     transform: scale(1);
@@ -16839,9 +16843,9 @@ body:has(.add-profile-screen),
   align-items: center;
   justify-content: center;
   transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
-              width 0.2s ease, height 0.2s ease,
-              border-radius 0.2s ease, background 0.2s ease,
-              box-shadow 0.2s ease;
+    width 0.2s ease, height 0.2s ease,
+    border-radius 0.2s ease, background 0.2s ease,
+    box-shadow 0.2s ease;
   z-index: 10;
 }
 
@@ -17024,6 +17028,7 @@ body:has(.add-profile-screen),
 }
 
 @keyframes lord-shake {
+
   0%,
   100% {
     transform: translateX(0);
@@ -17312,11 +17317,13 @@ body:has(.add-profile-screen),
       gap: 2px;
       padding: 3px;
     }
+
     .lord-mobile-nav-item {
       padding: 6px 3px;
       font-size: 10px;
       gap: 2px;
     }
+
     .lord-mobile-nav-item svg {
       width: 12px;
       height: 12px;
@@ -17599,7 +17606,7 @@ body:has(.add-profile-screen),
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.55) 55%, #000 100%),
-              linear-gradient(90deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.45) 55%, rgba(0, 0, 0, 0) 80%);
+    linear-gradient(90deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.45) 55%, rgba(0, 0, 0, 0) 80%);
 }
 
 .lord-hero-content {
@@ -17614,6 +17621,7 @@ body:has(.add-profile-screen),
     padding: 24px 16px;
     border-radius: 0;
   }
+
   .lord-hero-bg {
     object-position: center top;
   }
@@ -19156,7 +19164,7 @@ body:has(.add-profile-screen),
 }
 
 .phub-modal-meta {
-font-size: 11px;
+  font-size: 11px;
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 4px;
@@ -20215,6 +20223,7 @@ font-size: 11px;
   0% {
     background-position: 200% 0;
   }
+
   100% {
     background-position: -200% 0;
   }
@@ -20267,6 +20276,7 @@ font-size: 11px;
 }
 
 @media (max-width: 899px) {
+
   .jav-container,
   .phub-container {
     padding: max(72px, calc(env(safe-area-inset-top, 0px) + 24px)) 16px max(130px, calc(env(safe-area-inset-bottom, 0px) + 115px)) !important;
@@ -21006,6 +21016,7 @@ font-size: 11px;
 /* Keep the authentication, profile, and account surfaces out of the generic content reset above.
    Ensures complete visibility and proper layer compositing on iOS WebKit / iPhone without black screen issues. */
 @media (max-width: 899px) {
+
   .screen.login-screen,
   .screen.profiles-screen,
   .screen.account-screen,
@@ -22390,7 +22401,6 @@ font-size: 11px;
   padding-right: 0 !important;
 }
 
-/* Watch Screen PHub More Videos Section (3 columns x 3 rows) */
 .watch-phub-more-section {
   width: 100%;
   margin-top: 28px;
@@ -22452,7 +22462,3 @@ font-size: 11px;
     gap: 16px;
   }
 }
-
-
-
-
