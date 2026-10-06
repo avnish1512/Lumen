@@ -15622,14 +15622,92 @@ body:has(.add-profile-screen),
 }
 
 /* ==========================================================================
-   Watch screen — server cards side by side, and a mobile top row that stacks
-   the title above the Watch + SUB/DUB controls (fixes the overlap on phones).
+   Watch screen — server cards side by side in a clean 2-column grid on mobile,
+   ensuring all servers are neatly visible on screen without horizontal clipping.
    ========================================================================== */
 .watch-screen .server-selector {
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
 }
 
 @media (max-width: 899px) {
+  .watch-screen .server-selector,
+  .anime-server-row .anime-inline-servers {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-top: 10px;
+  }
+
+  .anime-server-row {
+    width: 100% !important;
+  }
+
+  .watch-screen .server-option-wrapper,
+  .anime-server-row .anime-inline-servers .server-option-wrapper {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    border-radius: 10px;
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  .watch-screen .server-option-wrapper .server-option,
+  .anime-server-row .anime-inline-servers .server-option {
+    display: flex !important;
+    align-items: center !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    height: 100% !important;
+    min-height: 44px !important;
+    padding: 0 8px 0 10px !important;
+    gap: 7px !important;
+    overflow: hidden !important;
+  }
+
+  .watch-screen .server-option-wrapper .provider-logo,
+  .anime-server-row .anime-inline-servers .provider-logo {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    height: auto !important;
+    padding: 2px 5px !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.03em !important;
+    border-radius: 4px !important;
+  }
+
+  .watch-screen .server-option-wrapper .provider-name,
+  .anime-server-row .anime-inline-servers .provider-name {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    text-align: left !important;
+  }
+
+  .watch-screen .server-option-wrapper .server-star-btn,
+  .anime-server-row .anime-inline-servers .server-star-btn {
+    flex: 0 0 auto !important;
+    height: 100% !important;
+    padding: 0 8px !important;
+  }
+
   .watch-screen .watch-topbar {
     flex-wrap: wrap;
     padding: 16px 16px 6px;
@@ -15660,6 +15738,10 @@ body:has(.add-profile-screen),
 
   .watch-title-main {
     font-size: clamp(30px, 8vw, 44px);
+  }
+
+  .watch-lower {
+    padding: 16px 16px 60px !important;
   }
 }
 
