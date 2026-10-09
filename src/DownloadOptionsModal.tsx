@@ -115,6 +115,36 @@ const MOVIE_SERVERS: ServerOption[] = [
     description: 'Fast direct video host for movies and shows',
   },
   {
+    id: 'vidcore',
+    name: 'VidCore',
+    badge: 'Direct',
+    description: 'Direct high-speed embed streaming for movies & shows',
+  },
+  {
+    id: 'autoembed',
+    name: 'AutoEmbed',
+    badge: 'Multi-Source',
+    description: 'Multi-source embed player with IMDB & TMDB fallback',
+  },
+  {
+    id: 'vsembed',
+    name: 'VSEmbed',
+    badge: 'Direct',
+    description: 'Direct high-availability stream with IMDB & TMDB support',
+  },
+  {
+    id: 'vidsrcbuzz',
+    name: 'VidSrc Buzz',
+    badge: 'Fast Stream',
+    description: 'Fast direct video host supporting movies & series',
+  },
+  {
+    id: 'embedwave',
+    name: 'EmbedWave',
+    badge: 'Direct',
+    description: 'Direct high-speed streaming for movies and series',
+  },
+  {
     id: 'superembed',
     name: 'SuperEmbed VIP',
     badge: 'Multi-Server',

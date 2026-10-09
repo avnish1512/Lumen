@@ -17,6 +17,11 @@ export type StreamProvider =
   | 'embedapi'
   | 'vidphantom'
   | 'mgeb'
+  | 'vidcore'
+  | 'autoembed'
+  | 'vsembed'
+  | 'vidsrcbuzz'
+  | 'embedwave'
   | 'filmu'
   | 'nhdapi'
   | 'yenime'
@@ -42,6 +47,11 @@ export function isStreamProvider(value: string | null | undefined): value is Str
     value === 'embedapi' ||
     value === 'vidphantom' ||
     value === 'mgeb' ||
+    value === 'vidcore' ||
+    value === 'autoembed' ||
+    value === 'vsembed' ||
+    value === 'vidsrcbuzz' ||
+    value === 'embedwave' ||
     value === 'primesrc' ||
     value === 'embedmaster' ||
     value === 'filmu' ||
@@ -186,6 +196,36 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'Mgeb',
     logo: 'MG',
     description: 'Dubbed · Movies & TV',
+  },
+  {
+    id: 'vidcore',
+    name: 'VidCore',
+    logo: 'VC',
+    description: 'Movies & TV · Direct',
+  },
+  {
+    id: 'autoembed',
+    name: 'AutoEmbed',
+    logo: 'AE',
+    description: 'Movies & TV · Multi-Source',
+  },
+  {
+    id: 'vsembed',
+    name: 'VSEmbed',
+    logo: 'VSE',
+    description: 'Movies & TV · Direct',
+  },
+  {
+    id: 'vidsrcbuzz',
+    name: 'VidSrc Buzz',
+    logo: 'VB',
+    description: 'Movies & TV · Direct',
+  },
+  {
+    id: 'embedwave',
+    name: 'EmbedWave',
+    logo: 'EW',
+    description: 'Movies & TV · Direct',
   },
   {
     id: 'primesrc',
@@ -642,6 +682,106 @@ function buildMgebUrl(movie: Movie) {
   }
 
   return `https://mgeb.top/embed/${identifier}`
+}
+
+export function buildVidCoreUrl(movie: Movie): string {
+  const tmdbId = movie.tmdbId ?? (movie.id && !movie.id.startsWith('tt') && !isNaN(Number(movie.id)) ? Number(movie.id) : undefined)
+  if (!tmdbId) {
+    return ''
+  }
+
+  if (
+    movie.tmdbType === 'tv' ||
+    movie.type === 'series' ||
+    movie.type === 'Series' ||
+    typeof movie.streamSeason === 'number'
+  ) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://vidcore.org/embed/tv/${tmdbId}/${season}/${episode}`
+  }
+
+  return `https://vidcore.org/embed/movie/${tmdbId}`
+}
+
+export function buildAutoEmbedUrl(movie: Movie): string {
+  const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
+  if (!identifier) {
+    return ''
+  }
+
+  if (
+    movie.tmdbType === 'tv' ||
+    movie.type === 'series' ||
+    movie.type === 'Series' ||
+    typeof movie.streamSeason === 'number'
+  ) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://player.autoembed.cc/embed/tv/${identifier}/${season}/${episode}`
+  }
+
+  return `https://player.autoembed.cc/embed/movie/${identifier}`
+}
+
+export function buildVSEmbedUrl(movie: Movie): string {
+  const identifier = movie.tmdbId ? String(movie.tmdbId) : (movie.id.startsWith('tt') ? movie.id : '')
+  if (!identifier) {
+    return ''
+  }
+
+  if (
+    movie.tmdbType === 'tv' ||
+    movie.type === 'series' ||
+    movie.type === 'Series' ||
+    typeof movie.streamSeason === 'number'
+  ) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://vsembed.ru/embed/tv/${identifier}/${season}/${episode}`
+  }
+
+  return `https://vsembed.ru/embed/movie/${identifier}`
+}
+
+export function buildVidSrcBuzzUrl(movie: Movie): string {
+  const identifier = movie.id.startsWith('tt') ? movie.id : (movie.tmdbId ? String(movie.tmdbId) : '')
+  if (!identifier) {
+    return ''
+  }
+
+  if (
+    movie.tmdbType === 'tv' ||
+    movie.type === 'series' ||
+    movie.type === 'Series' ||
+    typeof movie.streamSeason === 'number'
+  ) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://vidsrc.buzz/embed/tv/${identifier}/${season}/${episode}`
+  }
+
+  return `https://vidsrc.buzz/embed/movie/${identifier}`
+}
+
+export function buildEmbedWaveUrl(movie: Movie): string {
+  const tmdbId = movie.tmdbId ?? (movie.id && !movie.id.startsWith('tt') && !isNaN(Number(movie.id)) ? Number(movie.id) : undefined)
+  if (!tmdbId) {
+    return ''
+  }
+
+  if (
+    movie.tmdbType === 'tv' ||
+    movie.type === 'series' ||
+    movie.type === 'Series' ||
+    typeof movie.streamSeason === 'number'
+  ) {
+    const season = movie.streamSeason ?? 1
+    const episode = movie.streamEpisode ?? 1
+    return `https://embedwave.cc/embed/tv/${tmdbId}/${season}/${episode}`
+  }
+
+  return `https://embedwave.cc/embed/movie/${tmdbId}`
 }
 
 function buildRivestreamUrl(movie: Movie) {
@@ -1176,6 +1316,26 @@ export function buildStreamUrl(
 
   if (provider === 'mgeb') {
     return buildMgebUrl(movie)
+  }
+
+  if (provider === 'vidcore') {
+    return buildVidCoreUrl(movie)
+  }
+
+  if (provider === 'autoembed') {
+    return buildAutoEmbedUrl(movie)
+  }
+
+  if (provider === 'vsembed') {
+    return buildVSEmbedUrl(movie)
+  }
+
+  if (provider === 'vidsrcbuzz') {
+    return buildVidSrcBuzzUrl(movie)
+  }
+
+  if (provider === 'embedwave') {
+    return buildEmbedWaveUrl(movie)
   }
 
   if (provider === 'embedmaster') {

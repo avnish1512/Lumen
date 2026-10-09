@@ -3,6 +3,7 @@ import {
   type FormEvent,
   type PointerEvent,
   type RefObject,
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -576,6 +577,11 @@ function isStreamProvider(value: string | null): value is StreamProvider {
     value === 'embedapi' ||
     value === 'vidphantom' ||
     value === 'mgeb' ||
+    value === 'vidcore' ||
+    value === 'autoembed' ||
+    value === 'vsembed' ||
+    value === 'vidsrcbuzz' ||
+    value === 'embedwave' ||
     value === 'primesrc' ||
     value === 'embedmaster' ||
     value === 'filmu' ||
@@ -8725,6 +8731,10 @@ function WatchScreen({
 
   const [activeProviderOverride, setActiveProviderOverride] = useState<StreamProvider | null>(null)
 
+  useEffect(() => {
+    setActiveProviderOverride(null)
+  }, [movie.id])
+
   const isAdmin = isMainAccount(currentUser?.email || currentUserEmail)
   const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'clickhost', 'megaplay', 'megabuzz', 'megavid']
 
@@ -8749,11 +8759,22 @@ function WatchScreen({
               : (starProvider && animeProviderIds.includes(starProvider))
                 ? starProvider
                 : 'filmu'
-          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'vidrift' || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom' || chosenProvider === 'mgeb')
+          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'vidrift' || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom' || chosenProvider === 'mgeb' || chosenProvider === 'vidcore' || chosenProvider === 'autoembed' || chosenProvider === 'vsembed' || chosenProvider === 'vidsrcbuzz' || chosenProvider === 'embedwave')
             ? chosenProvider
             : (starProvider && !animeProviderIds.includes(starProvider))
               ? starProvider
               : 'rivestream'
+
+  const handleServerSelect = useCallback(
+    (providerId: StreamProvider) => {
+      if (providerId === activeProviderId) return
+      setActiveProviderOverride(providerId)
+      startTransition(() => {
+        onStreamProviderChange(providerId)
+      })
+    },
+    [activeProviderId, onStreamProviderChange],
+  )
 
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
   const hasEpisodes = Boolean(
@@ -10103,9 +10124,11 @@ function WatchScreen({
       ) : streamUrl && !opensExternally ? (
         <iframe
           ref={streamIframeRef}
+          key={`${activeProviderId}-${season}-${episode}`}
           className="stream-player"
           src={streamUrl}
           title={`${movie.title} stream`}
+          loading="eager"
           allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; accelerometer; gyroscope; clipboard-write"
           allowFullScreen
           // @ts-ignore
@@ -10394,10 +10417,7 @@ function WatchScreen({
                           aria-checked={isActive}
                           title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}`}
                           aria-label={provider.name}
-                          onClick={() => {
-                            setActiveProviderOverride(provider.id)
-                            onStreamProviderChange(provider.id)
-                          }}
+                          onClick={() => handleServerSelect(provider.id)}
                         >
                           <span className="provider-logo">{provider.logo}</span>
                           <span className="provider-name">{provider.name}</span>
@@ -10520,10 +10540,7 @@ function WatchScreen({
                           aria-checked={isActive}
                           title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}`}
                           aria-label={provider.name}
-                          onClick={() => {
-                            setActiveProviderOverride(provider.id)
-                            onStreamProviderChange(provider.id)
-                          }}
+                          onClick={() => handleServerSelect(provider.id)}
                         >
                           <span className="provider-logo">{provider.logo}</span>
                           <span className="provider-name">{provider.name}</span>
