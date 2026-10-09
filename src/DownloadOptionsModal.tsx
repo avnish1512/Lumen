@@ -197,8 +197,18 @@ export function DownloadOptionsModal({
 
   if (!isOpen) return null
 
-  const isAnime = Boolean(movie.isAnime)
-  const availableServers = isAnime ? ANIME_SERVERS : MOVIE_SERVERS
+  const disabledServers: string[] = (() => {
+    try {
+      const raw = window.localStorage.getItem('lumen.disabledServers.admin')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })()
+
+  const availableServers = (isAnime ? ANIME_SERVERS : MOVIE_SERVERS).filter(
+    (s) => s.id === 'auto' || !disabledServers.includes(s.id),
+  )
   const activeServerObj = availableServers.find((s) => s.id === selectedServer) || availableServers[0]
 
   const estimatedBytes = estimateMediaSize(

@@ -12,6 +12,7 @@ import {
 } from 'react'
 import {
   AlertCircle,
+  Ban,
   Bell,
   Check,
   ChevronLeft,
@@ -380,9 +381,32 @@ export type UserProfile = {
   name: string
   avatarColor: string
   starredServer?: string
+  disabledServers?: string[]
 }
 
 const adminStarredServerKey = 'lumen.starredServer.admin'
+const adminDisabledServersKey = 'lumen.disabledServers.admin'
+
+function readDisabledServers(): string[] {
+  try {
+    const saved = window.localStorage.getItem(adminDisabledServersKey)
+    if (!saved) return []
+    const parsed = JSON.parse(saved)
+    return Array.isArray(parsed) ? parsed.map((s) => String(s).trim()).filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
+function saveDisabledServers(servers: string[]) {
+  try {
+    if (servers && servers.length > 0) {
+      window.localStorage.setItem(adminDisabledServersKey, JSON.stringify(servers))
+    } else {
+      window.localStorage.removeItem(adminDisabledServersKey)
+    }
+  } catch {}
+}
 
 function notifyNativeNavState(canGoBack: boolean, screen: Screen) {
   try {
@@ -479,6 +503,7 @@ function readProfilesFor(user: UserInfo | null): UserProfile[] {
           name: p.name.trim(),
           avatarColor: typeof p.avatarColor === 'string' && p.avatarColor.trim() ? p.avatarColor : 'red',
           starredServer: typeof p.starredServer === 'string' && p.starredServer.trim() ? p.starredServer.trim() : undefined,
+          disabledServers: Array.isArray(p.disabledServers) ? p.disabledServers.map((s: any) => String(s).trim()).filter(Boolean) : undefined,
         }))
       return sanitized.length > 0 ? sanitized : fallback
     }
@@ -2864,6 +2889,7 @@ function App() {
   const [starredServer, setStarredServer] = useState<string>(() =>
     readStarredServerFor(readCurrentUser()),
   )
+  const [disabledServers, setDisabledServers] = useState<string[]>(readDisabledServers)
 
   useEffect(() => {
     const star = readStarredServerFor(currentUser)
@@ -2872,18 +2898,24 @@ function App() {
     }
   }, [currentUser])
 
-  // Pull the admin account's profiles to ensure the global admin-starred server is synced across all devices and accounts
+  // Pull the admin account's profiles to ensure global admin settings are synced across devices
   useEffect(() => {
     let active = true
     void fetchRemoteProfiles(MAIN_ACCOUNT_EMAIL).then((adminProfiles) => {
       if (!active || !adminProfiles || !adminProfiles.length) return
-      const adminProfile = adminProfiles.find((p) => p.starredServer) || adminProfiles[0]
+      const adminProfile = adminProfiles.find((p) => p.starredServer || p.disabledServers) || adminProfiles[0]
       const adminStar = adminProfile?.starredServer || ''
       if (adminStar && isStreamProvider(adminStar)) {
         try {
           window.localStorage.setItem(adminStarredServerKey, adminStar)
         } catch {}
         setStarredServer(adminStar)
+      }
+      if (Array.isArray(adminProfile?.disabledServers)) {
+        try {
+          window.localStorage.setItem(adminDisabledServersKey, JSON.stringify(adminProfile.disabledServers))
+        } catch {}
+        setDisabledServers(adminProfile.disabledServers)
       }
     })
     return () => {
@@ -2903,6 +2935,36 @@ function App() {
           const updated = currProfiles.map((p) => {
             if (p.name === currentUser.name) {
               return { ...p, starredServer: next || undefined }
+            }
+            return p
+          })
+          const account = currentUser ?? tempUser
+          window.localStorage.setItem(profilesKeyFor(account), JSON.stringify(updated))
+          if (account?.email) {
+            void saveRemoteProfiles(account.email, updated)
+          }
+          return updated
+        })
+      }
+      return next
+    })
+  }, [currentUser, tempUser])
+
+  const handleToggleDisableServer = useCallback((serverId: string) => {
+    if (!isMainAccount(currentUser?.email)) {
+      return
+    }
+    setDisabledServers((prev) => {
+      const isCurrentlyDisabled = prev.includes(serverId)
+      const next = isCurrentlyDisabled
+        ? prev.filter((id) => id !== serverId)
+        : [...prev, serverId]
+      saveDisabledServers(next)
+      if (currentUser?.name) {
+        setProfiles((currProfiles) => {
+          const updated = currProfiles.map((p) => {
+            if (p.name === currentUser.name) {
+              return { ...p, disabledServers: next.length > 0 ? next : undefined }
             }
             return p
           })
@@ -5705,6 +5767,8 @@ function App() {
             currentUser={currentUser}
             starredServer={starredServer}
             onToggleStarServer={handleToggleStarServer}
+            disabledServers={disabledServers}
+            onToggleDisableServer={handleToggleDisableServer}
           />
         </ErrorBoundary>
       )}
@@ -5821,6 +5885,8 @@ function App() {
         <ErrorBoundary onReset={() => setScreen(loginBackScreen || 'home')}>
           <LoginScreen
             currentUser={currentUser}
+            disabledServers={disabledServers}
+            onToggleDisableServer={handleToggleDisableServer}
             onLogin={(user) => {
               const sanitizedUser: UserInfo = {
                 name: user?.name?.trim() || (user?.email ? user.email.split('@')[0] : 'User'),
@@ -8664,6 +8730,8 @@ type WatchScreenProps = {
   currentUser?: UserInfo | null
   starredServer?: string
   onToggleStarServer?: (serverId: string) => void
+  disabledServers?: string[]
+  onToggleDisableServer?: (serverId: string) => void
 }
 
 function WatchScreen({
@@ -8693,6 +8761,8 @@ function WatchScreen({
   currentUser,
   starredServer,
   onToggleStarServer,
+  disabledServers,
+  onToggleDisableServer,
 }: WatchScreenProps) {
   const isPartyHost = activeParty ? currentUserEmail === activeParty.host_email : false
   const isPartyGuest = activeParty ? currentUserEmail !== activeParty.host_email : false
@@ -8737,9 +8807,21 @@ function WatchScreen({
 
   const isAdmin = isMainAccount(currentUser?.email || currentUserEmail)
   const animeProviderIds: StreamProvider[] = ['filmu', 'nhdapi', 'yenime', 'clickhost', 'megaplay', 'megabuzz', 'megavid']
+  const mainstreamProviders: StreamProvider[] = [
+    'rivestream', 'vidrift', 'vidcore', 'embedwave', 'vsembed', 'vidsrcbuzz',
+    'cinesrc', 'embedapi', 'vidphantom', 'mgeb', 'autoembed', 'primesrc', 'embedmaster', 'filmu'
+  ]
+  const disabledList = disabledServers || []
+  const starProvider = (starredServer && isStreamProvider(starredServer) && (isAdmin || !disabledList.includes(starredServer))) ? (starredServer as StreamProvider) : null
 
-  const starProvider = (starredServer && isStreamProvider(starredServer)) ? (starredServer as StreamProvider) : null
-  const chosenProvider: StreamProvider = activeProviderOverride ?? (starProvider ?? (isStreamProvider(streamProvider) ? streamProvider : defaultStreamProvider))
+  const enabledMainstreamFallback = mainstreamProviders.find((p) => !disabledList.includes(p)) ?? defaultStreamProvider
+  const enabledAnimeFallback = animeProviderIds.find((p) => !disabledList.includes(p)) ?? 'filmu'
+
+  const rawChosenProvider: StreamProvider = activeProviderOverride ?? (starProvider ?? (isStreamProvider(streamProvider) ? streamProvider : defaultStreamProvider))
+
+  const chosenProvider: StreamProvider = (!isAdmin && disabledList.includes(rawChosenProvider))
+    ? (starProvider ?? (isAnimeMovie ? enabledAnimeFallback : enabledMainstreamFallback))
+    : rawChosenProvider
 
   const activeProviderId: StreamProvider = isJavVideo
     ? 'apijav'
@@ -8758,12 +8840,12 @@ function WatchScreen({
               ? chosenProvider
               : (starProvider && animeProviderIds.includes(starProvider))
                 ? starProvider
-                : 'filmu'
+                : enabledAnimeFallback
           : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'vidrift' || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom' || chosenProvider === 'mgeb' || chosenProvider === 'vidcore' || chosenProvider === 'autoembed' || chosenProvider === 'vsembed' || chosenProvider === 'vidsrcbuzz' || chosenProvider === 'embedwave')
             ? chosenProvider
             : (starProvider && !animeProviderIds.includes(starProvider))
               ? starProvider
-              : 'rivestream'
+              : enabledMainstreamFallback
 
   const handleServerSelect = useCallback(
     (providerId: StreamProvider) => {
@@ -10397,6 +10479,9 @@ function WatchScreen({
                                   provider.id === 'eporner'
                                 )
                                   return false
+                                if (!isAdmin && disabledList.includes(provider.id)) {
+                                  return false
+                                }
                                 const isAnimeProvider = animeProviderIds.includes(provider.id)
                                 return isAnimeMovie ? (movie.tmdbId ? true : isAnimeProvider) : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
                               })
@@ -10404,23 +10489,29 @@ function WatchScreen({
                   return filteredOptions.map((provider) => {
                     const isActive = provider.id === activeProviderId
                     const isStarred = provider.id === starredServer
+                    const isDisabled = disabledList.includes(provider.id)
 
                     return (
                       <div
                         key={provider.id}
-                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
+                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}${isDisabled ? ' is-server-disabled' : ''}`}
                       >
                         <button
                           className={`server-option${isActive ? ' active' : ''}`}
                           type="button"
                           role="radio"
                           aria-checked={isActive}
-                          title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}`}
+                          title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}${isDisabled ? ' (Disabled for users)' : ''}`}
                           aria-label={provider.name}
                           onClick={() => handleServerSelect(provider.id)}
                         >
                           <span className="provider-logo">{provider.logo}</span>
-                          <span className="provider-name">{provider.name}</span>
+                          <span className="provider-name">
+                            {provider.name}
+                            {isAdmin && isDisabled && (
+                              <span className="server-disabled-tag">Disabled</span>
+                            )}
+                          </span>
                         </button>
                         {isAdmin && onToggleStarServer ? (
                           <button
@@ -10457,6 +10548,27 @@ function WatchScreen({
                               />
                             </div>
                           )
+                        )}
+                        {isAdmin && onToggleDisableServer && (
+                          <button
+                            type="button"
+                            className={`server-disable-btn${isDisabled ? ' is-disabled' : ''}`}
+                            title={
+                              isDisabled
+                                ? `Enable ${provider.name} (Currently hidden from users)`
+                                : `Disable ${provider.name} (Hide from users)`
+                            }
+                            aria-label={isDisabled ? `Enable ${provider.name}` : `Disable ${provider.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onToggleDisableServer(provider.id)
+                            }}
+                          >
+                            <Ban
+                              size={13}
+                              color={isDisabled ? '#ff4d4f' : 'rgba(255, 255, 255, 0.45)'}
+                            />
+                          </button>
                         )}
                       </div>
                     )
@@ -10520,6 +10632,9 @@ function WatchScreen({
                                   provider.id === 'eporner'
                                 )
                                   return false
+                                if (!isAdmin && disabledList.includes(provider.id)) {
+                                  return false
+                                }
                                 const isAnimeProvider = animeProviderIds.includes(provider.id)
                                 return isAnimeMovie ? (movie.tmdbId ? true : isAnimeProvider) : (!isAnimeProvider || provider.id === 'filmu' || provider.id === 'nhdapi')
                               })
@@ -10527,23 +10642,29 @@ function WatchScreen({
                   return filteredOptions.map((provider) => {
                     const isActive = provider.id === activeProviderId
                     const isStarred = provider.id === starredServer
+                    const isDisabled = disabledList.includes(provider.id)
 
                     return (
                       <div
                         key={provider.id}
-                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}`}
+                        className={`server-option-wrapper${isActive ? ' active' : ''}${isStarred ? ' starred' : ''}${isDisabled ? ' is-server-disabled' : ''}`}
                       >
                         <button
                           className={`server-option${isActive ? ' active' : ''}`}
                           type="button"
                           role="radio"
                           aria-checked={isActive}
-                          title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}`}
+                          title={`${provider.name} — ${provider.description}${isStarred ? ' (Starred by Admin)' : ''}${isDisabled ? ' (Disabled for users)' : ''}`}
                           aria-label={provider.name}
                           onClick={() => handleServerSelect(provider.id)}
                         >
                           <span className="provider-logo">{provider.logo}</span>
-                          <span className="provider-name">{provider.name}</span>
+                          <span className="provider-name">
+                            {provider.name}
+                            {isAdmin && isDisabled && (
+                              <span className="server-disabled-tag">Disabled</span>
+                            )}
+                          </span>
                         </button>
                         {isAdmin && onToggleStarServer ? (
                           <button
@@ -10580,6 +10701,27 @@ function WatchScreen({
                               />
                             </div>
                           )
+                        )}
+                        {isAdmin && onToggleDisableServer && (
+                          <button
+                            type="button"
+                            className={`server-disable-btn${isDisabled ? ' is-disabled' : ''}`}
+                            title={
+                              isDisabled
+                                ? `Enable ${provider.name} (Currently hidden from users)`
+                                : `Disable ${provider.name} (Hide from users)`
+                            }
+                            aria-label={isDisabled ? `Enable ${provider.name}` : `Disable ${provider.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onToggleDisableServer(provider.id)
+                            }}
+                          >
+                            <Ban
+                              size={13}
+                              color={isDisabled ? '#ff4d4f' : 'rgba(255, 255, 255, 0.45)'}
+                            />
+                          </button>
                         )}
                       </div>
                     )
@@ -11029,6 +11171,8 @@ type LoginScreenProps = {
   onSetLordPin?: () => void
   profiles: UserProfile[]
   designMode: 'apple' | 'netflix'
+  disabledServers?: string[]
+  onToggleDisableServer?: (serverId: string) => void
 }
 
 function LoginScreen({
@@ -11040,6 +11184,8 @@ function LoginScreen({
   onSelectProfile,
   profiles,
   designMode,
+  disabledServers,
+  onToggleDisableServer,
 }: LoginScreenProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -11073,6 +11219,7 @@ function LoginScreen({
   const [manageAccountsOpen, setManageAccountsOpen] = useState(false)
   const [changeAdminOpen, setChangeAdminOpen] = useState(false)
   const [changeLordOpen, setChangeLordOpen] = useState(false)
+  const [manageServersOpen, setManageServersOpen] = useState(false)
   const [newLordPin, setNewLordPin] = useState('')
   const [lordPinMsg, setLordPinMsg] = useState('')
   const [lordPinBusy, setLordPinBusy] = useState(false)
@@ -11818,6 +11965,68 @@ function LoginScreen({
                       </button>
                     </div>
                     {lordPinMsg && <p className="bff-status">{lordPinMsg}</p>}
+                  </div>
+                )}
+                {isMainAccount(currentUser?.email) && (
+                  <button
+                    type="button"
+                    className="account-row account-manage-toggle"
+                    onClick={() => setManageServersOpen((value) => !value)}
+                    aria-expanded={manageServersOpen}
+                  >
+                    <span className="account-row-left">
+                      <Tv size={18} />
+                      <span>Manage Streaming Servers</span>
+                    </span>
+                    <ChevronRight
+                      size={18}
+                      style={{
+                        transform: manageServersOpen ? 'rotate(90deg)' : 'none',
+                        transition: 'transform 0.15s ease',
+                      }}
+                    />
+                  </button>
+                )}
+                {isMainAccount(currentUser?.email) && manageServersOpen && (
+                  <div className="account-card account-manage-inline">
+                    <p className="account-manage-note">
+                      Enable or disable streaming servers. Disabled servers are instantly hidden from regular users and excluded from auto-play.
+                    </p>
+                    <div className="admin-servers-list">
+                      {streamProviderOptions
+                        .filter((p) => p.id !== 'apijav' && p.id !== 'eporner' && p.id !== 'upload18' && p.id !== 'phubplay' && p.id !== 'oceanplay')
+                        .map((provider) => {
+                          const isDis = disabledServers?.includes(provider.id)
+                          return (
+                            <div key={provider.id} className={`admin-server-item${isDis ? ' is-disabled' : ''}`}>
+                              <div className="admin-server-info">
+                                <span className="provider-logo">{provider.logo}</span>
+                                <div>
+                                  <span className="admin-server-name">{provider.name}</span>
+                                  <span className="admin-server-desc">{provider.description}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className={`admin-server-toggle-btn${isDis ? ' is-disabled' : ' is-enabled'}`}
+                                onClick={() => onToggleDisableServer?.(provider.id)}
+                              >
+                                {isDis ? (
+                                  <>
+                                    <Ban size={13} />
+                                    <span>Disabled</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check size={13} />
+                                    <span>Active</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )
+                        })}
+                    </div>
                   </div>
                 )}
                 <button
