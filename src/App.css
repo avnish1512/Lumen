@@ -7182,43 +7182,71 @@ a.watch-option-card {
     font-size: 12px;
   }
 
+  .search-screen {
+    padding-bottom: 120px !important;
+  }
+
+  .search-screen .search-content,
+  .search-screen .visual-search {
+    padding-bottom: 120px !important;
+  }
+
   .search-bottom {
-    bottom: max(10px, env(safe-area-inset-bottom));
-    grid-template-columns: 58px minmax(0, 1fr);
-    gap: 8px;
-    width: min(390px, calc(100vw - 24px));
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: max(24px, calc(env(safe-area-inset-bottom, 20px) + 16px)) !important;
+    z-index: 999 !important;
+    display: grid !important;
+    grid-template-columns: 54px minmax(0, 1fr) !important;
+    gap: 8px !important;
+    width: min(390px, calc(100vw - 24px)) !important;
+    margin: 0 auto !important;
+    align-items: center !important;
+    pointer-events: auto !important;
   }
 
   .search-form {
-    grid-template-columns: 26px minmax(0, 1fr) 34px;
-    min-height: 56px;
-    gap: 8px;
-    padding: 0 12px;
+    display: grid !important;
+    grid-template-columns: 24px minmax(0, 1fr) 34px !important;
+    min-height: 54px !important;
+    height: 54px !important;
+    gap: 8px !important;
+    padding: 0 14px !important;
+    border-radius: 999px !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
   }
 
   .search-form>svg {
-    width: 25px;
-    height: 25px;
+    width: 22px !important;
+    height: 22px !important;
   }
 
   .search-form input {
-    font-size: clamp(18px, 5.2vw, 25px);
+    font-size: clamp(16px, 4.8vw, 20px) !important;
+    height: 100% !important;
   }
 
   .search-library-bubble {
-    width: 58px;
-    height: 58px;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 54px !important;
+    height: 54px !important;
+    border-radius: 50% !important;
+    box-sizing: border-box !important;
   }
 
   .search-library-bubble svg,
   .mic-button svg {
-    width: 28px;
-    height: 28px;
+    width: 24px !important;
+    height: 24px !important;
   }
 
   .mic-button {
-    width: 34px;
-    height: 34px;
+    width: 34px !important;
+    height: 34px !important;
   }
 
   .library-header {
@@ -8396,17 +8424,17 @@ a.watch-option-card {
     padding: 24px 28px 80px;
   }
 
-  .watch-screen .server-selector {
+  .watch-screen .watch-card-section .server-selector {
     gap: 8px;
   }
 
-  .watch-screen .server-option {
+  .watch-screen .watch-card-section .server-option {
     min-height: 40px;
     height: 40px;
     padding: 0 10px;
   }
 
-  .watch-screen .server-option .provider-logo {
+  .watch-screen .watch-card-section .server-option .provider-logo {
     width: 50px;
     height: 50px;
     font-size: 20px;
@@ -15625,34 +15653,45 @@ body:has(.add-profile-screen),
    Watch screen — server cards side by side in a clean 2-column grid on mobile,
    ensuring all servers are neatly visible on screen without horizontal clipping.
    ========================================================================== */
+.watch-server-grid,
 .watch-screen .server-selector {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 @media (max-width: 899px) {
+  .watch-server-grid,
   .watch-screen .server-selector,
   .anime-server-row .anime-inline-servers {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
     width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     box-sizing: border-box !important;
-    margin-top: 10px;
+    margin-top: 10px !important;
   }
 
   .anime-server-row {
     width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
   }
 
+  .watch-server-grid .server-option-wrapper,
   .watch-screen .server-option-wrapper,
   .anime-server-row .anime-inline-servers .server-option-wrapper {
     display: flex !important;
     align-items: center !important;
     width: 100% !important;
+    max-width: 100% !important;
     min-width: 0 !important;
     box-sizing: border-box !important;
     border-radius: 10px;
@@ -15660,20 +15699,29 @@ body:has(.add-profile-screen),
     min-height: 44px !important;
   }
 
+  .watch-server-grid .server-option-wrapper:only-child,
+  .watch-screen .server-option-wrapper:only-child {
+    grid-column: 1 / -1 !important;
+  }
+
+  .watch-server-grid .server-option-wrapper .server-option,
   .watch-screen .server-option-wrapper .server-option,
   .anime-server-row .anime-inline-servers .server-option {
     display: flex !important;
     align-items: center !important;
     flex: 1 1 auto !important;
     min-width: 0 !important;
-    width: auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
     height: 100% !important;
     min-height: 44px !important;
     padding: 0 8px 0 10px !important;
     gap: 7px !important;
     overflow: hidden !important;
+    box-sizing: border-box !important;
   }
 
+  .watch-server-grid .server-option-wrapper .provider-logo,
   .watch-screen .server-option-wrapper .provider-logo,
   .anime-server-row .anime-inline-servers .provider-logo {
     display: inline-flex !important;
@@ -15681,6 +15729,7 @@ body:has(.add-profile-screen),
     justify-content: center !important;
     flex: 0 0 auto !important;
     width: auto !important;
+    min-width: 24px !important;
     height: auto !important;
     padding: 2px 5px !important;
     font-size: 11px !important;
@@ -15689,6 +15738,7 @@ body:has(.add-profile-screen),
     border-radius: 4px !important;
   }
 
+  .watch-server-grid .server-option-wrapper .provider-name,
   .watch-screen .server-option-wrapper .provider-name,
   .anime-server-row .anime-inline-servers .provider-name {
     flex: 1 1 auto !important;
@@ -15701,6 +15751,7 @@ body:has(.add-profile-screen),
     text-align: left !important;
   }
 
+  .watch-server-grid .server-option-wrapper .server-star-btn,
   .watch-screen .server-option-wrapper .server-star-btn,
   .anime-server-row .anime-inline-servers .server-star-btn {
     flex: 0 0 auto !important;
@@ -15712,11 +15763,18 @@ body:has(.add-profile-screen),
     flex-wrap: wrap;
     padding: 16px 16px 6px;
     gap: 12px;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .watch-screen .watch-topbar .watch-title-block {
     order: -1;
     flex-basis: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
   }
 
   .watch-screen .watch-topbar .watch-play {
@@ -15738,10 +15796,55 @@ body:has(.add-profile-screen),
 
   .watch-title-main {
     font-size: clamp(30px, 8vw, 44px);
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
   .watch-lower {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
     padding: 16px 16px 60px !important;
+    overflow-x: hidden !important;
+  }
+
+  .watch-lower-left {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .watch-actions-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 4px !important;
+    margin-top: 12px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .watch-actions-row::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .watch-actions-row .watch-mylist-btn {
+    flex-shrink: 0 !important;
+    margin-top: 0 !important;
+    padding: 8px 14px !important;
+    font-size: 13px !important;
+    height: 38px !important;
   }
 }
 
@@ -22458,11 +22561,19 @@ body:has(.add-profile-screen),
 
 /* Watch Screen Similars Rail */
 .watch-similars-rail-section {
-  width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
   margin-top: 24px;
+  overflow-x: hidden !important;
 }
 
 .watch-similars-rail-section .detail-section {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
   padding: 0 !important;
   background: transparent !important;
 }
@@ -22475,10 +22586,16 @@ body:has(.add-profile-screen),
 }
 
 .watch-similars-rail-section .detail-poster-viewport {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
   margin-right: 0 !important;
 }
 
 .watch-similars-rail-section .detail-poster-row {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
   margin-right: 0 !important;
   padding-right: 0 !important;
 }

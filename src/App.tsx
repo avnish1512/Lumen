@@ -10353,7 +10353,7 @@ function WatchScreen({
             </div>
 
             {!isPartyGuest && (
-              <div className="server-selector" role="radiogroup" aria-label="Streaming server">
+              <div className="server-selector watch-server-grid" role="radiogroup" aria-label="Streaming server">
                 {(() => {
                   const filteredOptions = isJavVideo
                     ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
