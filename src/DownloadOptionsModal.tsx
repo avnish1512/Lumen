@@ -197,6 +197,8 @@ export function DownloadOptionsModal({
 
   if (!isOpen) return null
 
+  const isAnime = Boolean(movie.isAnime)
+
   const disabledServers: string[] = (() => {
     try {
       const raw = window.localStorage.getItem('lumen.disabledServers.admin')

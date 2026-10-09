@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import { isStreamProvider, streamProviderOptions, type StreamProvider } from './tmdb'
+import { streamProviderOptions, type StreamProvider } from './tmdb'
 
 describe('Admin Server Disabling feature', () => {
   const adminDisabledServersKey = 'lumen.disabledServers.admin'
