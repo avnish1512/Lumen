@@ -1,3 +1,27 @@
+/* Accessibility & SEO Helpers */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.apple-floating-nav a,
+.netflix-sidebar-nav a {
+  text-decoration: none;
+}
+
+.apple-nav-link.apple-nav-link-active,
+.apple-floating-nav .apple-nav-link.apple-nav-link-active {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
 .app-shell {
   position: relative;
   width: min(100vw, 576px);
@@ -3567,14 +3591,21 @@ button:focus-visible {
     color: #fff;
   }
 
-  .apple-desktop-nav .apple-nav-link.apple-nav-link-active {
-    background: #ffffff;
-    color: #000000;
+  .apple-desktop-nav .apple-nav-link.apple-nav-link-active,
+  .apple-floating-nav .apple-nav-link.apple-nav-link-active,
+  .apple-nav-link.apple-nav-link-active {
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 
   .apple-desktop-nav .apple-nav-link.apple-nav-link-active:hover,
-  .apple-desktop-nav .apple-nav-link.apple-nav-link-active:focus-visible {
-    color: #000000;
+  .apple-desktop-nav .apple-nav-link.apple-nav-link-active:focus-visible,
+  .apple-floating-nav .apple-nav-link.apple-nav-link-active:hover,
+  .apple-floating-nav .apple-nav-link.apple-nav-link-active:focus-visible,
+  .apple-nav-link.apple-nav-link-active:hover,
+  .apple-nav-link.apple-nav-link-active:focus-visible {
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 
   .apple-desktop-nav .apple-nav-divider {

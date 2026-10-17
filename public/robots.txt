@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Allow: /movies
+Allow: /tv
+Allow: /anime
+Allow: /manga
+Allow: /livetv
+Allow: /library
+Allow: /search
+
+# Disallow private profiles, adult sections, backend API endpoints, and sensitive tokens
+Disallow: /lord
+Disallow: /lord/
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+Disallow: /*?*token=*
+Disallow: /*?*pin=*
+Disallow: /*?*secret=*
+
+# Sitemap location
+Sitemap: https://lumen.tv/sitemap.xml
+Host: https://lumen.tv

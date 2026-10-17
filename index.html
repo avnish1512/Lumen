@@ -2,17 +2,93 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <title>Lumen — Stream Movies, TV Shows, Anime &amp; Live TV</title>
+    <meta name="description" content="Stream thousands of trending movies, hit TV series, anime, manga, and live sports in high-definition on Lumen with an ultra-fast Apple TV and Netflix inspired interface." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://lumen.tv/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Lumen" />
+    <meta property="og:title" content="Lumen — Stream Movies, TV Shows, Anime &amp; Live TV" />
+    <meta property="og:description" content="Stream thousands of trending movies, hit TV series, anime, manga, and live sports in high-definition on Lumen with an ultra-fast Apple TV and Netflix inspired interface." />
+    <meta property="og:url" content="https://lumen.tv/" />
+    <meta property="og:image" content="https://lumen.tv/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Lumen Streaming Platform Interface" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@LumenStream" />
+    <meta name="twitter:title" content="Lumen — Stream Movies, TV Shows, Anime &amp; Live TV" />
+    <meta name="twitter:description" content="Stream thousands of trending movies, hit TV series, anime, manga, and live sports in high-definition on Lumen with an ultra-fast Apple TV and Netflix inspired interface." />
+    <meta name="twitter:image" content="https://lumen.tv/og-image.jpg" />
+
+    <!-- Mobile PWA & Responsiveness -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Lumen" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Favicons -->
     <link rel="icon" type="image/jpeg" href="/icon.jpeg" />
     <link rel="apple-touch-icon" href="/icon.jpeg" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- Speed up the first anime cover-art requests (AniList CDN + image host). -->
+
+    <!-- Enforce HTTPS & Upgrade Insecure Requests -->
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+
+    <!-- Core Web Vitals Preconnect & DNS-Prefetch Hints -->
+    <link rel="preconnect" href="https://image.tmdb.org" crossorigin />
+    <link rel="dns-prefetch" href="https://image.tmdb.org" />
     <link rel="preconnect" href="https://s4.anilist.co" crossorigin />
     <link rel="dns-prefetch" href="https://s4.anilist.co" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
     <!-- Immediately preload splash/login video and backdrop for instantaneous playback -->
     <link rel="preload" href="/loading.mp4" as="video" type="video/mp4" />
     <link rel="preload" href="/login-bg.jpeg" as="image" />
-    <title>Lumen</title>
+
+    <!-- Structured Data: Organization & WebSite JSON-LD Schema -->
+    <script id="lumen-jsonld-schema" type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://lumen.tv/#organization",
+            "name": "Lumen",
+            "url": "https://lumen.tv",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://lumen.tv/lumen-logo.png"
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://lumen.tv/#website",
+            "url": "https://lumen.tv",
+            "name": "Lumen",
+            "description": "Stream thousands of trending movies, hit TV series, anime, manga, and live sports in high-definition on Lumen.",
+            "publisher": {
+              "@id": "https://lumen.tv/#organization"
+            },
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": "https://lumen.tv/#search?q={search_term_string}"
+              },
+              "query-input": "required name=search_term_string"
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

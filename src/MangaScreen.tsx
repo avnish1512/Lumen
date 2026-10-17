@@ -229,7 +229,7 @@ export function MangaScreen({
             <ChevronLeft size={22} />
             <span>Back</span>
           </button>
-          <h1 style={{ fontSize: '18px', fontWeight: '700' }}>{selected.title}</h1>
+          <span className="screen-header-title" style={{ fontSize: '18px', fontWeight: '700' }}>{selected.title}</span>
           {renderHeaderProfile()}
         </header>
 

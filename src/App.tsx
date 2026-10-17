@@ -163,6 +163,7 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { DownloadsScreen } from './DownloadsScreen'
 import { startDownload, getAllDownloads, subscribeDownloads } from './downloads'
 import { DownloadOptionsModal } from './DownloadOptionsModal'
+import { updateSeoTags, createMovieSlug } from './seo'
 import {
   type JavPost,
   INITIAL_JAV_POSTS,
@@ -4703,6 +4704,107 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [screen, selectedMovie, detailBackScreen, watchBackScreen, lordBackScreen, loginBackScreen, hydrateMovie, hydrateStreamingMovie, markContinueWatching, resetScroll, setScreen])
 
+  // Synchronize dynamic SEO titles, meta descriptions, canonical URLs, robots noindex, and JSON-LD schema
+  useEffect(() => {
+    const isLordOrAdult =
+      screen === 'lord' || (selectedMovie ? isLordAdultMovie(selectedMovie) : false)
+
+    if (isLordOrAdult) {
+      updateSeoTags({
+        title: 'Protected Entertainment',
+        isNoIndex: true,
+        path: '/#lord',
+      })
+      return
+    }
+
+    if (screen === 'login' || screen === 'profiles') {
+      updateSeoTags({
+        title: screen === 'profiles' ? 'Choose Profile' : currentUser ? 'Account Settings' : 'Sign In',
+        isNoIndex: true,
+        path: `/#${screen}`,
+      })
+      return
+    }
+
+    if (screen === 'detail' && selectedMovie) {
+      updateSeoTags({
+        title: `${selectedMovie.title} (${selectedMovie.year || 'HD'}) — Watch Online`,
+        description: selectedMovie.synopsis,
+        path: `/#detail/${createMovieSlug(selectedMovie.title, selectedMovie.year)}`,
+        ogImage: selectedMovie.hero || selectedMovie.poster,
+        ogType: isTvShow(selectedMovie) ? 'video.tv_show' : 'video.movie',
+        movie: selectedMovie,
+        isNoIndex: false,
+      })
+      return
+    }
+
+    if (screen === 'watch' && selectedMovie) {
+      updateSeoTags({
+        title: `Watch ${selectedMovie.title} Online`,
+        description: selectedMovie.synopsis,
+        path: `/#watch/${createMovieSlug(selectedMovie.title, selectedMovie.year)}`,
+        ogImage: selectedMovie.hero || selectedMovie.poster,
+        ogType: isTvShow(selectedMovie) ? 'video.tv_show' : 'video.movie',
+        movie: selectedMovie,
+        isNoIndex: false,
+      })
+      return
+    }
+
+    const titlesByScreen: Record<string, { title: string; desc: string }> = {
+      home: {
+        title: 'Stream Movies, TV Shows, Anime & Live TV',
+        desc: 'Stream thousands of trending movies, hit TV series, anime, manga, and live sports in HD on Lumen with an ultra-fast Apple TV and Netflix inspired interface.',
+      },
+      drama: {
+        title: 'Drama — Stream Asian & International Dramas',
+        desc: 'Stream trending Korean, Chinese, and international dramas with English subtitles on Lumen.',
+      },
+      movies: {
+        title: 'Movies — Watch Free HD Movies',
+        desc: 'Browse and stream thousands of top-rated movies across action, comedy, sci-fi, and drama in crystal-clear HD.',
+      },
+      tv: {
+        title: 'TV Shows — Stream Hit Series',
+        desc: 'Binge-watch award-winning drama, comedy, and thriller television series with full seasons and episodes on Lumen.',
+      },
+      anime: {
+        title: 'Anime — Stream Sub & Dub Anime Online',
+        desc: 'Watch trending anime series and movies with Japanese sub and English dub options on Lumen.',
+      },
+      manga: {
+        title: 'Manga — Read Manga Online Free',
+        desc: 'Read the latest trending manga chapters with a clean vertical reading interface.',
+      },
+      livetv: {
+        title: 'Live TV & Sports — Watch Live Channels',
+        desc: 'Watch live sports matches and entertainment television channels streaming in high definition.',
+      },
+      library: {
+        title: 'My Library — Saved Movies & Series',
+        desc: 'Access your saved watchlist and favorites on Lumen.',
+      },
+      search: {
+        title: 'Search Movies, TV Shows & Anime',
+        desc: 'Search our massive catalog of movies, series, anime, and manga instantly on Lumen.',
+      },
+      downloads: {
+        title: 'Downloads — Offline Media',
+        desc: 'Manage and play your downloaded media offline on Lumen.',
+      },
+    }
+
+    const currentMeta = titlesByScreen[screen] || titlesByScreen.home
+    updateSeoTags({
+      title: currentMeta.title,
+      description: currentMeta.desc,
+      path: screen === 'home' ? '/' : `/#${screen}`,
+      isNoIndex: false,
+    })
+  }, [screen, selectedMovie])
+
   // Expose hardware back handler for mobile shells (ExpoWebShell / React Native WebView)
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -6613,7 +6715,7 @@ function HomeScreen({
         <img
           className="hero-art-image"
           src={posterImageFor(featuredMovie)}
-          alt=""
+          alt={featuredMovie.title || 'Featured movie art'}
           onError={(event) => {
             event.currentTarget.src = heroImageFor(featuredMovie)
           }}
@@ -7031,7 +7133,7 @@ function BrowseScreen({
           <img
             className="hero-art-image"
             src={posterImageFor(heroMovie)}
-            alt=""
+            alt={heroMovie?.title || `${screenTitle} featured art`}
             onError={(event) => {
               event.currentTarget.src = heroImageFor(heroMovie)
             }}
@@ -7577,7 +7679,7 @@ function DetailScreen({
           <img
             className="detail-hero-art"
             src={heroImageFor(movie)}
-            alt=""
+            alt={movie.title || 'Movie backdrop'}
             onError={(event) => {
               event.currentTarget.src = posterImageFor(movie)
             }}
@@ -7597,7 +7699,8 @@ function DetailScreen({
             isNetflix ? 'netflix-detail-copy' : 'apple-detail-copy'
           }`}
         >
-          <pre className="logo-title detail-title">{movie.logoTitle}</pre>
+          <h1 className="sr-only">{movie.title}</h1>
+          <pre className="logo-title detail-title" aria-hidden="true">{movie.logoTitle}</pre>
 
           {isNetflix ? (
             <p className="detail-meta netflix-detail-meta">
@@ -8329,7 +8432,7 @@ function SeasonEpisodeSection({
                 <span className="episode-thumb">
                   <img
                     src={cover}
-                    alt=""
+                    alt={`Episode ${episode} ${name}`.trim() || 'Episode thumbnail'}
                     loading="lazy"
                     onError={(event) => {
                       const showArt = movie.isAnime
@@ -8428,7 +8531,7 @@ function DetailLandscapeRail({
           >
             <img
               src={item.image || fallbackPosterForRank(item.movie?.rank ?? 1)}
-              alt=""
+              alt={item.title || 'Related title'}
               onError={(event) => {
                 event.currentTarget.src = fallbackPosterForRank(
                   item.movie?.rank ?? 1,
@@ -8554,7 +8657,7 @@ function WhereToWatch({
               <>
                 <span className="watch-option-logo platform-logo">
                   {provider.logoUrl ? (
-                    <img src={provider.logoUrl} alt="" />
+                    <img src={provider.logoUrl} alt={`${provider.name} logo`} />
                   ) : (
                     initialsFor(provider.name)
                   )}
@@ -8679,7 +8782,7 @@ function CastCrewRail({
               {person.imageUrl ? (
                 <img
                   src={person.imageUrl}
-                  alt=""
+                  alt={person.name || 'Cast member'}
                   onError={(event) => {
                     const avatar = event.currentTarget.parentElement
 
@@ -11080,7 +11183,7 @@ function SearchScreen({
                   >
                     <img
                       src={movie.poster}
-                      alt=""
+                      alt={movie.title || 'Recent search result'}
                       onError={(event) => {
                         event.currentTarget.src = fallbackPosterForRank(movie.rank)
                       }}
@@ -12385,8 +12488,8 @@ function LoginScreen({
 
           <p className="mobile-login-terms">
             By using Lumen you agree to Lumen&apos;s{' '}
-            <a href="#privacy" onClick={(e) => e.preventDefault()}>Privacy Policy</a> &amp;{' '}
-            <a href="#terms" onClick={(e) => e.preventDefault()}>Terms of Service</a>
+            <a href="mailto:support@lumen.tv?subject=Privacy%20Policy%20Inquiry" title="Privacy Policy">Privacy Policy</a> &amp;{' '}
+            <a href="mailto:support@lumen.tv?subject=Terms%20of%20Service%20Inquiry" title="Terms of Service">Terms of Service</a>
           </p>
         </div>
       </div>
@@ -13324,7 +13427,7 @@ function ProfilesScreen({
           <img
             key={src}
             src={src}
-            alt=""
+            alt="Profile background artwork"
             className={index === backdropIndex ? 'active' : ''}
           />
         ))}
@@ -13654,7 +13757,7 @@ function LandscapePosterCard({
     >
       <img
         src={image}
-        alt=""
+        alt={movie.title || 'Poster card'}
         loading="lazy"
         onError={(event) => {
           event.currentTarget.src = posterImageFor(movie)
@@ -13956,7 +14059,7 @@ function ContinueWatchingRail({
               >
                 <img
                   src={movie.still || movie.poster || movie.hero || fallbackPosterForRank(movie.rank)}
-                  alt=""
+                  alt={movie.title || 'Continue watching item'}
                   onError={(event) => {
                     event.currentTarget.src = fallbackPosterForRank(movie.rank)
                   }}
@@ -14122,7 +14225,7 @@ function FeatureRail({ title, movies, onOpenDetail }: MovieRailProps) {
             >
               <img
                 src={movie.poster}
-                alt=""
+                alt={movie.title || 'Feature title'}
                 onError={(event) => {
                   event.currentTarget.src = fallbackPosterForRank(movie.rank)
                 }}
@@ -14488,15 +14591,15 @@ function LiveMatchCard({
         {poster ? (
           <img
             src={poster}
-            alt=""
+            alt={match.title || 'Match banner'}
             loading="lazy"
             onError={() => setPosterFailed(true)}
           />
         ) : (
           <span className="livetv-match-badges">
-            {home?.badge && <img src={liveBadgeUrl(home.badge)} alt="" loading="lazy" />}
+            {home?.badge && <img src={liveBadgeUrl(home.badge)} alt={home?.name ? `${home.name} badge` : 'Home team'} loading="lazy" />}
             <span className="livetv-match-vs">vs</span>
-            {away?.badge && <img src={liveBadgeUrl(away.badge)} alt="" loading="lazy" />}
+            {away?.badge && <img src={liveBadgeUrl(away.badge)} alt={away?.name ? `${away.name} badge` : 'Away team'} loading="lazy" />}
           </span>
         )}
         {isLiveNow && <span className="livetv-card-live">● LIVE</span>}
@@ -15021,7 +15124,7 @@ function NotificationBell({
                 <span className="notif-thumb">
                   <img
                     src={invite.movie?.poster || invite.movie?.still || invite.movie?.hero || ''}
-                    alt=""
+                    alt={invite.movie?.title || 'Watch party title'}
                     loading="lazy"
                   />
                 </span>
@@ -15904,7 +16007,7 @@ function LordScreen({
                       >
                         <img
                           src={movie.poster || movie.still || movie.hero}
-                          alt=""
+                          alt={movie.title || 'Result poster'}
                           loading="lazy"
                           onError={(event) => {
                             ;(event.target as HTMLImageElement).style.visibility = 'hidden'
@@ -18273,64 +18376,88 @@ function DesktopNav({
           {/* Middle navigation links/icons */}
           <nav className="netflix-sidebar-nav" aria-label="Main Navigation">
             {/* Anime (Home) icon */}
-            <button
+            <a
+              href="#home"
               className={`netflix-sidebar-btn ${active === 'Home' ? 'active' : ''}`}
-              type="button"
-              onClick={onHome}
+              onClick={(e) => {
+                e.preventDefault()
+                onHome()
+              }}
               title="Anime (Home)"
+              aria-label="Anime Home"
             >
               <Home size={22} strokeWidth={2.2} />
-            </button>
+            </a>
 
             {/* Drama icon */}
-            <button
+            <a
+              href="#drama"
               className={`netflix-sidebar-btn ${active === 'Drama' ? 'active' : ''}`}
-              type="button"
-              onClick={onDrama}
+              onClick={(e) => {
+                e.preventDefault()
+                onDrama()
+              }}
               title="Drama"
+              aria-label="Drama"
             >
               <Tv size={22} strokeWidth={2.2} />
-            </button>
+            </a>
 
             {/* Live TV icon */}
-            <button
+            <a
+              href="#livetv"
               className={`netflix-sidebar-btn ${active === 'Live TV' ? 'active' : ''}`}
-              type="button"
-              onClick={onLiveTv}
+              onClick={(e) => {
+                e.preventDefault()
+                onLiveTv()
+              }}
               title="Live TV"
+              aria-label="Live TV"
             >
               <Radio size={22} strokeWidth={2.2} />
-            </button>
+            </a>
 
             {/* Manga icon */}
-            <button
+            <a
+              href="#manga"
               className={`netflix-sidebar-btn ${active === 'Manga' ? 'active' : ''}`}
-              type="button"
-              onClick={onManga}
+              onClick={(e) => {
+                e.preventDefault()
+                onManga()
+              }}
               title="Manga"
+              aria-label="Manga"
             >
               <BookOpen size={22} strokeWidth={2.2} />
-            </button>
+            </a>
 
             {/* Search icon */}
-            <button
+            <a
+              href="#search"
               className={`netflix-sidebar-btn ${active === 'Search' ? 'active' : ''}`}
-              type="button"
-              onClick={onSearch}
+              onClick={(e) => {
+                e.preventDefault()
+                onSearch()
+              }}
               title="Search"
+              aria-label="Search"
             >
               <Search size={22} strokeWidth={2.2} />
-            </button>
+            </a>
 
             {/* Library (Plus) icon */}
-            <button
+            <a
+              href="#library"
               className={`netflix-sidebar-btn ${active === 'Library' ? 'active' : ''}`}
-              type="button"
-              onClick={onLibrary}
+              onClick={(e) => {
+                e.preventDefault()
+                onLibrary()
+              }}
               title="Library"
+              aria-label="Library"
             >
               <Plus size={22} strokeWidth={2.2} />
-            </button>
+            </a>
           </nav>
 
           {/* Bottom Actions: Notifications & Profile */}
@@ -18357,52 +18484,70 @@ function DesktopNav({
             role="navigation"
             aria-label="Primary"
           >
-            <button
+            <a
+              href="#home"
               className={`apple-nav-link${active === 'Home' ? ' apple-nav-link-active' : ''}`}
-              type="button"
-              onClick={onHome}
+              onClick={(e) => {
+                e.preventDefault()
+                onHome()
+              }}
             >
               Home
-            </button>
-            <button
+            </a>
+            <a
+              href="#movies"
               className={`apple-nav-link${active === 'Movies' ? ' apple-nav-link-active' : ''}`}
-              type="button"
-              onClick={onMovies}
+              onClick={(e) => {
+                e.preventDefault()
+                onMovies()
+              }}
             >
               Movies
-            </button>
-            <button
+            </a>
+            <a
+              href="#tv"
               className={`apple-nav-link${active === 'TV Shows' ? ' apple-nav-link-active' : ''}`}
-              type="button"
-              onClick={onTvShows}
+              onClick={(e) => {
+                e.preventDefault()
+                onTvShows()
+              }}
             >
               TV
-            </button>
-            <button
+            </a>
+            <a
+              href="#library"
               className={`apple-nav-link${active === 'Library' ? ' apple-nav-link-active' : ''}`}
-              type="button"
-              onClick={onLibrary}
+              onClick={(e) => {
+                e.preventDefault()
+                onLibrary()
+              }}
             >
               Library
-            </button>
+            </a>
             <span className="apple-nav-divider" aria-hidden="true" />
-            <button
+            <a
+              href="#anime"
               className="apple-nav-link apple-nav-anime-link"
-              type="button"
-              onClick={onGoAnime}
+              onClick={(e) => {
+                e.preventDefault()
+                onGoAnime()
+              }}
               title="Switch to Anime / Drama"
             >
               A/D
-            </button>
-            <button
+            </a>
+            <a
+              href="#search"
               className="apple-nav-icon-btn"
-              type="button"
               title="Search"
               aria-label="Search"
-              onClick={onSearch}
+              onClick={(e) => {
+                e.preventDefault()
+                onSearch()
+              }}
             >
               <Search size={18} />
-            </button>
+            </a>
           </div>
           <NotificationBell
             variant="apple"
