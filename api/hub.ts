@@ -12,9 +12,19 @@ import {
   fetchWatchHistory,
   saveWatchHistory,
   updateMovieProgress,
+  fetchUserWatchProgress,
+  saveUserWatchRecord,
+  batchSaveUserWatchRecords,
+  buildWatchRecordKey,
+  type WatchProgressRecord,
   supabaseConfigFromEnv,
   type StoredProfile,
 } from './_lib/supabase-core.js'
+import {
+  createSessionToken,
+  verifySessionToken,
+  extractBearerToken,
+} from './_lib/auth-token.js'
 import {
   createTmdbTrailerAuthChain,
   fetchTmdbTrailerYoutubeId,
@@ -411,8 +421,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const password = String(body.password ?? '')
     const adminPassword = await resolveAdminPassword(env, config)
     if (email === adminEmailFromEnv(env) && adminPassword && safeEqual(password, adminPassword)) {
+      const sessionToken = createSessionToken(email, config, env, 'Admin')
       res.setHeader('Cache-Control', 'no-store')
-      res.status(200).json({ ok: true })
+      res.status(200).json({ ok: true, sessionToken, user: { email, name: 'Admin' } })
       return
     }
     // Otherwise fall through to the table-backed verify in the accounts block.
@@ -465,48 +476,139 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (kind === 'watch-history') {
     res.setHeader('Cache-Control', 'no-store')
     try {
+      const authHeader = req.headers.authorization || (req.headers as any)?.['Authorization']
+      const bearerToken = extractBearerToken(authHeader)
+      const session = verifySessionToken(bearerToken, config, env)
+      const authenticatedUserId = session?.userId ?? null
+
       if (req.method === 'GET') {
-        const key = (qv(req.query.key) ?? '').trim()
-        if (!key) {
-          res.status(400).json({ ok: false, error: 'key is required.', history: null })
+        const queryKey = (qv(req.query.key) ?? '').trim()
+        const targetUserId = authenticatedUserId || (queryKey.includes('::') ? queryKey.split('::')[0].toLowerCase() : (queryKey ? queryKey.toLowerCase() : ''))
+
+        // Security check: if authenticated as user A, prevent accessing user B's history
+        if (authenticatedUserId && queryKey) {
+          const requestedUser = queryKey.includes('::') ? queryKey.split('::')[0].toLowerCase() : queryKey.toLowerCase()
+          if (requestedUser && requestedUser !== authenticatedUserId) {
+            res.status(403).json({ ok: false, error: 'Forbidden. You cannot access another account\'s watch history.' })
+            return
+          }
+        }
+
+        if (!targetUserId && !queryKey) {
+          res.status(400).json({ ok: false, error: 'Authenticated session or key is required.', history: null })
           return
         }
-        let history: Record<string, unknown> | null = null
+
+        let records: WatchProgressRecord[] = []
+        let history: Record<string, unknown> = {}
+
         if (config) {
           try {
-            history = await fetchWatchHistory(config, key)
+            if (targetUserId) {
+              const resData = await fetchUserWatchProgress(config, targetUserId)
+              records = resData.records
+              history = resData.history
+            } else if (queryKey) {
+              const old = await fetchWatchHistory(config, queryKey)
+              if (old) history = old
+            }
           } catch {}
         }
-        res.status(200).json({ ok: true, configured: Boolean(config), history })
+
+        res.status(200).json({
+          ok: true,
+          configured: Boolean(config),
+          userId: targetUserId,
+          records,
+          history,
+        })
         return
       }
-      const key = String(body.key ?? '').trim()
-      const history = body.history
-      const movieId = typeof body.movieId === 'string' ? body.movieId.trim() : ''
-      const movieData = body.movieData
-      if (!key) {
-        res.status(400).json({ ok: false, error: 'key is required.' })
+
+      // POST / PUT
+      const targetUserId = authenticatedUserId || (body.key ? String(body.key).split('::')[0].toLowerCase() : (body.user_id ? String(body.user_id).toLowerCase() : ''))
+
+      if (authenticatedUserId && body.key) {
+        const requestedUser = String(body.key).split('::')[0].toLowerCase()
+        if (requestedUser && requestedUser !== authenticatedUserId) {
+          res.status(403).json({ ok: false, error: 'Forbidden. You cannot modify another account\'s watch history.' })
+          return
+        }
+      }
+
+      if (!targetUserId) {
+        res.status(401).json({ ok: false, error: 'Authenticated session required.' })
         return
       }
-      if (movieId && movieData && typeof movieData === 'object') {
+
+      // 1. Batch progress records (e.g. offline queue flush)
+      if (Array.isArray(body.records)) {
         if (config) {
           try {
-            await updateMovieProgress(config, key, movieId, movieData as Record<string, unknown>)
+            await batchSaveUserWatchRecords(config, targetUserId, body.records as WatchProgressRecord[])
           } catch {}
         }
         res.status(200).json({ ok: true, configured: Boolean(config) })
         return
       }
-      if (!history || typeof history !== 'object') {
-        res.status(400).json({ ok: false, error: 'key and history required.' })
+
+      // 2. Single WatchProgressRecord
+      if (body.record && typeof body.record === 'object') {
+        if (config) {
+          try {
+            await saveUserWatchRecord(config, targetUserId, body.record as WatchProgressRecord)
+          } catch {}
+        }
+        res.status(200).json({ ok: true, configured: Boolean(config) })
         return
       }
-      if (config) {
-        try {
-          await saveWatchHistory(config, key, history as Record<string, unknown>)
-        } catch {}
+
+      // 3. Direct progress fields: content_id / movieId + progress_seconds
+      if (body.content_id || body.contentId || body.movieId) {
+        const contentId = String(body.content_id || body.contentId || body.movieId).trim()
+        const progressSeconds = typeof body.progress_seconds === 'number' ? body.progress_seconds : (typeof body.progressSeconds === 'number' ? body.progressSeconds : (typeof body.progress === 'number' ? body.progress : 0))
+        const durationSeconds = typeof body.duration_seconds === 'number' ? body.duration_seconds : (typeof body.durationSeconds === 'number' ? body.durationSeconds : 7200)
+        const season = body.season_number != null ? Number(body.season_number) : (body.season != null ? Number(body.season) : null)
+        const episode = body.episode_number != null ? Number(body.episode_number) : (body.episode != null ? Number(body.episode) : null)
+        const completed = Boolean(body.completed || (durationSeconds > 0 && progressSeconds >= 0.95 * durationSeconds))
+        const movie = (body.movie && typeof body.movie === 'object' ? body.movie : (body.movieData && typeof body.movieData === 'object' ? body.movieData : {})) as Record<string, unknown>
+
+        const rec: WatchProgressRecord = {
+          id: buildWatchRecordKey(targetUserId, contentId, season, episode),
+          user_id: targetUserId,
+          content_id: contentId,
+          content_type: (body.content_type || body.contentType || (movie.tmdbType === 'tv' ? 'tv' : 'movie')) as any,
+          season_number: season,
+          episode_number: episode,
+          progress_seconds: progressSeconds,
+          duration_seconds: durationSeconds,
+          updated_at: new Date().toISOString(),
+          completed,
+          movie,
+        }
+
+        if (config) {
+          try {
+            await saveUserWatchRecord(config, targetUserId, rec)
+          } catch {}
+        }
+        res.status(200).json({ ok: true, configured: Boolean(config), record: rec })
+        return
       }
-      res.status(200).json({ ok: true, configured: Boolean(config) })
+
+      // 4. Legacy full history map
+      if (body.history && typeof body.history === 'object') {
+        const key = String(body.key || `${targetUserId}::continue_watching`).trim()
+        if (config) {
+          try {
+            await saveWatchHistory(config, key, body.history as Record<string, unknown>)
+          } catch {}
+        }
+        res.status(200).json({ ok: true, configured: Boolean(config) })
+        return
+      }
+
+      res.status(400).json({ ok: false, error: 'Valid watch record or history required.' })
     } catch (error) {
       res.status(502).json({ ok: false, error: error instanceof Error ? error.message : 'Watch-history error.' })
     }
@@ -708,7 +810,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           res.status(429).json({ ok: false, error: 'Too many login attempts. Please wait a moment.' })
           return
         }
-        res.status(200).json({ ok: await verifyAccount(config, String(body.email ?? '').toLowerCase(), String(body.password ?? '')) })
+        const userEmail = String(body.email ?? '').toLowerCase()
+        const ok = await verifyAccount(config, userEmail, String(body.password ?? ''))
+        if (ok) {
+          const sessionToken = createSessionToken(userEmail, config, env)
+          res.status(200).json({ ok: true, sessionToken, user: { email: userEmail, name: userEmail.split('@')[0] } })
+          return
+        }
+        res.status(200).json({ ok: false })
         return
       }
       if (req.method === 'GET' && action === 'list') {

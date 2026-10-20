@@ -22,8 +22,16 @@ export type HlsPlayerProps = {
   muted?: boolean
   controls?: boolean
   title?: string
+  /** Playback position in seconds to resume from. */
+  startTime?: number
   /** Fired once playback actually begins (useful for "continue watching"). */
   onPlay?: () => void
+  /** Fired periodically during playback with current position and total duration. */
+  onTimeUpdate?: (currentTime: number, duration: number) => void
+  /** Fired when playback pauses. */
+  onPause?: (currentTime: number, duration: number) => void
+  /** Fired when playback finishes. */
+  onEnded?: () => void
   /** Fired when the stream can't be loaded / recovered. */
   onError?: (message: string) => void
 }
@@ -36,11 +44,20 @@ export function HlsPlayer({
   muted = false,
   controls = true,
   title,
+  startTime = 0,
   onPlay,
+  onTimeUpdate,
+  onPause,
+  onEnded,
   onError,
 }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [fatal, setFatal] = useState<string | null>(null)
+  const hasSeekedInitialRef = useRef(false)
+
+  useEffect(() => {
+    hasSeekedInitialRef.current = false
+  }, [src])
 
   useEffect(() => {
     const video = videoRef.current
@@ -49,6 +66,15 @@ export function HlsPlayer({
     }
 
     setFatal(null)
+
+    const applyStartTime = () => {
+      if (!hasSeekedInitialRef.current && startTime > 0 && Number.isFinite(video.duration)) {
+        if (startTime < video.duration) {
+          video.currentTime = startTime
+          hasSeekedInitialRef.current = true
+        }
+      }
+    }
 
     const fail = (message: string) => {
       setFatal(message)
@@ -61,7 +87,11 @@ export function HlsPlayer({
     if (!Hls.isSupported()) {
       if (canPlayNative) {
         video.src = src
+        video.addEventListener('loadedmetadata', applyStartTime, { once: true })
+        video.addEventListener('canplay', applyStartTime, { once: true })
         return () => {
+          video.removeEventListener('loadedmetadata', applyStartTime)
+          video.removeEventListener('canplay', applyStartTime)
           video.removeAttribute('src')
           video.load()
         }
@@ -80,6 +110,13 @@ export function HlsPlayer({
 
     hls.loadSource(src)
     hls.attachMedia(video)
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      applyStartTime()
+    })
+
+    video.addEventListener('loadedmetadata', applyStartTime, { once: true })
+    video.addEventListener('canplay', applyStartTime, { once: true })
 
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (!data.fatal) {
@@ -101,9 +138,11 @@ export function HlsPlayer({
     })
 
     return () => {
+      video.removeEventListener('loadedmetadata', applyStartTime)
+      video.removeEventListener('canplay', applyStartTime)
       hls.destroy()
     }
-  }, [src, onError])
+  }, [src, startTime, onError])
 
   return (
     <div className={className}>
@@ -116,6 +155,19 @@ export function HlsPlayer({
         playsInline
         title={title}
         onPlay={onPlay}
+        onTimeUpdate={() => {
+          const v = videoRef.current
+          if (v && Number.isFinite(v.currentTime) && Number.isFinite(v.duration)) {
+            onTimeUpdate?.(v.currentTime, v.duration)
+          }
+        }}
+        onPause={() => {
+          const v = videoRef.current
+          if (v && Number.isFinite(v.currentTime) && Number.isFinite(v.duration)) {
+            onPause?.(v.currentTime, v.duration)
+          }
+        }}
+        onEnded={onEnded}
         style={{ width: '100%', height: '100%', display: 'block', background: '#000' }}
       />
       {fatal && (

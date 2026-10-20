@@ -107,6 +107,9 @@ export type Movie = {
   boxOffice: string
   ratings: OmdbRating[]
   badges?: string[]
+  progressSeconds?: number
+  durationSeconds?: number
+  completed?: boolean
   isFull?: boolean
   isHentaiOcean?: boolean
   isJav?: boolean

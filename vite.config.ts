@@ -45,9 +45,19 @@ import {
   fetchWatchHistory,
   saveWatchHistory,
   updateMovieProgress,
+  fetchUserWatchProgress,
+  saveUserWatchRecord,
+  batchSaveUserWatchRecords,
+  buildWatchRecordKey,
+  type WatchProgressRecord,
   supabaseConfigFromEnv,
   type StoredProfile,
 } from './api/_lib/supabase-core'
+import {
+  createSessionToken,
+  verifySessionToken,
+  extractBearerToken,
+} from './api/_lib/auth-token'
 import { fetchPosterImage, posterKeysFromEnv } from './api/_lib/poster-core'
 import {
   fetchMangaChapter,
@@ -1082,10 +1092,17 @@ function accountsDevProxy(env: Record<string, string | undefined>): Plugin {
               const password = String(body.password ?? '')
               const adminPassword = await resolveAdminPassword(env, config)
               if (email === adminEmail && adminPassword && password === adminPassword) {
-                sendJson(res, 200, { ok: true })
+                const sessionToken = createSessionToken(email, config, env, 'Admin')
+                sendJson(res, 200, { ok: true, sessionToken, user: { email, name: 'Admin' } })
                 return
               }
-              sendJson(res, 200, { ok: await verifyAccount(config, email, password) })
+              const ok = await verifyAccount(config, email, password)
+              if (ok) {
+                const sessionToken = createSessionToken(email, config, env)
+                sendJson(res, 200, { ok: true, sessionToken, user: { email, name: email.split('@')[0] } })
+                return
+              }
+              sendJson(res, 200, { ok: false })
               return
             }
             if (action === 'set-admin-password') {
@@ -1627,22 +1644,55 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
       server.middlewares.use('/api/watch-history', async (req: IncomingMessage, res) => {
         const config = supabaseConfigFromEnv(env)
         try {
+          const authHeader = req.headers.authorization || (req.headers as any)?.['Authorization']
+          const bearerToken = extractBearerToken(authHeader)
+          const session = verifySessionToken(bearerToken, config, env)
+          const authenticatedUserId = session?.userId ?? null
+
           if (req.method === 'GET') {
             const requestUrl = new URL(req.url ?? '/', 'http://localhost')
-            const key = (requestUrl.searchParams.get('key') ?? '').trim()
-            if (!key) {
-              sendJson(res, 400, { ok: false, error: 'key is required.', history: null })
+            const queryKey = (requestUrl.searchParams.get('key') ?? '').trim()
+            const targetUserId = authenticatedUserId || (queryKey.includes('::') ? queryKey.split('::')[0].toLowerCase() : (queryKey ? queryKey.toLowerCase() : ''))
+
+            // Security check: if authenticated as user A, prevent accessing user B's history
+            if (authenticatedUserId && queryKey) {
+              const requestedUser = queryKey.includes('::') ? queryKey.split('::')[0].toLowerCase() : queryKey.toLowerCase()
+              if (requestedUser && requestedUser !== authenticatedUserId) {
+                sendJson(res, 403, { ok: false, error: "Forbidden. You cannot access another account's watch history." })
+                return
+              }
+            }
+
+            if (!targetUserId && !queryKey) {
+              sendJson(res, 400, { ok: false, error: 'Authenticated session or key is required.', history: null })
               return
             }
-            let history: Record<string, unknown> | null = null
+
+            let records: WatchProgressRecord[] = []
+            let history: Record<string, unknown> = {}
+
             if (config) {
               try {
-                history = await fetchWatchHistory(config, key)
+                if (targetUserId) {
+                  const resData = await fetchUserWatchProgress(config, targetUserId)
+                  records = resData.records
+                  history = resData.history
+                } else if (queryKey) {
+                  const old = await fetchWatchHistory(config, queryKey)
+                  if (old) history = old
+                }
               } catch {
                 // ignore fetch failure
               }
             }
-            sendJson(res, 200, { ok: true, configured: Boolean(config), history })
+
+            sendJson(res, 200, {
+              ok: true,
+              configured: Boolean(config),
+              userId: targetUserId,
+              records,
+              history,
+            })
             return
           }
 
@@ -1652,22 +1702,89 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
               chunks.push(chunk as Buffer)
             }
             const raw = Buffer.concat(chunks).toString('utf8')
-            const body = raw
-              ? (JSON.parse(raw) as {
-                  key?: string
-                  history?: Record<string, unknown>
-                  movieId?: string
-                  movieData?: Record<string, unknown>
-                })
-              : {}
-            const key = String(body.key ?? '').trim()
+            const body = raw ? (JSON.parse(raw) as Record<string, any>) : {}
+
+            const targetUserId = authenticatedUserId || (body.key ? String(body.key).split('::')[0].toLowerCase() : (body.user_id ? String(body.user_id).toLowerCase() : ''))
+
+            if (authenticatedUserId && body.key) {
+              const requestedUser = String(body.key).split('::')[0].toLowerCase()
+              if (requestedUser && requestedUser !== authenticatedUserId) {
+                sendJson(res, 403, { ok: false, error: "Forbidden. You cannot modify another account's watch history." })
+                return
+              }
+            }
+
+            if (!targetUserId) {
+              sendJson(res, 401, { ok: false, error: 'Authenticated session required.' })
+              return
+            }
+
+            // 1. Batch progress records (e.g. offline queue flush)
+            if (Array.isArray(body.records)) {
+              if (config) {
+                try {
+                  await batchSaveUserWatchRecords(config, targetUserId, body.records as WatchProgressRecord[])
+                } catch {
+                  // ignore
+                }
+              }
+              sendJson(res, 200, { ok: true, configured: Boolean(config) })
+              return
+            }
+
+            // 2. Single WatchProgressRecord
+            if (body.record && typeof body.record === 'object') {
+              if (config) {
+                try {
+                  await saveUserWatchRecord(config, targetUserId, body.record as WatchProgressRecord)
+                } catch {
+                  // ignore
+                }
+              }
+              sendJson(res, 200, { ok: true, configured: Boolean(config) })
+              return
+            }
+
+            // 3. Direct progress fields: content_id / movieId + progress_seconds
+            if (body.content_id || body.contentId || body.movieId) {
+              const contentId = String(body.content_id || body.contentId || body.movieId).trim()
+              const progressSeconds = typeof body.progress_seconds === 'number' ? body.progress_seconds : (typeof body.progressSeconds === 'number' ? body.progressSeconds : (typeof body.progress === 'number' ? body.progress : 0))
+              const durationSeconds = typeof body.duration_seconds === 'number' ? body.duration_seconds : (typeof body.durationSeconds === 'number' ? body.durationSeconds : 7200)
+              const season = body.season_number != null ? Number(body.season_number) : (body.season != null ? Number(body.season) : null)
+              const episode = body.episode_number != null ? Number(body.episode_number) : (body.episode != null ? Number(body.episode) : null)
+              const completed = Boolean(body.completed || (durationSeconds > 0 && progressSeconds >= 0.95 * durationSeconds))
+              const movie = (body.movie && typeof body.movie === 'object' ? body.movie : (body.movieData && typeof body.movieData === 'object' ? body.movieData : {})) as Record<string, unknown>
+
+              const rec: WatchProgressRecord = {
+                id: buildWatchRecordKey(targetUserId, contentId, season, episode),
+                user_id: targetUserId,
+                content_id: contentId,
+                content_type: (body.content_type || body.contentType || (movie.tmdbType === 'tv' ? 'tv' : 'movie')) as any,
+                season_number: season,
+                episode_number: episode,
+                progress_seconds: progressSeconds,
+                duration_seconds: durationSeconds,
+                updated_at: new Date().toISOString(),
+                completed,
+                movie,
+              }
+
+              if (config) {
+                try {
+                  await saveUserWatchRecord(config, targetUserId, rec)
+                } catch {
+                  // ignore
+                }
+              }
+              sendJson(res, 200, { ok: true, configured: Boolean(config), record: rec })
+              return
+            }
+
+            // 4. Legacy full history map or movieId
+            const key = String(body.key ?? `${targetUserId}::continue_watching`).trim()
             const history = body.history
             const movieId = typeof body.movieId === 'string' ? body.movieId.trim() : ''
             const movieData = body.movieData
-            if (!key) {
-              sendJson(res, 400, { ok: false, error: 'key is required.' })
-              return
-            }
             if (movieId && movieData && typeof movieData === 'object') {
               if (config) {
                 try {
@@ -1679,18 +1796,19 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
               sendJson(res, 200, { ok: true, configured: Boolean(config) })
               return
             }
-            if (!history || typeof history !== 'object') {
-              sendJson(res, 400, { ok: false, error: 'key and history are required.' })
+            if (history && typeof history === 'object') {
+              if (config) {
+                try {
+                  await saveWatchHistory(config, key, history)
+                } catch {
+                  // ignore save failure
+                }
+              }
+              sendJson(res, 200, { ok: true, configured: Boolean(config) })
               return
             }
-            if (config) {
-              try {
-                await saveWatchHistory(config, key, history)
-              } catch {
-                // ignore save failure
-              }
-            }
-            sendJson(res, 200, { ok: true, configured: Boolean(config) })
+
+            sendJson(res, 400, { ok: false, error: 'Valid watch record or history required.' })
             return
           }
 

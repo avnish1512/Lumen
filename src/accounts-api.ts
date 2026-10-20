@@ -108,6 +108,29 @@ export async function deleteAccount(
   }
 }
 
+export const SESSION_TOKEN_KEY = 'lumen_session_token'
+
+export function getSessionToken(): string {
+  try {
+    return localStorage.getItem(SESSION_TOKEN_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function setSessionToken(token: string): void {
+  try {
+    if (token) localStorage.setItem(SESSION_TOKEN_KEY, token)
+    else localStorage.removeItem(SESSION_TOKEN_KEY)
+  } catch {
+    // ignore storage error
+  }
+}
+
+export function clearSessionToken(): void {
+  setSessionToken('')
+}
+
 export async function verifyCredentials(email: string, password: string): Promise<boolean> {
   try {
     const response = await fetch('/api/accounts?action=verify', {
@@ -116,7 +139,13 @@ export async function verifyCredentials(email: string, password: string): Promis
       body: JSON.stringify({ email, password }),
     })
     const data = await response.json()
-    return Boolean(data?.ok)
+    if (data?.ok) {
+      if (typeof data.sessionToken === 'string') {
+        setSessionToken(data.sessionToken)
+      }
+      return true
+    }
+    return false
   } catch {
     return false
   }

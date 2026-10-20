@@ -109,10 +109,12 @@ import {
   saveAccountProfiles as saveRemoteProfiles,
   verifyRemoteLordPin,
   saveRemoteLordPin,
-  fetchRemoteWatchHistory,
   saveRemoteWatchHistory,
   fetchGlobalPhubSeed,
   updateGlobalPhubSeed,
+  fetchAccountWatchProgress,
+  saveWatchProgressRecord,
+  type WatchProgressRecord,
 } from './profiles-api'
 import {
   acceptInvite,
@@ -136,6 +138,7 @@ import {
   saveAccount as saveAccountApi,
   setAdminKey,
   verifyCredentials,
+  clearSessionToken,
   type Account,
 } from './accounts-api'
 import {
@@ -275,6 +278,13 @@ type WatchHistoryEntry = {
   movie: Movie
   updatedAt: number
   progress: number
+  progressSeconds?: number
+  durationSeconds?: number
+  seasonNumber?: number | null
+  episodeNumber?: number | null
+  completed?: boolean
+  recordId?: string
+  userId?: string
 }
 type WatchHistory = Record<string, WatchHistoryEntry>
 type SearchCategoryTile = {
@@ -923,7 +933,19 @@ function mergeWatchHistory(a: WatchHistory, b: WatchHistory, removedMap?: Remove
     if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt)) {
       merged[key] = {
         ...entry,
-        movie: sanitizeMovieEmbed(normalizeMovie(entry.movie)),
+        progress: entry.progress,
+        progressSeconds: entry.progressSeconds,
+        durationSeconds: entry.durationSeconds,
+        completed: entry.completed,
+        seasonNumber: entry.seasonNumber,
+        episodeNumber: entry.episodeNumber,
+        movie: sanitizeMovieEmbed(normalizeMovie({
+          ...entry.movie,
+          progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
+        })),
       }
     }
   }
@@ -935,7 +957,19 @@ function mergeWatchHistory(a: WatchHistory, b: WatchHistory, removedMap?: Remove
     if (!existing || (entry.updatedAt ?? 0) > (existing.updatedAt ?? 0)) {
       merged[key] = {
         ...entry,
-        movie: sanitizeMovieEmbed(normalizeMovie(entry.movie)),
+        progress: entry.progress,
+        progressSeconds: entry.progressSeconds,
+        durationSeconds: entry.durationSeconds,
+        completed: entry.completed,
+        seasonNumber: entry.seasonNumber,
+        episodeNumber: entry.episodeNumber,
+        movie: sanitizeMovieEmbed(normalizeMovie({
+          ...entry.movie,
+          progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
+        })),
       }
     }
   }
@@ -1343,23 +1377,69 @@ function mergeKnownMovie(base: Movie, update: Movie) {
 }
 
 function continueProgressFor(movie: Movie) {
+  if (typeof movie.progressSeconds === 'number' && typeof movie.durationSeconds === 'number' && movie.durationSeconds > 0) {
+    return Math.min(100, Math.round((movie.progressSeconds / movie.durationSeconds) * 100))
+  }
   return Math.min(86, Math.max(8, movie.progress || 24))
+}
+
+export function parseRuntimeSeconds(runtime?: string | null): number {
+  if (!runtime || typeof runtime !== 'string') return 7200
+  const hrMatch = runtime.match(/(\d+)\s*(?:h|hr|hours?)\b/i)
+  const minMatch = runtime.match(/(\d+)\s*(?:m|min|mins?|minutes?)\b/i)
+  const hours = hrMatch ? parseInt(hrMatch[1], 10) : 0
+  const mins = minMatch ? parseInt(minMatch[1], 10) : 0
+  const total = (hours * 60 + mins) * 60
+  return total > 0 ? total : 7200
+}
+
+export function formatPlaybackSeconds(seconds?: number): string {
+  if (!seconds || seconds <= 0) return ''
+  const totalSeconds = Math.floor(seconds)
+  const m = Math.floor(totalSeconds / 60)
+  const h = Math.floor(m / 60)
+  const remM = m % 60
+  const s = totalSeconds % 60
+  if (h > 0) {
+    return `${h}:${remM.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+export function appendStartTimeToUrl(url: string, seconds: number): string {
+  if (!url || seconds <= 0) return url
+  const sec = Math.floor(seconds)
+  if (url.includes('start_time=') || url.includes('#t=')) {
+    return url
+  }
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}start_time=${sec}&t=${sec}#t=${sec}`
 }
 
 function continueRuntimeLabel(movie: Movie) {
   const runtime = compactRuntime(movie.runtime)
+  const pos = formatPlaybackSeconds(movie.progressSeconds)
 
   if (isTvShow(movie)) {
     const s = movie.streamSeason ?? 1
     const e = movie.streamEpisode ?? 1
+    if (pos && runtime) {
+      return `S${s}, E${e} · ${pos} / ${runtime}`
+    }
     return `S${s}, E${e} / ${runtime}`
   }
 
   // Anime with multiple episodes that aren't classified as TV shows
   if (movie.isAnime && (movie.streamEpisode ?? 0) > 0) {
+    if (pos && runtime) {
+      return `E${movie.streamEpisode} · ${pos} / ${runtime}`
+    }
     return `E${movie.streamEpisode} / ${runtime}`
   }
 
+  if (pos && runtime) {
+    return `${pos} / ${runtime}`
+  }
   return runtime
 }
 
@@ -3137,6 +3217,7 @@ function App() {
       Object.values(watchHistory)
         .filter(
           (entry) =>
+            !entry.completed &&
             entry.progress < 100 &&
             !isLordAdultMovie(entry.movie),
         )
@@ -3146,6 +3227,9 @@ function App() {
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
         })),
     [watchHistory],
   )
@@ -3171,6 +3255,7 @@ function App() {
       Object.values(watchHistory)
         .filter(
           (entry) =>
+            !entry.completed &&
             entry.progress < 100 &&
             isHentaiMovie(entry.movie),
         )
@@ -3180,6 +3265,9 @@ function App() {
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
         })),
     [watchHistory],
   )
@@ -3188,6 +3276,7 @@ function App() {
       Object.values(watchHistory)
         .filter(
           (entry) =>
+            !entry.completed &&
             entry.progress < 100 &&
             isPhubMovie(entry.movie),
         )
@@ -3197,6 +3286,9 @@ function App() {
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
         })),
     [watchHistory],
   )
@@ -3205,6 +3297,7 @@ function App() {
       Object.values(watchHistory)
         .filter(
           (entry) =>
+            !entry.completed &&
             entry.progress < 100 &&
             isPhub1Movie(entry.movie),
         )
@@ -3214,6 +3307,9 @@ function App() {
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
         })),
     [watchHistory],
   )
@@ -3222,6 +3318,7 @@ function App() {
       Object.values(watchHistory)
         .filter(
           (entry) =>
+            !entry.completed &&
             entry.progress < 100 &&
             isPhub2Movie(entry.movie),
         )
@@ -3231,6 +3328,9 @@ function App() {
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
         })),
     [watchHistory],
   )
@@ -3239,6 +3339,7 @@ function App() {
       Object.values(watchHistory)
         .filter(
           (entry) =>
+            !entry.completed &&
             entry.progress < 100 &&
             isPhub3Movie(entry.movie),
         )
@@ -3248,6 +3349,9 @@ function App() {
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
         })),
     [watchHistory],
   )
@@ -3256,6 +3360,7 @@ function App() {
       Object.values(watchHistory)
         .filter(
           (entry) =>
+            !entry.completed &&
             entry.progress < 100 &&
             isJavMovie(entry.movie),
         )
@@ -3265,6 +3370,9 @@ function App() {
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
         })),
     [watchHistory],
   )
@@ -3930,11 +4038,15 @@ function App() {
     }
   }, [likedMovies, currentUser])
 
+  const previousAccountEmailRef = useRef<string | null>(null)
+
   useEffect(() => {
     if ((currentUser?.name ?? null) !== loadedProfileRef.current) {
       return
     }
-    if (currentUser) {
+    if (currentUser?.email) {
+      const accountStorageKey = `${watchHistoryKey}.${currentUser.email.toLowerCase()}`
+      window.localStorage.setItem(accountStorageKey, JSON.stringify(watchHistory))
       window.localStorage.setItem(`${watchHistoryKey}.${currentUser.name}`, JSON.stringify(watchHistory))
     } else {
       window.localStorage.setItem(watchHistoryKey, JSON.stringify(watchHistory))
@@ -3964,12 +4076,28 @@ function App() {
         setLikedMovies({})
       }
 
-      try {
-        const historyStr = window.localStorage.getItem(`${watchHistoryKey}.${currentUser.name}`)
-        setWatchHistory(historyStr ? JSON.parse(historyStr) : {})
-      } catch {
+      const currentEmail = currentUser.email?.toLowerCase() || ''
+      const isDifferentAccount =
+        previousAccountEmailRef.current !== null &&
+        previousAccountEmailRef.current !== currentEmail
+
+      if (isDifferentAccount) {
+        // Account switched: do not reveal the previous account's watch history
         setWatchHistory({})
+      } else {
+        try {
+          const accountStr = currentEmail
+            ? window.localStorage.getItem(`${watchHistoryKey}.${currentEmail}`)
+            : null
+          const historyStr =
+            accountStr ||
+            window.localStorage.getItem(`${watchHistoryKey}.${currentUser.name}`)
+          setWatchHistory(historyStr ? JSON.parse(historyStr) : {})
+        } catch {
+          setWatchHistory({})
+        }
       }
+      previousAccountEmailRef.current = currentEmail
     } else {
       try {
         window.localStorage.removeItem(currentUserKey)
@@ -3979,50 +4107,83 @@ function App() {
       setSavedMovies({})
       setLikedMovies({})
       setWatchHistory({})
+      previousAccountEmailRef.current = null
     }
     // Mark this profile as the one now loaded so the persistence effects above
     // are allowed to write its data.
     loadedProfileRef.current = currentUser?.name ?? null
   }, [currentUser])
 
-  // Cross-device "Continue Watching" sync. Keyed by account email + profile so
-  // the same person sees the same history on every device they sign in on.
-  const watchHistorySyncKey = currentUser?.email
-    ? `${currentUser.email.toLowerCase()}::${currentUser.name}`
+  // Cross-device "Continue Watching" sync. Keyed by authenticated user account email
+  // so the same person sees the same history across all devices.
+  const userAccountEmail = currentUser?.email
+    ? currentUser.email.toLowerCase()
     : ''
+  const watchHistorySyncKey = userAccountEmail
 
-  // Pull the remote history when the active account/profile changes and merge
-  // it into the local cache (newest entry per title wins).
+  // Pull the remote history when the active account changes and merge
+  // it into the local cache (authoritative timestamp conflict resolution).
   useEffect(() => {
-    if (!watchHistorySyncKey) {
+    if (!userAccountEmail) {
       return
     }
     let cancelled = false
-    const profileAtFetch = currentUser?.name ?? null
+    const emailAtFetch = userAccountEmail
     void (async () => {
-      const remote = await fetchRemoteWatchHistory(watchHistorySyncKey)
-      if (cancelled || !remote || loadedProfileRef.current !== profileAtFetch) {
+      const res = await fetchAccountWatchProgress(userAccountEmail)
+      if (cancelled || !res?.history || userAccountEmail !== emailAtFetch) {
         return
       }
-      setWatchHistory((local) => mergeWatchHistory(local, remote as WatchHistory))
+      setWatchHistory((local) => mergeWatchHistory(local, res.history as WatchHistory))
     })()
     return () => {
       cancelled = true
     }
-  }, [watchHistorySyncKey])
+  }, [userAccountEmail])
+
+  // Multi-device synchronization: re-fetch from Supabase when the window/tab
+  // becomes visible, window regains focus, or when device reconnects online.
+  useEffect(() => {
+    if (!userAccountEmail) {
+      return
+    }
+    const syncWithServer = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchAccountWatchProgress(userAccountEmail).then((res) => {
+          if (res?.history) {
+            setWatchHistory((local) => mergeWatchHistory(local, res.history as WatchHistory))
+          }
+        })
+      }
+    }
+
+    document.addEventListener('visibilitychange', syncWithServer)
+    window.addEventListener('focus', syncWithServer)
+    window.addEventListener('online', syncWithServer)
+
+    // Periodic sync while app is active across devices
+    const interval = window.setInterval(syncWithServer, 20000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', syncWithServer)
+      window.removeEventListener('focus', syncWithServer)
+      window.removeEventListener('online', syncWithServer)
+      window.clearInterval(interval)
+    }
+  }, [userAccountEmail])
 
   // Debounced push of local history changes back to the server.
   useEffect(() => {
-    if (!watchHistorySyncKey || loadedProfileRef.current !== (currentUser?.name ?? null)) {
+    if (!userAccountEmail || loadedProfileRef.current !== (currentUser?.name ?? null)) {
       return
     }
     const handle = window.setTimeout(() => {
-      void saveRemoteWatchHistory(watchHistorySyncKey, watchHistory)
+      void saveRemoteWatchHistory(userAccountEmail, watchHistory)
     }, 1500)
     return () => {
       window.clearTimeout(handle)
     }
-  }, [watchHistory, watchHistorySyncKey])
+  }, [watchHistory, userAccountEmail])
 
   // Record this real device as a signed-in session for the account, so the
   // "Manage Devices" screen reflects actual devices (not sample data). Runs
@@ -4161,10 +4322,79 @@ function App() {
           movie: historyMovie,
           updatedAt: Date.now(),
           progress: nextProgress,
+          progressSeconds: movie.progressSeconds ?? existing?.progressSeconds,
+          durationSeconds: movie.durationSeconds ?? existing?.durationSeconds,
+          completed: movie.completed ?? existing?.completed,
+          seasonNumber: movie.streamSeason ?? existing?.seasonNumber,
+          episodeNumber: movie.streamEpisode ?? existing?.episodeNumber,
         },
       }
     })
-  }, [aniListToken])
+  }, [aniListToken, currentUser])
+
+  const updatePlaybackProgress = useCallback(
+    (movie: Movie, progressSeconds: number, durationSeconds: number, completed = false) => {
+      unmarkMovieRemoved(movie, currentUser)
+      const safeDuration = durationSeconds > 0 ? durationSeconds : 7200
+      const safeProgress = Math.max(0, Math.min(safeDuration, progressSeconds))
+      const progressPercent = Math.min(100, Math.round((safeProgress / safeDuration) * 100))
+      const isCompleted = completed || progressPercent >= 95
+      const now = Date.now()
+
+      const updatedMovie: Movie = {
+        ...movie,
+        progress: progressPercent,
+        progressSeconds: safeProgress,
+        durationSeconds: safeDuration,
+        completed: isCompleted,
+      }
+
+      setWatchHistory((current) => {
+        const matchingKey =
+          findMatchingMovieKey(current, movie, (entry) => entry.movie) ?? movie.id
+        const existing = current[matchingKey]
+        const historyMovie = existing
+          ? mergeKnownMovie(existing.movie, updatedMovie)
+          : updatedMovie
+
+        return {
+          ...current,
+          [matchingKey]: {
+            movie: historyMovie,
+            updatedAt: now,
+            progress: progressPercent,
+            progressSeconds: safeProgress,
+            durationSeconds: safeDuration,
+            seasonNumber: movie.streamSeason ?? null,
+            episodeNumber: movie.streamEpisode ?? null,
+            completed: isCompleted,
+          },
+        }
+      })
+
+      if (currentUser?.email) {
+        const userEmail = currentUser.email.toLowerCase()
+        const contentId = String(movie.tmdbId ?? movie.id)
+        const season = movie.streamSeason != null ? Number(movie.streamSeason) : null
+        const episode = movie.streamEpisode != null ? Number(movie.streamEpisode) : null
+        const record: WatchProgressRecord = {
+          id: `${userEmail}::${contentId}${season != null && episode != null ? `::s${season}e${episode}` : ''}`,
+          user_id: userEmail,
+          content_id: contentId,
+          content_type: movie.tmdbType === 'tv' || movie.type === 'series' ? 'tv' : 'movie',
+          season_number: season,
+          episode_number: episode,
+          progress_seconds: safeProgress,
+          duration_seconds: safeDuration,
+          updated_at: new Date(now).toISOString(),
+          completed: isCompleted,
+          movie: updatedMovie,
+        }
+        void saveWatchProgressRecord(record)
+      }
+    },
+    [currentUser],
+  )
 
   const upsertMovie = (movie: Movie) => {
     const mergeMovie = (item: Movie) =>
@@ -5854,6 +6084,7 @@ function App() {
             }}
             onSave={() => toggleSaved(selectedMovie)}
             onStartWatching={markContinueWatching}
+            onUpdateProgress={updatePlaybackProgress}
             onStreamSandboxChange={setStreamSandboxEnabled}
             onStreamProviderChange={setStreamProvider}
             onSelectMovie={openWatch}
@@ -6008,7 +6239,9 @@ function App() {
               setScreen('profiles')
             }}
             onLogout={() => {
+              clearSessionToken()
               setCurrentUser(null)
+              setWatchHistory({})
               setScreen('login')
             }}
             onBack={() => {
@@ -8818,6 +9051,12 @@ type WatchScreenProps = {
   onSave: () => void
   onToggleLike: () => void
   onStartWatching: (movie: Movie) => void
+  onUpdateProgress?: (
+    movie: Movie,
+    progressSeconds: number,
+    durationSeconds: number,
+    completed?: boolean,
+  ) => void
   onStreamSandboxChange: (enabled: boolean) => void
   onStreamProviderChange: (provider: StreamProvider) => void
   designMode?: 'apple' | 'netflix'
@@ -8850,6 +9089,7 @@ function WatchScreen({
   onSave,
   onToggleLike,
   onStartWatching,
+  onUpdateProgress,
   onStreamSandboxChange,
   onStreamProviderChange,
   onSelectMovie,
@@ -9440,6 +9680,125 @@ function WatchScreen({
     [movie, activeWatchAnimeSeason?.anilistId, episode, season, language, resolvedPhubEmbed, isPhubVideo, isJavVideo, isHentai],
   )
 
+  // Playback position resume & sync
+  const estimatedInitialDuration = parseRuntimeSeconds(movie.runtime) || 7200
+  const initialSavedPos =
+    movie.completed
+      ? 0
+      : (movie.progressSeconds && movie.progressSeconds > 10)
+        ? movie.progressSeconds
+        : (movie.progress && movie.progress > 0 && movie.progress < 95)
+          ? Math.floor((movie.progress / 100) * estimatedInitialDuration)
+          : 0
+
+  const [resumeSeconds, setResumeSeconds] = useState<number>(initialSavedPos)
+  const [showResumeToast, setShowResumeToast] = useState<boolean>(Boolean(initialSavedPos > 15))
+
+  useEffect(() => {
+    if (!showResumeToast) return
+    const timer = window.setTimeout(() => {
+      setShowResumeToast(false)
+    }, 7000)
+    return () => window.clearTimeout(timer)
+  }, [showResumeToast])
+
+  useEffect(() => {
+    if (episode !== (movie.streamEpisode ?? 1) || season !== (movie.streamSeason ?? 1)) {
+      setResumeSeconds(0)
+      setShowResumeToast(false)
+      currentTimeRef.current = 0
+    }
+  }, [episode, season, movie.streamEpisode, movie.streamSeason])
+
+  const currentTimeRef = useRef<number>(initialSavedPos)
+  const durationRef = useRef<number>(estimatedInitialDuration)
+  const isPlayingRef = useRef<boolean>(true)
+  const lastSavedTimeRef = useRef<number>(0)
+  const lastSavedPosRef = useRef<number>(initialSavedPos)
+
+  const reportProgress = useCallback(
+    (isCompleted = false, immediate = false, overridePos?: number) => {
+      if (!onUpdateProgress) return
+      const currentPos = overridePos !== undefined ? overridePos : currentTimeRef.current
+      const dur = durationRef.current > 0 ? durationRef.current : 7200
+      const now = Date.now()
+      if (!immediate && now - lastSavedTimeRef.current < 8000) {
+        return
+      }
+      lastSavedTimeRef.current = now
+      lastSavedPosRef.current = currentPos
+      onUpdateProgress(streamMovie, currentPos, dur, isCompleted)
+    },
+    [onUpdateProgress, streamMovie],
+  )
+
+  const handleBackWithProgress = useCallback(() => {
+    reportProgress(false, true)
+    onBack()
+  }, [reportProgress, onBack])
+
+  useEffect(() => {
+    const handleUnload = () => {
+      reportProgress(false, true)
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    window.addEventListener('pagehide', handleUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload)
+      window.removeEventListener('pagehide', handleUnload)
+      reportProgress(false, true)
+    }
+  }, [reportProgress])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+        if (!data || typeof data !== 'object') return
+
+        const time = Number(data.currentTime ?? data.time ?? data.progress ?? data.data?.currentTime ?? data.data?.time)
+        const dur = Number(data.duration ?? data.total ?? data.data?.duration)
+        const eventType = String(data.event ?? data.type ?? data.action ?? '').toLowerCase()
+
+        if (!isNaN(time) && time >= 0) {
+          currentTimeRef.current = Math.floor(time)
+        }
+        if (!isNaN(dur) && dur > 0) {
+          durationRef.current = Math.floor(dur)
+        }
+
+        if (eventType.includes('pause')) {
+          isPlayingRef.current = false
+          reportProgress(false, true)
+        } else if (eventType.includes('play')) {
+          isPlayingRef.current = true
+        } else if (eventType.includes('end') || eventType.includes('finish') || eventType.includes('complete')) {
+          isPlayingRef.current = false
+          reportProgress(true, true)
+        }
+      } catch {}
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [reportProgress])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (isPlayingRef.current) {
+        if (Math.abs(currentTimeRef.current - lastSavedPosRef.current) < 2) {
+          currentTimeRef.current += 10
+        }
+        reportProgress(false, false)
+      }
+    }, 10000)
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [reportProgress])
+
   // Persist the current season/episode to continue-watching history whenever
   // the user switches episodes so the rail always shows the correct position.
   const initialEpRef = useRef({ episode: movie.streamEpisode ?? 1, season: movie.streamSeason ?? 1 })
@@ -9451,9 +9810,14 @@ function WatchScreen({
     onStartWatching(streamMovie)
   }, [episode, season])
 
-  const streamUrl = useMemo(
+  const rawStreamUrl = useMemo(
     () => buildStreamUrl(streamMovie, activeProviderId),
     [streamMovie, activeProviderId],
+  )
+
+  const streamUrl = useMemo(
+    () => (resumeSeconds > 0 ? appendStartTimeToUrl(rawStreamUrl, resumeSeconds) : rawStreamUrl),
+    [rawStreamUrl, resumeSeconds],
   )
 
   const currentProvider =
@@ -9462,7 +9826,7 @@ function WatchScreen({
   const opensExternally = activeProviderId === 'multiembed-vip'
   // Direct HLS (.m3u8) sources play in a native <video> via hls.js; everything
   // else is an embed player and stays in the iframe.
-  const isHlsStream = /\.m3u8(\?|#|$)/i.test(streamUrl)
+  const isHlsStream = /\.m3u8(\?|#|$)/i.test(rawStreamUrl)
 
   const fallbackWatchSeasons = useMemo(() => {
     if (isAnimeMovie && watchAnimeSeasons.length > 0) {
@@ -10173,7 +10537,27 @@ function WatchScreen({
   }
 
   const renderPlayerSection = () => (
-    <section className="stream-player-section">
+    <section className="stream-player-section" style={{ position: 'relative' }}>
+      {showResumeToast && resumeSeconds > 0 && (
+        <div className="stream-resume-toast" role="status" aria-live="polite">
+          <span>Resuming from {formatPlaybackSeconds(resumeSeconds)}</span>
+          <button
+            type="button"
+            className="stream-restart-button"
+            onClick={() => {
+              setShowResumeToast(false)
+              setResumeSeconds(0)
+              currentTimeRef.current = 0
+              if (streamIframeRef.current) {
+                streamIframeRef.current.src = rawStreamUrl
+              }
+              reportProgress(false, true, 0)
+            }}
+          >
+            Start Over
+          </button>
+        </div>
+      )}
       {screenShareError && (
         <div className="screen-share-error-banner" role="alert">
           <AlertCircle size={15} />
@@ -10298,18 +10682,36 @@ function WatchScreen({
       ) : streamUrl && isHlsStream ? (
         <HlsPlayer
           className="stream-player"
-          src={streamUrl}
+          src={rawStreamUrl}
           poster={movie.still}
           title={`${movie.title} stream`}
           autoPlay
           controls
-          onPlay={() => onStartWatching(movie)}
+          startTime={resumeSeconds}
+          onPlay={() => {
+            isPlayingRef.current = true
+            onStartWatching(streamMovie)
+          }}
+          onPause={() => {
+            isPlayingRef.current = false
+            reportProgress(false, true)
+          }}
+          onEnded={() => {
+            isPlayingRef.current = false
+            reportProgress(true, true)
+          }}
+          onTimeUpdate={(currentTime, duration) => {
+            currentTimeRef.current = Math.floor(currentTime)
+            if (duration > 0) {
+              durationRef.current = Math.floor(duration)
+            }
+          }}
           onError={() => {}}
         />
       ) : streamUrl && !opensExternally ? (
         <iframe
           ref={streamIframeRef}
-          key={`${activeProviderId}-${season}-${episode}`}
+          key={`${activeProviderId}-${season}-${episode}-${resumeSeconds > 0 ? 'resumed' : 'fresh'}`}
           className="stream-player"
           src={streamUrl}
           title={`${movie.title} stream`}
@@ -10433,7 +10835,7 @@ function WatchScreen({
   if (isMobile) {
     return (
       <section className="screen watch-screen">
-        <DetailTopBar onBack={onBack} dark />
+        <DetailTopBar onBack={handleBackWithProgress} dark />
 
         {renderPlayerSection()}
         {renderUnderIframeBar()}
@@ -10704,7 +11106,7 @@ function WatchScreen({
 
   return (
     <section className="screen watch-screen anime-watch-screen">
-      <DetailTopBar onBack={onBack} dark />
+      <DetailTopBar onBack={handleBackWithProgress} dark />
 
       <div className={`anime-watch-main-grid${!hasEpisodes ? ' no-sidebar' : ''}`}>
         {/* LEFT COLUMN: Player -> Under-iframe Bar -> Control & Server bar -> Title/Synopsis/Metadata */}
