@@ -14,6 +14,7 @@ import {
   updateMovieProgress,
   fetchUserWatchProgress,
   saveUserWatchRecord,
+  deleteUserWatchRecord,
   batchSaveUserWatchRecords,
   buildWatchRecordKey,
   type WatchProgressRecord,
@@ -499,6 +500,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           return
         }
 
+        if (targetUserId === 'guest@apple-tv.com') {
+          res.status(200).json({ ok: true, configured: Boolean(config), userId: 'guest@apple-tv.com', records: [], history: {} })
+          return
+        }
+
         let records: WatchProgressRecord[] = []
         let history: Record<string, unknown> = {}
 
@@ -536,8 +542,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         }
       }
 
-      if (!targetUserId) {
+      if (!targetUserId || targetUserId === 'guest@apple-tv.com') {
         res.status(401).json({ ok: false, error: 'Authenticated session required.' })
+        return
+      }
+
+      // 0. Delete / Remove watch progress record
+      if (req.method === 'DELETE' || body.action === 'delete' || body.action === 'remove') {
+        const contentId = String(body.content_id || body.contentId || body.movieId || body.id || qv(req.query.content_id) || qv(req.query.movieId) || '').trim()
+        const tmdbId = body.tmdb_id || body.tmdbId || qv(req.query.tmdb_id) || qv(req.query.tmdbId)
+        if (config && contentId) {
+          try {
+            await deleteUserWatchRecord(config, targetUserId, contentId, tmdbId ? [tmdbId] : [])
+          } catch {}
+        }
+        res.status(200).json({ ok: true, configured: Boolean(config) })
         return
       }
 

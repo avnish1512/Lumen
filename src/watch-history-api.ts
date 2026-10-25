@@ -124,6 +124,10 @@ if (typeof window !== 'undefined') {
 export async function fetchAccountWatchProgress(
   userEmail?: string,
 ): Promise<{ records: WatchProgressRecord[]; history: WatchHistoryMap } | null> {
+  if (userEmail && userEmail.toLowerCase() === 'guest@apple-tv.com') {
+    return { records: [], history: {} }
+  }
+
   const queryParam = userEmail ? `?key=${encodeURIComponent(userEmail.toLowerCase())}` : ''
 
   try {
@@ -224,6 +228,10 @@ export async function fetchAccountWatchProgress(
 export async function saveWatchProgressRecord(
   record: WatchProgressRecord,
 ): Promise<{ ok: boolean; queuedOffline?: boolean }> {
+  if (!record.user_id || record.user_id.toLowerCase() === 'guest@apple-tv.com') {
+    return { ok: true }
+  }
+
   // If browser is known to be offline, queue locally right away
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     enqueueOfflineProgress(record)
@@ -305,14 +313,35 @@ export const flushOfflineQueue = flushOfflineProgressQueue
 export function mergeWithServerHistory(
   localHistory: WatchHistoryMap,
   serverHistory: WatchHistoryMap | WatchProgressRecord[],
+  removedMap?: Record<string, number>,
 ): WatchHistoryMap {
   const serverMap: WatchHistoryMap = Array.isArray(serverHistory)
     ? recordsToWatchHistoryMap(serverHistory)
     : serverHistory
   const merged: WatchHistoryMap = { ...localHistory }
 
+  const isRemoved = (key: string, item: WatchHistoryItem) => {
+    if (!removedMap || Object.keys(removedMap).length === 0) return false
+    const itemTime = item.updatedAt || 0
+    const check = (id?: string | number | null) => {
+      if (!id) return false
+      const s = String(id).trim()
+      const rem = removedMap[s]
+      return typeof rem === 'number' && (itemTime === 0 || rem >= itemTime)
+    }
+    if (check(key) || check(key.replace(/^(movie|tv)-/, ''))) return true
+    const m = item.movie
+    if (m) {
+      if (check(m.id) || (m.id && check(String(m.id).replace(/^(movie|tv)-/, '')))) return true
+      if (m.tmdbId && (check(m.tmdbId) || check(`movie-${m.tmdbId}`) || check(`tv-${m.tmdbId}`))) return true
+      if (m.title && check(`title:${String(m.title).trim().toLowerCase()}`)) return true
+    }
+    return false
+  }
+
   for (const [key, serverItem] of Object.entries(serverMap)) {
     if (!serverItem) continue
+    if (isRemoved(key, serverItem)) continue
     const localItem = merged[key]
 
     if (!localItem) {
@@ -357,7 +386,10 @@ export async function saveRemoteWatchHistory(
   key: string,
   history: Record<string, any>,
 ): Promise<void> {
-  const userEmail = key.includes('::') ? key.split('::')[0] : key
+  const userEmail = (key.includes('::') ? key.split('::')[0] : key).trim().toLowerCase()
+  if (!userEmail || userEmail === 'guest@apple-tv.com') {
+    return
+  }
   try {
     await fetch('/api/watch-history', {
       method: 'POST',
@@ -369,20 +401,51 @@ export async function saveRemoteWatchHistory(
   }
 }
 
+export async function deleteRemoteMovieProgress(
+  key: string,
+  movieId: string,
+  extra?: { tmdbId?: number | string; tmdbType?: string },
+): Promise<boolean> {
+  const userEmail = (key.includes('::') ? key.split('::')[0] : key).trim().toLowerCase()
+  if (!userEmail || userEmail === 'guest@apple-tv.com') {
+    return true
+  }
+
+  try {
+    const response = await fetch('/api/watch-history', {
+      method: 'DELETE',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        key,
+        user_id: userEmail,
+        content_id: movieId,
+        movieId,
+        tmdbId: extra?.tmdbId,
+      }),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
 export async function saveRemoteMovieProgress(
   key: string,
   movieId: string,
   movieData: Record<string, any>,
 ): Promise<void> {
-  const userEmail = key.includes('::') ? key.split('::')[0] : key
+  const userEmail = (key.includes('::') ? key.split('::')[0] : key).trim().toLowerCase()
+  if (!userEmail || userEmail === 'guest@apple-tv.com') {
+    return
+  }
   const progressSec = typeof movieData.progressSeconds === 'number'
     ? movieData.progressSeconds
     : (typeof movieData.progress === 'number' ? Math.round((movieData.progress / 100) * 7200) : 0)
   const durationSec = typeof movieData.durationSeconds === 'number' ? movieData.durationSeconds : 7200
 
   const record: WatchProgressRecord = {
-    id: `${userEmail.toLowerCase()}::${movieId}`,
-    user_id: userEmail.toLowerCase(),
+    id: `${userEmail}::${movieId}`,
+    user_id: userEmail,
     content_id: movieId,
     content_type: movieData.tmdbType === 'tv' || movieData.type === 'series' ? 'tv' : 'movie',
     season_number: typeof movieData.streamSeason === 'number' ? movieData.streamSeason : null,
@@ -396,3 +459,4 @@ export async function saveRemoteMovieProgress(
 
   await saveWatchProgressRecord(record)
 }
+

@@ -47,6 +47,7 @@ import {
   updateMovieProgress,
   fetchUserWatchProgress,
   saveUserWatchRecord,
+  deleteUserWatchRecord,
   batchSaveUserWatchRecords,
   buildWatchRecordKey,
   type WatchProgressRecord,
@@ -1668,6 +1669,17 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
               return
             }
 
+            if (targetUserId === 'guest@apple-tv.com') {
+              sendJson(res, 200, {
+                ok: true,
+                configured: Boolean(config),
+                userId: 'guest@apple-tv.com',
+                records: [],
+                history: {},
+              })
+              return
+            }
+
             let records: WatchProgressRecord[] = []
             let history: Record<string, unknown> = {}
 
@@ -1696,15 +1708,16 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
             return
           }
 
-          if (req.method === 'POST' || req.method === 'PUT') {
+          if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
             const chunks: Buffer[] = []
             for await (const chunk of req) {
               chunks.push(chunk as Buffer)
             }
             const raw = Buffer.concat(chunks).toString('utf8')
             const body = raw ? (JSON.parse(raw) as Record<string, any>) : {}
+            const requestUrl = new URL(req.url ?? '/', 'http://localhost')
 
-            const targetUserId = authenticatedUserId || (body.key ? String(body.key).split('::')[0].toLowerCase() : (body.user_id ? String(body.user_id).toLowerCase() : ''))
+            const targetUserId = authenticatedUserId || (body.key ? String(body.key).split('::')[0].toLowerCase() : (body.user_id ? String(body.user_id).toLowerCase() : (requestUrl.searchParams.get('key')?.split('::')[0].toLowerCase() ?? '')))
 
             if (authenticatedUserId && body.key) {
               const requestedUser = String(body.key).split('::')[0].toLowerCase()
@@ -1714,8 +1727,23 @@ function watchHistoryDevProxy(env: Record<string, string | undefined>): Plugin {
               }
             }
 
-            if (!targetUserId) {
+            if (!targetUserId || targetUserId === 'guest@apple-tv.com') {
               sendJson(res, 401, { ok: false, error: 'Authenticated session required.' })
+              return
+            }
+
+            // 0. Delete / Remove watch progress record
+            if (req.method === 'DELETE' || body.action === 'delete' || body.action === 'remove') {
+              const contentId = String(body.content_id || body.contentId || body.movieId || body.id || requestUrl.searchParams.get('content_id') || requestUrl.searchParams.get('movieId') || '').trim()
+              const tmdbId = body.tmdb_id || body.tmdbId || requestUrl.searchParams.get('tmdb_id') || requestUrl.searchParams.get('tmdbId')
+              if (config && contentId) {
+                try {
+                  await deleteUserWatchRecord(config, targetUserId, contentId, tmdbId ? [tmdbId] : [])
+                } catch {
+                  // ignore
+                }
+              }
+              sendJson(res, 200, { ok: true, configured: Boolean(config) })
               return
             }
 

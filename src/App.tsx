@@ -110,6 +110,7 @@ import {
   verifyRemoteLordPin,
   saveRemoteLordPin,
   saveRemoteWatchHistory,
+  deleteRemoteMovieProgress,
   fetchGlobalPhubSeed,
   updateGlobalPhubSeed,
   fetchAccountWatchProgress,
@@ -831,14 +832,23 @@ function deviceLastUsedLabel(session: DeviceSession): string {
 type RemovedHistoryMap = Record<string, number>
 
 function removedHistoryKeyFor(user: UserInfo | null) {
-  return user ? `${removedHistoryKey}.${user.name}` : removedHistoryKey
+  if (!user) return `${removedHistoryKey}.guest`
+  const email = user.email?.trim().toLowerCase()
+  const name = user.name?.trim().toLowerCase() || 'default'
+  if (email && email !== 'guest@apple-tv.com') {
+    return `${removedHistoryKey}.${email}.${name}`
+  }
+  return `${removedHistoryKey}.guest.${name}`
 }
 
 function readRemovedHistory(user?: UserInfo | null): RemovedHistoryMap {
   try {
     const currentUser = user !== undefined ? user : readCurrentUser()
     const key = removedHistoryKeyFor(currentUser)
-    const saved = window.localStorage.getItem(key)
+    let saved = window.localStorage.getItem(key)
+    if (!saved && currentUser?.name) {
+      saved = window.localStorage.getItem(`${removedHistoryKey}.${currentUser.name}`)
+    }
     return saved ? (JSON.parse(saved) as RemovedHistoryMap) : {}
   } catch {
     return {}
@@ -850,6 +860,12 @@ function saveRemovedHistory(removed: RemovedHistoryMap, user?: UserInfo | null) 
     const currentUser = user !== undefined ? user : readCurrentUser()
     const key = removedHistoryKeyFor(currentUser)
     window.localStorage.setItem(key, JSON.stringify(removed))
+    if (currentUser?.email && currentUser.email.toLowerCase() !== 'guest@apple-tv.com') {
+      window.localStorage.setItem(
+        `${removedHistoryKey}.${currentUser.email.toLowerCase()}`,
+        JSON.stringify(removed),
+      )
+    }
   } catch {
     // ignore storage errors
   }
@@ -859,10 +875,26 @@ function recordMovieRemoved(movie: Movie, user?: UserInfo | null): RemovedHistor
   const current = readRemovedHistory(user)
   const now = Date.now()
   const next = { ...current }
-  if (movie.id) next[movie.id] = now
-  if (movie.tmdbId) next[`tmdb:${movie.tmdbType || 'movie'}:${movie.tmdbId}`] = now
+  if (movie.id) {
+    next[movie.id] = now
+    const stripped = movie.id.replace(/^(movie|tv)-/, '')
+    if (stripped) next[stripped] = now
+  }
+  if (movie.tmdbId) {
+    const tmdbStr = String(movie.tmdbId)
+    next[tmdbStr] = now
+    next[`movie-${tmdbStr}`] = now
+    next[`tv-${tmdbStr}`] = now
+    next[`tmdb:${movie.tmdbType || 'movie'}:${tmdbStr}`] = now
+    next[`tmdb:${tmdbStr}`] = now
+  }
+  if (movie.imdbId) {
+    next[movie.imdbId] = now
+  }
   const titleNorm = normalizeMovieIdentity(movie.title)
-  if (titleNorm) next[`title:${titleNorm}`] = now
+  if (titleNorm) {
+    next[`title:${titleNorm}`] = now
+  }
   saveRemovedHistory(next, user)
   return next
 }
@@ -871,46 +903,108 @@ function unmarkMovieRemoved(movie: Movie, user?: UserInfo | null) {
   const current = readRemovedHistory(user)
   const next = { ...current }
   let changed = false
-  if (movie.id && next[movie.id]) {
-    delete next[movie.id]
-    changed = true
+  const keysToRemove: string[] = []
+  if (movie.id) {
+    keysToRemove.push(movie.id)
+    keysToRemove.push(movie.id.replace(/^(movie|tv)-/, ''))
   }
-  if (movie.tmdbId && next[`tmdb:${movie.tmdbType || 'movie'}:${movie.tmdbId}`]) {
-    delete next[`tmdb:${movie.tmdbType || 'movie'}:${movie.tmdbId}`]
-    changed = true
+  if (movie.tmdbId) {
+    const tmdbStr = String(movie.tmdbId)
+    keysToRemove.push(
+      tmdbStr,
+      `movie-${tmdbStr}`,
+      `tv-${tmdbStr}`,
+      `tmdb:${movie.tmdbType || 'movie'}:${tmdbStr}`,
+      `tmdb:${tmdbStr}`,
+    )
+  }
+  if (movie.imdbId) {
+    keysToRemove.push(movie.imdbId)
   }
   const titleNorm = normalizeMovieIdentity(movie.title)
-  if (titleNorm && next[`title:${titleNorm}`]) {
-    delete next[`title:${titleNorm}`]
-    changed = true
+  if (titleNorm) {
+    keysToRemove.push(`title:${titleNorm}`)
+  }
+  for (const k of keysToRemove) {
+    if (k && next[k]) {
+      delete next[k]
+      changed = true
+    }
   }
   if (changed) {
     saveRemovedHistory(next, user)
   }
 }
 
-function isMovieRemoved(movie: Movie, removed: RemovedHistoryMap, entryUpdatedAt = 0): boolean {
-  const check = (k: string) => {
-    const removedAt = removed[k]
+function isMovieRemoved(
+  movie: Movie | undefined | null,
+  removed: RemovedHistoryMap,
+  entryUpdatedAt = 0,
+  key?: string,
+): boolean {
+  if (!removed || Object.keys(removed).length === 0) return false
+
+  const check = (k?: string | number | null) => {
+    if (!k) return false
+    const str = String(k).trim()
+    const removedAt = removed[str]
     return typeof removedAt === 'number' && (entryUpdatedAt === 0 || removedAt >= entryUpdatedAt)
   }
-  if (movie.id && check(movie.id)) return true
-  if (movie.tmdbId && check(`tmdb:${movie.tmdbType || 'movie'}:${movie.tmdbId}`)) return true
+
+  if (key) {
+    if (check(key)) return true
+    if (check(key.replace(/^(movie|tv)-/, ''))) return true
+  }
+
+  if (!movie) return false
+
+  if (check(movie.id)) return true
+  if (movie.id && check(movie.id.replace(/^(movie|tv)-/, ''))) return true
+
+  if (movie.tmdbId) {
+    const tmdbStr = String(movie.tmdbId)
+    if (check(tmdbStr)) return true
+    if (check(`movie-${tmdbStr}`)) return true
+    if (check(`tv-${tmdbStr}`)) return true
+    if (check(`tmdb:${movie.tmdbType || 'movie'}:${tmdbStr}`)) return true
+    if (check(`tmdb:${tmdbStr}`)) return true
+  }
+
+  if (movie.imdbId && check(movie.imdbId)) return true
+
   const titleNorm = normalizeMovieIdentity(movie.title)
   if (titleNorm && check(`title:${titleNorm}`)) return true
+
   return false
 }
 
-function readWatchHistory(): WatchHistory {
+function watchHistoryStorageKeyFor(user: UserInfo | null): string {
+  if (!user) {
+    return `${watchHistoryKey}.guest`
+  }
+  const email = user.email?.trim().toLowerCase()
+  const name = user.name?.trim().toLowerCase() || 'default'
+  if (email && email !== 'guest@apple-tv.com') {
+    return `${watchHistoryKey}.${email}.${name}`
+  }
+  return `${watchHistoryKey}.guest.${name}`
+}
+
+function readWatchHistory(user?: UserInfo | null): WatchHistory {
   try {
-    const user = readCurrentUser()
-    const key = user ? `${watchHistoryKey}.${user.name}` : watchHistoryKey
-    const saved = window.localStorage.getItem(key)
+    const activeUser = user !== undefined ? user : readCurrentUser()
+    const targetKey = watchHistoryStorageKeyFor(activeUser)
+    let saved = window.localStorage.getItem(targetKey)
+    if (!saved && activeUser?.email && activeUser.email.toLowerCase() !== 'guest@apple-tv.com') {
+      saved = window.localStorage.getItem(`${watchHistoryKey}.${activeUser.email.toLowerCase()}`)
+    } else if (!saved && !activeUser?.email) {
+      saved = window.localStorage.getItem(`${watchHistoryKey}.${activeUser?.name || 'default'}`) || window.localStorage.getItem(watchHistoryKey)
+    }
     const history = saved ? (JSON.parse(saved) as WatchHistory) : {}
-    const removed = readRemovedHistory(user)
+    const removed = readRemovedHistory(activeUser)
     const cleaned: WatchHistory = {}
     for (const [k, entry] of Object.entries(history)) {
-      if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt)) {
+      if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt, k)) {
         cleaned[k] = {
           ...entry,
           movie: sanitizeMovieEmbed(normalizeMovie(entry.movie)),
@@ -925,12 +1019,17 @@ function readWatchHistory(): WatchHistory {
 
 // Merge two watch-history maps, keeping the most-recently-updated entry per
 // key, ignoring any entries tombstoned by user removal.
-function mergeWatchHistory(a: WatchHistory, b: WatchHistory, removedMap?: RemovedHistoryMap): WatchHistory {
-  const removed = removedMap ?? readRemovedHistory()
+function mergeWatchHistory(
+  a: WatchHistory,
+  b: WatchHistory,
+  removedMap?: RemovedHistoryMap,
+  currentUser?: UserInfo | null,
+): WatchHistory {
+  const removed = removedMap ?? readRemovedHistory(currentUser)
   const merged: WatchHistory = {}
 
   for (const [key, entry] of Object.entries(a)) {
-    if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt)) {
+    if (entry?.movie && !isMovieRemoved(entry.movie, removed, entry.updatedAt, key)) {
       merged[key] = {
         ...entry,
         progress: entry.progress,
@@ -952,7 +1051,7 @@ function mergeWatchHistory(a: WatchHistory, b: WatchHistory, removedMap?: Remove
 
   for (const [key, entry] of Object.entries(b)) {
     if (!entry?.movie) continue
-    if (isMovieRemoved(entry.movie, removed, entry.updatedAt)) continue
+    if (isMovieRemoved(entry.movie, removed, entry.updatedAt, key)) continue
     const existing = merged[key]
     if (!existing || (entry.updatedAt ?? 0) > (existing.updatedAt ?? 0)) {
       merged[key] = {
@@ -3213,25 +3312,28 @@ function App() {
   const savedList = useMemo(() => Object.values(savedMovies), [savedMovies])
   const likedList = useMemo(() => Object.values(likedMovies), [likedMovies])
   const continueWatching = useMemo(
-    () =>
-      Object.values(watchHistory)
+    () => {
+      const removed = readRemovedHistory(currentUser)
+      return Object.entries(watchHistory)
         .filter(
-          (entry) =>
+          ([key, entry]) =>
             !entry.completed &&
             entry.progress < 100 &&
-            !isLordAdultMovie(entry.movie),
+            !isLordAdultMovie(entry.movie) &&
+            !isMovieRemoved(entry.movie, removed, entry.updatedAt, key),
         )
-        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
-        .map((entry, index) => ({
+        .map(([_, entry], index) => ({
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
           progressSeconds: entry.progressSeconds,
           durationSeconds: entry.durationSeconds,
           completed: entry.completed,
-        })),
-    [watchHistory],
+        }))
+    },
+    [watchHistory, currentUser],
   )
   const continueWatchingLumen = useMemo(
     () => continueWatching.filter((m) => !m.isAnime),
@@ -3251,130 +3353,148 @@ function App() {
     [continueWatching],
   )
   const continueWatchingLord = useMemo(
-    () =>
-      Object.values(watchHistory)
+    () => {
+      const removed = readRemovedHistory(currentUser)
+      return Object.entries(watchHistory)
         .filter(
-          (entry) =>
+          ([key, entry]) =>
             !entry.completed &&
             entry.progress < 100 &&
-            isHentaiMovie(entry.movie),
+            isHentaiMovie(entry.movie) &&
+            !isMovieRemoved(entry.movie, removed, entry.updatedAt, key),
         )
-        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
-        .map((entry, index) => ({
+        .map(([_, entry], index) => ({
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
           progressSeconds: entry.progressSeconds,
           durationSeconds: entry.durationSeconds,
           completed: entry.completed,
-        })),
-    [watchHistory],
+        }))
+    },
+    [watchHistory, currentUser],
   )
   const continueWatchingPhub = useMemo(
-    () =>
-      Object.values(watchHistory)
+    () => {
+      const removed = readRemovedHistory(currentUser)
+      return Object.entries(watchHistory)
         .filter(
-          (entry) =>
+          ([key, entry]) =>
             !entry.completed &&
             entry.progress < 100 &&
-            isPhubMovie(entry.movie),
+            isPhubMovie(entry.movie) &&
+            !isMovieRemoved(entry.movie, removed, entry.updatedAt, key),
         )
-        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
-        .map((entry, index) => ({
+        .map(([_, entry], index) => ({
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
           progressSeconds: entry.progressSeconds,
           durationSeconds: entry.durationSeconds,
           completed: entry.completed,
-        })),
-    [watchHistory],
+        }))
+    },
+    [watchHistory, currentUser],
   )
   const continueWatchingPhub1 = useMemo(
-    () =>
-      Object.values(watchHistory)
+    () => {
+      const removed = readRemovedHistory(currentUser)
+      return Object.entries(watchHistory)
         .filter(
-          (entry) =>
+          ([key, entry]) =>
             !entry.completed &&
             entry.progress < 100 &&
-            isPhub1Movie(entry.movie),
+            isPhub1Movie(entry.movie) &&
+            !isMovieRemoved(entry.movie, removed, entry.updatedAt, key),
         )
-        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
-        .map((entry, index) => ({
+        .map(([_, entry], index) => ({
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
           progressSeconds: entry.progressSeconds,
           durationSeconds: entry.durationSeconds,
           completed: entry.completed,
-        })),
-    [watchHistory],
+        }))
+    },
+    [watchHistory, currentUser],
   )
   const continueWatchingPhub2 = useMemo(
-    () =>
-      Object.values(watchHistory)
+    () => {
+      const removed = readRemovedHistory(currentUser)
+      return Object.entries(watchHistory)
         .filter(
-          (entry) =>
+          ([key, entry]) =>
             !entry.completed &&
             entry.progress < 100 &&
-            isPhub2Movie(entry.movie),
+            isPhub2Movie(entry.movie) &&
+            !isMovieRemoved(entry.movie, removed, entry.updatedAt, key),
         )
-        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
-        .map((entry, index) => ({
+        .map(([_, entry], index) => ({
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
           progressSeconds: entry.progressSeconds,
           durationSeconds: entry.durationSeconds,
           completed: entry.completed,
-        })),
-    [watchHistory],
+        }))
+    },
+    [watchHistory, currentUser],
   )
   const continueWatchingPhub3 = useMemo(
-    () =>
-      Object.values(watchHistory)
+    () => {
+      const removed = readRemovedHistory(currentUser)
+      return Object.entries(watchHistory)
         .filter(
-          (entry) =>
+          ([key, entry]) =>
             !entry.completed &&
             entry.progress < 100 &&
-            isPhub3Movie(entry.movie),
+            isPhub3Movie(entry.movie) &&
+            !isMovieRemoved(entry.movie, removed, entry.updatedAt, key),
         )
-        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
-        .map((entry, index) => ({
+        .map(([_, entry], index) => ({
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
           progressSeconds: entry.progressSeconds,
           durationSeconds: entry.durationSeconds,
           completed: entry.completed,
-        })),
-    [watchHistory],
+        }))
+    },
+    [watchHistory, currentUser],
   )
   const continueWatchingJav = useMemo(
-    () =>
-      Object.values(watchHistory)
+    () => {
+      const removed = readRemovedHistory(currentUser)
+      return Object.entries(watchHistory)
         .filter(
-          (entry) =>
+          ([key, entry]) =>
             !entry.completed &&
             entry.progress < 100 &&
-            isJavMovie(entry.movie),
+            isJavMovie(entry.movie) &&
+            !isMovieRemoved(entry.movie, removed, entry.updatedAt, key),
         )
-        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
         .slice(0, 12)
-        .map((entry, index) => ({
+        .map(([_, entry], index) => ({
           ...entry.movie,
           rank: index + 1,
           progress: entry.progress,
           progressSeconds: entry.progressSeconds,
           durationSeconds: entry.durationSeconds,
           completed: entry.completed,
-        })),
-    [watchHistory],
+        }))
+    },
+    [watchHistory, currentUser],
   )
   const savedLordList = useMemo(
     () =>
@@ -3773,7 +3893,7 @@ function App() {
     const matchedProfile = list.find((p) => p && p.name && p.name.toLowerCase() === profileName.toLowerCase())
     const user: UserInfo = {
       name: profileName,
-      email: currentUser?.email || 'guest@apple-tv.com',
+      email: currentUser?.email || '',
       avatarColor: matchedProfile?.avatarColor || 'red',
     }
     setCurrentUser(user)
@@ -3832,7 +3952,11 @@ function App() {
   }, [designMode, selectedMovie, setScreen])
 
   const signOut = () => {
+    clearSessionToken()
     setCurrentUser(null)
+    setWatchHistory({})
+    setSavedMovies({})
+    setLikedMovies({})
     try {
       window.sessionStorage.removeItem(activeScreenKey)
       window.sessionStorage.removeItem(selectedMovieKey)
@@ -4038,18 +4162,21 @@ function App() {
     }
   }, [likedMovies, currentUser])
 
-  const previousAccountEmailRef = useRef<string | null>(null)
+  const previousAccountEmailRef = useRef<string | null>(
+    currentUser?.email ? currentUser.email.toLowerCase() : null,
+  )
 
   useEffect(() => {
     if ((currentUser?.name ?? null) !== loadedProfileRef.current) {
       return
     }
-    if (currentUser?.email) {
-      const accountStorageKey = `${watchHistoryKey}.${currentUser.email.toLowerCase()}`
-      window.localStorage.setItem(accountStorageKey, JSON.stringify(watchHistory))
-      window.localStorage.setItem(`${watchHistoryKey}.${currentUser.name}`, JSON.stringify(watchHistory))
-    } else {
-      window.localStorage.setItem(watchHistoryKey, JSON.stringify(watchHistory))
+    const targetKey = watchHistoryStorageKeyFor(currentUser)
+    window.localStorage.setItem(targetKey, JSON.stringify(watchHistory))
+    if (currentUser?.email && currentUser.email.toLowerCase() !== 'guest@apple-tv.com') {
+      window.localStorage.setItem(
+        `${watchHistoryKey}.${currentUser.email.toLowerCase()}`,
+        JSON.stringify(watchHistory),
+      )
     }
   }, [watchHistory, currentUser])
 
@@ -4061,22 +4188,30 @@ function App() {
         // ignore
       }
 
+      const email = currentUser.email?.trim().toLowerCase() || ''
+      const isRealAccount = Boolean(email && email !== 'guest@apple-tv.com')
+      const profileScope = isRealAccount ? `${email}.${currentUser.name}` : `guest.${currentUser.name}`
+
       // Switch watch list and history for the active profile
       try {
-        const savedStr = window.localStorage.getItem(`${savedMoviesKey}.${currentUser.name}`)
+        const savedStr =
+          window.localStorage.getItem(`${savedMoviesKey}.${profileScope}`) ||
+          window.localStorage.getItem(`${savedMoviesKey}.${currentUser.name}`)
         setSavedMovies(savedStr ? JSON.parse(savedStr) : {})
       } catch {
         setSavedMovies({})
       }
 
       try {
-        const likedStr = window.localStorage.getItem(`${likedMoviesKey}.${currentUser.name}`)
+        const likedStr =
+          window.localStorage.getItem(`${likedMoviesKey}.${profileScope}`) ||
+          window.localStorage.getItem(`${likedMoviesKey}.${currentUser.name}`)
         setLikedMovies(likedStr ? JSON.parse(likedStr) : {})
       } catch {
         setLikedMovies({})
       }
 
-      const currentEmail = currentUser.email?.toLowerCase() || ''
+      const currentEmail = isRealAccount ? email : ''
       const isDifferentAccount =
         previousAccountEmailRef.current !== null &&
         previousAccountEmailRef.current !== currentEmail
@@ -4085,17 +4220,8 @@ function App() {
         // Account switched: do not reveal the previous account's watch history
         setWatchHistory({})
       } else {
-        try {
-          const accountStr = currentEmail
-            ? window.localStorage.getItem(`${watchHistoryKey}.${currentEmail}`)
-            : null
-          const historyStr =
-            accountStr ||
-            window.localStorage.getItem(`${watchHistoryKey}.${currentUser.name}`)
-          setWatchHistory(historyStr ? JSON.parse(historyStr) : {})
-        } catch {
-          setWatchHistory({})
-        }
+        const profileHistory = readWatchHistory(currentUser)
+        setWatchHistory(profileHistory)
       }
       previousAccountEmailRef.current = currentEmail
     } else {
@@ -4116,9 +4242,10 @@ function App() {
 
   // Cross-device "Continue Watching" sync. Keyed by authenticated user account email
   // so the same person sees the same history across all devices.
-  const userAccountEmail = currentUser?.email
-    ? currentUser.email.toLowerCase()
-    : ''
+  const userAccountEmail =
+    currentUser?.email && currentUser.email.toLowerCase() !== 'guest@apple-tv.com'
+      ? currentUser.email.toLowerCase()
+      : ''
   const watchHistorySyncKey = userAccountEmail
 
   // Pull the remote history when the active account changes and merge
@@ -4134,12 +4261,12 @@ function App() {
       if (cancelled || !res?.history || userAccountEmail !== emailAtFetch) {
         return
       }
-      setWatchHistory((local) => mergeWatchHistory(local, res.history as WatchHistory))
+      setWatchHistory((local) => mergeWatchHistory(local, res.history as WatchHistory, undefined, currentUser))
     })()
     return () => {
       cancelled = true
     }
-  }, [userAccountEmail])
+  }, [userAccountEmail, currentUser])
 
   // Multi-device synchronization: re-fetch from Supabase when the window/tab
   // becomes visible, window regains focus, or when device reconnects online.
@@ -4151,7 +4278,7 @@ function App() {
       if (document.visibilityState === 'visible') {
         void fetchAccountWatchProgress(userAccountEmail).then((res) => {
           if (res?.history) {
-            setWatchHistory((local) => mergeWatchHistory(local, res.history as WatchHistory))
+            setWatchHistory((local) => mergeWatchHistory(local, res.history as WatchHistory, undefined, currentUser))
           }
         })
       }
@@ -4170,7 +4297,7 @@ function App() {
       window.removeEventListener('online', syncWithServer)
       window.clearInterval(interval)
     }
-  }, [userAccountEmail])
+  }, [userAccountEmail, currentUser])
 
   // Debounced push of local history changes back to the server.
   useEffect(() => {
@@ -4372,7 +4499,7 @@ function App() {
         }
       })
 
-      if (currentUser?.email) {
+      if (currentUser?.email && currentUser.email.toLowerCase() !== 'guest@apple-tv.com') {
         const userEmail = currentUser.email.toLowerCase()
         const contentId = String(movie.tmdbId ?? movie.id)
         const season = movie.streamSeason != null ? Number(movie.streamSeason) : null
@@ -5524,6 +5651,12 @@ function App() {
   const removeContinueMovie = useCallback(
     (movie: Movie) => {
       recordMovieRemoved(movie, currentUser)
+      if (watchHistorySyncKey) {
+        void deleteRemoteMovieProgress(watchHistorySyncKey, movie.id, {
+          tmdbId: movie.tmdbId,
+          tmdbType: movie.tmdbType,
+        })
+      }
       setWatchHistory((current) => {
         const next = removeMatchingMovieRecords(current, movie, (entry) => entry.movie)
         if (watchHistorySyncKey) {
@@ -5597,6 +5730,12 @@ function App() {
 
         if (matchesTab) {
           recordMovieRemoved(entry.movie, currentUser)
+          if (watchHistorySyncKey) {
+            void deleteRemoteMovieProgress(watchHistorySyncKey, entry.movie.id, {
+              tmdbId: entry.movie.tmdbId,
+              tmdbType: entry.movie.tmdbType,
+            })
+          }
           delete next[key]
           changed = true
         }
@@ -6272,7 +6411,7 @@ function App() {
               const matchedProfile = list.find((p) => p && p.name && p.name.toLowerCase() === profileName.toLowerCase())
               const finalUser: UserInfo = {
                 name: profileName,
-                email: tempUser?.email || currentUser?.email || 'guest@apple-tv.com',
+                email: tempUser?.email || currentUser?.email || '',
                 avatarColor: matchedProfile?.avatarColor || 'red',
               }
               setCurrentUser(finalUser)

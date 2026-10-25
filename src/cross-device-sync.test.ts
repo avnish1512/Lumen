@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   fetchAccountWatchProgress,
   saveWatchProgressRecord,
+  deleteRemoteMovieProgress,
   mergeWithServerHistory,
   getOfflineQueue,
   addToOfflineQueue,
@@ -421,4 +422,74 @@ describe('Cross-Device Continue Watching Synchronization', () => {
       expect(history['999']?.progress).toBeGreaterThanOrEqual(95)
     })
   })
+
+  describe('7. Removal & Account Isolation Validation', () => {
+    it('calls DELETE /api/watch-history with proper payload on deleteRemoteMovieProgress', async () => {
+      const userEmail = 'active@example.com'
+      const token = createSessionToken(userEmail)
+      setSessionToken(token)
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true }),
+      } as Response)
+
+      const result = await deleteRemoteMovieProgress(userEmail, 'movie-550', { tmdbId: 550, tmdbType: 'movie' })
+      expect(result).toBe(true)
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/watch-history',
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({
+            key: userEmail,
+            user_id: userEmail,
+            content_id: 'movie-550',
+            movieId: 'movie-550',
+            tmdbId: 550,
+          }),
+        }),
+      )
+    })
+
+    it('does not send delete or fetch requests for guest@apple-tv.com', async () => {
+      globalThis.fetch = vi.fn()
+
+      const delRes = await deleteRemoteMovieProgress('guest@apple-tv.com', '550')
+      expect(delRes).toBe(true)
+      expect(globalThis.fetch).not.toHaveBeenCalled()
+
+      const fetchRes = await fetchAccountWatchProgress('guest@apple-tv.com')
+      expect(fetchRes).toEqual({ records: [], history: {} })
+      expect(globalThis.fetch).not.toHaveBeenCalled()
+    })
+
+    it('filters out removed movies when removedMap is provided to mergeWithServerHistory', () => {
+      const record: WatchProgressRecord = {
+        id: 'user@example.com::550',
+        user_id: 'user@example.com',
+        content_id: '550',
+        content_type: 'movie',
+        season_number: null,
+        episode_number: null,
+        progress_seconds: 1200,
+        duration_seconds: 6000,
+        updated_at: '2026-10-25T10:00:00.000Z',
+        completed: false,
+        movie: { id: '550', title: 'Fight Club' },
+      }
+
+      // If removedMap has tombstone for '550' or 'movie-550'
+      const removedMap: Record<string, number> = {
+        '550': new Date('2026-10-25T11:00:00.000Z').getTime(),
+      }
+
+      const history = mergeWithServerHistory({}, [record], removedMap)
+      expect(history['550']).toBeUndefined()
+    })
+  })
 })
+

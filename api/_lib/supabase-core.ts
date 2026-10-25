@@ -424,3 +424,74 @@ export async function batchSaveUserWatchRecords(
   }
   return { ok: true, savedCount }
 }
+
+/**
+ * Deletes a user's watch progress record(s) from Supabase.
+ * Purges itemized row(s) and cleans legacy composite dictionary entries.
+ */
+export async function deleteUserWatchRecord(
+  config: SupabaseConfig,
+  userId: string,
+  contentId: string,
+  extraIds: Array<string | number> = [],
+): Promise<{ ok: boolean }> {
+  const normUser = userId.trim().toLowerCase()
+  if (!normUser || !contentId) return { ok: false }
+
+  const idsToDelete = new Set<string>()
+  const clean = (id: string | number) => String(id).trim()
+  idsToDelete.add(clean(contentId))
+  idsToDelete.add(clean(contentId).replace(/^(movie|tv)-/, ''))
+  for (const extra of extraIds) {
+    if (extra != null && String(extra).trim()) {
+      const s = clean(extra)
+      idsToDelete.add(s)
+      idsToDelete.add(s.replace(/^(movie|tv)-/, ''))
+    }
+  }
+
+  // 1. Delete itemized progress rows matching user + content IDs
+  for (const id of idsToDelete) {
+    if (!id) continue
+    try {
+      const deleteUrl = `${config.url}/rest/v1/account_watch_history?key=like.${encodeURIComponent(
+        `${normUser}::${id}`,
+      )}*`
+      await fetch(deleteUrl, {
+        method: 'DELETE',
+        headers: restHeaders(config),
+      })
+    } catch {
+      // Best-effort delete
+    }
+  }
+
+  // 2. Also remove from legacy composite continue_watching dictionary
+  try {
+    const compositeKey = `${normUser}::continue_watching`
+    const existing = await fetchWatchHistory(config, compositeKey)
+    if (existing) {
+      let modified = false
+      for (const [key, item] of Object.entries(existing)) {
+        const itemMovie = (item as any)?.movie || item
+        const itemId = String((itemMovie as any)?.id || key)
+        const itemTmdbId = String((itemMovie as any)?.tmdbId || '')
+        if (
+          idsToDelete.has(itemId) ||
+          idsToDelete.has(itemId.replace(/^(movie|tv)-/, '')) ||
+          (itemTmdbId && idsToDelete.has(itemTmdbId))
+        ) {
+          delete existing[key]
+          modified = true
+        }
+      }
+      if (modified) {
+        await saveWatchHistory(config, compositeKey, existing)
+      }
+    }
+  } catch {
+    // Best-effort
+  }
+
+  return { ok: true }
+}

@@ -60,6 +60,7 @@ export {
   mergeWithServerHistory,
   fetchRemoteWatchHistory,
   saveRemoteWatchHistory,
+  deleteRemoteMovieProgress,
   saveRemoteMovieProgress,
   flushOfflineProgressQueue,
   type WatchProgressRecord,
