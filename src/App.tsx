@@ -159,7 +159,15 @@ import {
   type LiveStream,
   type LiveMatchScope,
 } from './livetv'
-import { topPosterUrl, hasTopPoster, proxiedAnimeImage } from './posters'
+import {
+  topPosterUrl,
+  hasTopPoster,
+  proxiedAnimeImage,
+  fetchTmdbAnimeArtwork,
+  getCustomAnimePoster,
+  setCustomAnimePoster,
+  type AnimeArtwork,
+} from './posters'
 import { fetchTrailerYoutubeId } from './kinocheck'
 import { WatchRecommenderEntry } from './watch-recommender/WatchRecommender'
 import { SplashScreen } from './SplashScreen'
@@ -2211,6 +2219,10 @@ function cleanImageUrl(value?: string) {
 }
 
 function posterImageFor(movie: Movie) {
+  if (movie.isAnime) {
+    const custom = getCustomAnimePoster(movie.id)
+    if (custom) return custom
+  }
   return (
     cleanImageUrl(movie.poster) ||
     cleanImageUrl(movie.still) ||
@@ -2572,8 +2584,8 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
 function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
   const title = anime.title?.english || anime.title?.romaji || anime.title?.userPreferred || 'Unknown Anime'
   const year = anime.seasonYear ? String(anime.seasonYear) : 'N/A'
-  const banner = anime.bannerImage || anime.coverImage?.large || ''
-  const poster = anime.coverImage?.large || anime.coverImage?.medium || ''
+  const banner = anime.bannerImage || anime.coverImage?.extraLarge || anime.coverImage?.large || ''
+  const poster = anime.coverImage?.extraLarge || anime.coverImage?.large || anime.coverImage?.medium || ''
   const animeFormat = (anime.format || '').toUpperCase()
   const isAnimeFilm = animeFormat === 'MOVIE' || animeFormat === 'MUSIC'
   // AniList reports `episodes: null` while a series is still airing; in that
@@ -7706,6 +7718,160 @@ type DetailScreenProps = {
   designMode: 'apple' | 'netflix'
 }
 
+function AnimePosterModal({
+  movie,
+  onClose,
+}: {
+  movie: Movie
+  onClose: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [artwork, setArtwork] = useState<AnimeArtwork | null>(null)
+  const [currentCustom, setCurrentCustom] = useState<string | null>(() =>
+    getCustomAnimePoster(movie.id),
+  )
+
+  useEffect(() => {
+    let mounted = true
+    fetchTmdbAnimeArtwork(movie.title).then((res) => {
+      if (mounted) {
+        setArtwork(res)
+        setLoading(false)
+      }
+    })
+    return () => {
+      mounted = false
+    }
+  }, [movie.title])
+
+  const options: Array<{ id: string; label: string; badge: string; url: string; isWide?: boolean }> = useMemo(() => {
+    const list: Array<{ id: string; label: string; badge: string; url: string; isWide?: boolean }> = []
+
+    // 1. TMDB English Poster (with English Title Logo)
+    if (artwork?.poster) {
+      list.push({
+        id: 'tmdb-poster',
+        label: 'Official English Poster',
+        badge: 'English Logo',
+        url: artwork.poster,
+      })
+    }
+
+    // 2. Original Japanese Poster (from AniList)
+    if (movie.poster && movie.poster !== artwork?.poster) {
+      list.push({
+        id: 'anilist-poster',
+        label: 'Original Anime Art',
+        badge: 'Japanese Key Art',
+        url: movie.poster,
+      })
+    }
+
+    // 3. Cinematic 16:9 Backdrop
+    const backdrop = artwork?.backdrop || movie.hero || movie.still
+    if (backdrop) {
+      list.push({
+        id: 'cinematic-backdrop',
+        label: 'Cinematic Backdrop',
+        badge: '16:9 Landscape',
+        url: backdrop,
+        isWide: true,
+      })
+    }
+
+    // 4. Hero still if distinct
+    if (movie.hero && movie.hero !== backdrop && movie.hero !== movie.poster) {
+      list.push({
+        id: 'hero-art',
+        label: 'Banner Artwork',
+        badge: 'Promotional Banner',
+        url: movie.hero,
+        isWide: true,
+      })
+    }
+
+    return list
+  }, [artwork, movie.poster, movie.hero, movie.still])
+
+  const handleSelect = (url: string) => {
+    setCustomAnimePoster(movie.id, url)
+    setCurrentCustom(url)
+  }
+
+  const handleReset = () => {
+    setCustomAnimePoster(movie.id, null)
+    setCurrentCustom(null)
+  }
+
+  const activeUrl = currentCustom || (artwork?.poster ?? movie.poster)
+
+  return (
+    <div className="bff-overlay" role="dialog" aria-label="Choose anime poster" onClick={onClose}>
+      <div className="bff-modal anime-poster-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="bff-close" type="button" aria-label="Close" onClick={onClose}>
+          <X size={20} />
+        </button>
+
+        <div className="anime-poster-modal-header">
+          <h2 className="anime-poster-modal-title">Alternative Posters</h2>
+          <p className="anime-poster-modal-sub">
+            Choose your preferred artwork for <strong>{movie.title}</strong> in the Netflix UI. Select an official English poster with title logo, original Japanese key art, or cinematic banners.
+          </p>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(255,255,255,0.6)' }}>
+            <LoaderCircle className="spin" size={32} style={{ margin: '0 auto 12px' }} />
+            <p>Searching official posters from TMDB and anime archives...</p>
+          </div>
+        ) : (
+          <div className="anime-poster-grid">
+            {options.map((opt) => {
+              const isSelected = activeUrl === opt.url
+              return (
+                <div
+                  key={opt.id}
+                  className={`anime-poster-option${isSelected ? ' is-active' : ''}`}
+                  onClick={() => handleSelect(opt.url)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') handleSelect(opt.url)
+                  }}
+                >
+                  <div className={`anime-poster-preview-wrap${opt.isWide ? ' is-wide' : ''}`}>
+                    <img src={opt.url} alt={opt.label} loading="lazy" />
+                    <span className="anime-poster-badge">{opt.badge}</span>
+                    {isSelected && (
+                      <span className="anime-poster-active-tag">
+                        <Check size={12} strokeWidth={3} /> Active
+                      </span>
+                    )}
+                  </div>
+                  <div className="anime-poster-option-footer">
+                    <span className="anime-poster-label">{opt.label}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="anime-poster-actions">
+          {currentCustom && (
+            <button className="anime-poster-reset-btn" type="button" onClick={handleReset}>
+              Reset to Default
+            </button>
+          )}
+          <button className="primary-play small" type="button" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DetailScreen({
   movie,
   relatedMovies,
@@ -7729,6 +7895,7 @@ function DetailScreen({
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false)
+  const [showPosterModal, setShowPosterModal] = useState(false)
 
   const isHentaiMovie = Boolean(
     movie.isHentaiOcean ||
@@ -8161,6 +8328,17 @@ function DetailScreen({
                     {isSaved ? <Check /> : <Plus />}
                   </button>
                 )}
+                {isDesktop && movie.isAnime && (
+                  <button
+                    className="circle-action"
+                    type="button"
+                    onClick={() => setShowPosterModal(true)}
+                    title="Choose Alternative Poster"
+                    aria-label="Choose Alternative Poster"
+                  >
+                    <Sparkles size={18} />
+                  </button>
+                )}
                 {!isDesktop && (
                   <div className="netflix-detail-iconrow">
                     <button type="button" className="netflix-icon-action" title="Set Reminders">
@@ -8176,6 +8354,17 @@ function DetailScreen({
                       {isSaved ? <Check /> : <Plus />}
                       <span>My List</span>
                     </button>
+                    {movie.isAnime && (
+                      <button
+                        type="button"
+                        className="netflix-icon-action"
+                        onClick={() => setShowPosterModal(true)}
+                        title="Posters"
+                      >
+                        <Sparkles />
+                        <span>Posters</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="netflix-icon-action"
@@ -8366,6 +8555,13 @@ function DetailScreen({
           episode={movie.streamEpisode}
           currentServer="auto"
           currentQuality="1080p"
+        />
+      )}
+
+      {showPosterModal && (
+        <AnimePosterModal
+          movie={movie}
+          onClose={() => setShowPosterModal(false)}
         />
       )}
     </section>
@@ -14287,7 +14483,36 @@ function LandscapePosterCard({
   movie: Movie
   onOpenDetail: (movie: Movie) => void
 }) {
-  const image = heroImageFor(movie) || posterImageFor(movie)
+  const [customPoster, setCustomPoster] = useState<string | null>(() =>
+    movie.isAnime ? getCustomAnimePoster(movie.id) : null,
+  )
+  const [tmdbBackdrop, setTmdbBackdrop] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!movie.isAnime) return
+
+    const handleCustomChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail?.movieId === movie.id) {
+        setCustomPoster(detail.posterUrl || null)
+      }
+    }
+    window.addEventListener('lumen:poster-change', handleCustomChange)
+
+    let mounted = true
+    fetchTmdbAnimeArtwork(movie.title).then((art) => {
+      if (mounted && art?.backdrop) {
+        setTmdbBackdrop(art.backdrop)
+      }
+    })
+
+    return () => {
+      mounted = false
+      window.removeEventListener('lumen:poster-change', handleCustomChange)
+    }
+  }, [movie.id, movie.title, movie.isAnime])
+
+  const image = customPoster || tmdbBackdrop || heroImageFor(movie) || posterImageFor(movie)
 
   return (
     <button
@@ -14304,7 +14529,7 @@ function LandscapePosterCard({
           event.currentTarget.src = posterImageFor(movie)
         }}
       />
-      <span className="landscape-poster-title">{movie.title}</span>
+      <span className="landscape-poster-title" title={movie.title}>{movie.title}</span>
     </button>
   )
 }
@@ -14802,18 +15027,59 @@ function PosterImage({
   className?: string
   alt?: string
 }) {
+  const [customPoster, setCustomPoster] = useState<string | null>(() =>
+    movie.isAnime ? getCustomAnimePoster(movie.id) : null,
+  )
+  const [tmdbPoster, setTmdbPoster] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!movie.isAnime) return
+
+    const handleCustomChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail?.movieId === movie.id) {
+        setCustomPoster(detail.posterUrl || null)
+      }
+    }
+    window.addEventListener('lumen:poster-change', handleCustomChange)
+
+    let mounted = true
+    fetchTmdbAnimeArtwork(movie.title).then((art) => {
+      if (mounted && art?.poster) {
+        setTmdbPoster(art.poster)
+      }
+    })
+
+    return () => {
+      mounted = false
+      window.removeEventListener('lumen:poster-change', handleCustomChange)
+    }
+  }, [movie.id, movie.title, movie.isAnime])
+
   // Ordered list of image sources to try. On each load error we advance to the
-  // next candidate. Anime skip the Top-Posters proxy (they're never indexed
-  // there — attempting it just adds a slow 404) and gain a proxied AniList
-  // fallback so a flaky AniList CDN still resolves through our cached origin.
+  // next candidate.
   const candidates = useMemo(() => {
     const list: string[] = []
     const direct = cleanImageUrl(movie.poster)
 
     if (movie.isAnime) {
+      if (customPoster) {
+        list.push(customPoster)
+      }
+      if (tmdbPoster) {
+        list.push(tmdbPoster)
+      }
       if (direct) {
         list.push(direct)
         list.push(proxiedAnimeImage(direct))
+      }
+      const altStill = cleanImageUrl(movie.still)
+      if (altStill && !list.includes(altStill)) {
+        list.push(altStill)
+      }
+      const altHero = cleanImageUrl(movie.hero)
+      if (altHero && !list.includes(altHero)) {
+        list.push(altHero)
       }
     } else {
       if (hasTopPoster(movie)) {
@@ -14837,7 +15103,17 @@ function PosterImage({
     }
 
     return list.filter((entry, index) => Boolean(entry) && list.indexOf(entry) === index)
-  }, [movie.id, movie.tmdbId, movie.isAnime, movie.poster, movie.still, movie.hero, fallback])
+  }, [
+    movie.id,
+    movie.tmdbId,
+    movie.isAnime,
+    movie.poster,
+    movie.still,
+    movie.hero,
+    fallback,
+    customPoster,
+    tmdbPoster,
+  ])
 
   const [index, setIndex] = useState(0)
 

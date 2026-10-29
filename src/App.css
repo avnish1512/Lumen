@@ -12788,18 +12788,181 @@ body:has(.add-profile-screen),
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 22px 12px 10px;
+  padding: 26px 12px 10px;
   color: #fff;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
   text-align: left;
-  line-height: 1.2;
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.88));
+  line-height: 1.25;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.7) 40%, rgba(0, 0, 0, 0.95) 100%);
   opacity: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+}
+
+/* ==========================================================================
+   Anime Alternative Poster Switcher Modal (Netflix Theme)
+   ========================================================================== */
+.anime-poster-modal {
+  max-width: 780px !important;
+  width: 92% !important;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #141414 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  padding: 28px !important;
+  color: #fff;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+}
+
+.anime-poster-modal-header {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.anime-poster-modal-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+  color: #fff;
+}
+
+.anime-poster-modal-sub {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.anime-poster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.anime-poster-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #1f1f1f;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  cursor: pointer;
+  text-align: left;
+}
+
+.anime-poster-option:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.anime-poster-option.is-active {
+  border-color: #e50914;
+  box-shadow: 0 0 0 1px #e50914, 0 8px 24px rgba(229, 9, 20, 0.35);
+}
+
+.anime-poster-preview-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background: #0a0a0a;
+  overflow: hidden;
+}
+
+.anime-poster-preview-wrap.is-wide {
+  aspect-ratio: 16 / 9;
+}
+
+.anime-poster-preview-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.anime-poster-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.anime-poster-active-tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #e50914;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.anime-poster-option-footer {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #1a1a1a;
+}
+
+.anime-poster-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.anime-poster-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.anime-poster-reset-btn {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.anime-poster-reset-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
 
 .rail-arrow {
   position: absolute;
