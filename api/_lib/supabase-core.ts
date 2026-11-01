@@ -1,18 +1,3 @@
-// Minimal Supabase REST helpers for cross-device profile storage.
-// Uses the PostgREST endpoint directly (no @supabase/supabase-js dependency)
-// with the service-role key, so this must only ever run server-side.
-//
-// Expected table (run once in the Supabase SQL editor):
-//
-//   create table if not exists account_profiles (
-//     email      text primary key,
-//     profiles   jsonb not null default '[]'::jsonb,
-//     updated_at timestamptz not null default now()
-//   );
-//
-//   -- Keep it locked down; only the service role (server) touches it.
-//   alter table account_profiles enable row level security;
-
 export type StoredProfile = {
   name: string
   avatarColor: string
