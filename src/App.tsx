@@ -173,8 +173,7 @@ import { WatchRecommenderEntry } from './watch-recommender/WatchRecommender'
 import { SplashScreen } from './SplashScreen'
 import { ErrorBoundary } from './ErrorBoundary'
 import { DownloadsScreen } from './DownloadsScreen'
-import { startDownload, getAllDownloads, subscribeDownloads } from './downloads'
-import { DownloadOptionsModal } from './DownloadOptionsModal'
+import { getAllDownloads, subscribeDownloads, buildMovieDownloaderUrl } from './downloads'
 import { updateSeoTags, createMovieSlug } from './seo'
 import {
   type JavPost,
@@ -7928,7 +7927,6 @@ function DetailScreen({
   const similarsRef = useRef<HTMLDivElement | null>(null)
   const [isDownloaded, setIsDownloaded] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
-  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false)
   const [showPosterModal, setShowPosterModal] = useState(false)
 
   const isHentaiMovie = Boolean(
@@ -7962,37 +7960,36 @@ function DetailScreen({
     }
   }, [movie.id, isHentaiMovie])
 
-  const handleDownloadClick = () => {
-    setIsDownloadModalOpen(true)
-  }
-
-  const handleConfirmDownload = async (server: string, quality: string) => {
+  const handleDownloadClick = async () => {
+    if (isHentaiMovie) return
     setIsDownloading(true)
     try {
-      const streamProviderToUse = server !== 'auto' && isStreamProvider(server) ? (server as StreamProvider) : 'rivestream'
-      const streamUrl = buildStreamUrl(movie, streamProviderToUse)
-      await startDownload(
-        {
-          id: movie.id,
-          movieId: movie.id,
-          tmdbId: movie.tmdbId,
-          imdbId: movie.id?.startsWith('tt') ? movie.id : undefined,
-          title: movie.title,
-          year: movie.year,
-          season: movie.streamSeason,
-          episode: movie.streamEpisode,
-          poster: movie.poster,
-          still: movie.still,
-          runtime: movie.runtime,
-          mediaType: movie.isAnime ? 'anime' : (movie.type === 'series' ? 'tv' : 'movie'),
-          trailerYoutubeId: movie.trailerYoutubeId,
-        },
-        streamUrl,
-        { server, quality },
-      )
-      setIsDownloaded(true)
+      let tmdbId = movie.tmdbId
+      const isTv = movie.type === 'series' || movie.isAnime || movie.tmdbType === 'tv'
+      if (!tmdbId) {
+        const rawId = movie.id?.replace(/^(movie|tv)-/, '')
+        if (rawId && !isNaN(Number(rawId))) {
+          tmdbId = Number(rawId)
+        } else if (movie.id) {
+          const match = await fetchTmdbMatch(movie.id, false, isTv ? 'tv' : 'movie')
+          if (match?.tmdbId) tmdbId = match.tmdbId
+        }
+      }
+      if (tmdbId) {
+        const downloadUrl = buildMovieDownloaderUrl(tmdbId, {
+          isTv,
+          season: movie.streamSeason || 1,
+          episode: movie.streamEpisode || 1,
+        })
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer')
+        setIsDownloaded(true)
+      } else {
+        alert('Could not resolve download source for this title.')
+      }
+    } catch {
+      alert('Failed to resolve download link.')
     } finally {
-      setTimeout(() => setIsDownloading(false), 800)
+      setTimeout(() => setIsDownloading(false), 1000)
     }
   }
 
@@ -8579,18 +8576,7 @@ function DetailScreen({
         )}
       </div>
 
-      {isDownloadModalOpen && (
-        <DownloadOptionsModal
-          isOpen={isDownloadModalOpen}
-          onClose={() => setIsDownloadModalOpen(false)}
-          onConfirm={handleConfirmDownload}
-          movie={movie}
-          season={movie.streamSeason}
-          episode={movie.streamEpisode}
-          currentServer="auto"
-          currentQuality="1080p"
-        />
-      )}
+
 
       {showPosterModal && (
         <AnimePosterModal
@@ -9065,6 +9051,21 @@ function SeasonEpisodeSection({
                       <span className="episode-time">
                         <RefreshCcw />
                         {upcoming ? (comingDate || 'Coming soon') : runtime}
+                      </span>
+                    )}
+                    {!upcoming && targetTmdbId && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="episode-download-action-btn"
+                        title={`Download Episode ${episode}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const url = buildMovieDownloaderUrl(targetTmdbId, { isTv: true, season: selectedSeason, episode })
+                          window.open(url, '_blank', 'noopener,noreferrer')
+                        }}
+                      >
+                        <Download size={14} />
                       </span>
                     )}
                     <MoreHorizontal />
@@ -9582,7 +9583,6 @@ function WatchScreen({
 
   const [isWatchDownloaded, setIsWatchDownloaded] = useState(false)
   const [isWatchDownloading, setIsWatchDownloading] = useState(false)
-  const [isWatchDownloadModalOpen, setIsWatchDownloadModalOpen] = useState(false)
 
   const currentDownloadKey = movie.streamSeason !== undefined && movie.streamEpisode
     ? `${movie.id}-s${movie.streamSeason}e${movie.streamEpisode}`
@@ -9606,42 +9606,34 @@ function WatchScreen({
     }
   }, [currentDownloadKey])
 
-  const handleWatchDownload = () => {
-    setIsWatchDownloadModalOpen(true)
-  }
-
-  const handleConfirmWatchDownload = async (server: string, quality: string) => {
+  const handleWatchDownload = async () => {
+    if (isPhubVideo || isJavVideo || isHentai) return
     setIsWatchDownloading(true)
     try {
-      const providerToUse = server !== 'auto' && isStreamProvider(server) ? (server as StreamProvider) : activeProviderId
-      const activeStreamUrl = buildStreamUrl(movie, providerToUse)
-      await startDownload(
-        {
-          id: currentDownloadKey,
-          movieId: movie.id,
-          tmdbId: movie.tmdbId,
-          imdbId: movie.id?.startsWith('tt') ? movie.id : undefined,
-          title: movie.title,
-          year: movie.year,
-          season: movie.streamSeason,
-          episode: movie.streamEpisode,
-          episodeTitle: movie.streamSeason !== undefined && movie.streamEpisode
-            ? (movie.streamSeason === 0
-                ? `Special Episode ${movie.streamEpisode}`
-                : `Season ${movie.streamSeason} Episode ${movie.streamEpisode}`)
-            : undefined,
-          poster: movie.poster,
-          still: movie.still,
-          runtime: movie.runtime,
-          mediaType: movie.isAnime ? 'anime' : (movie.type === 'series' ? 'tv' : 'movie'),
-          trailerYoutubeId: movie.trailerYoutubeId,
-        },
-        activeStreamUrl,
-        { server, quality },
-      )
-      setIsWatchDownloaded(true)
+      let tmdbId = watchTargetTmdbId || movie.tmdbId
+      const isTv = watchIsTvId || isAnimeMovie || movie.streamSeason !== undefined || movie.streamEpisode !== undefined
+      if (!tmdbId) {
+        const rawId = movie.id?.replace(/^(movie|tv)-/, '')
+        if (rawId && !isNaN(Number(rawId))) {
+          tmdbId = Number(rawId)
+        } else if (movie.id) {
+          const match = await fetchTmdbMatch(movie.id, false, isTv ? 'tv' : 'movie')
+          if (match?.tmdbId) tmdbId = match.tmdbId
+        }
+      }
+      if (tmdbId) {
+        const s = movie.streamSeason ?? season ?? 1
+        const ep = movie.streamEpisode ?? episode ?? 1
+        const downloadUrl = buildMovieDownloaderUrl(tmdbId, { isTv, season: s, episode: ep })
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer')
+        setIsWatchDownloaded(true)
+      } else {
+        alert('Could not resolve download source for this title.')
+      }
+    } catch {
+      alert('Failed to resolve download link.')
     } finally {
-      setTimeout(() => setIsWatchDownloading(false), 800)
+      setTimeout(() => setIsWatchDownloading(false), 1000)
     }
   }
 
@@ -10943,6 +10935,26 @@ function WatchScreen({
                     <span>{epDurationStr}</span>
                     <span className="anime-yt-dot">•</span>
                     <span>{audioText}</span>
+                    {watchTargetTmdbId && (
+                      <>
+                        <span className="anime-yt-dot">•</span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="anime-yt-download-pill"
+                          title={`Download Episode ${number}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const s = movie.streamSeason ?? season ?? 1
+                            const url = buildMovieDownloaderUrl(watchTargetTmdbId, { isTv: true, season: s, episode: number })
+                            window.open(url, '_blank', 'noopener,noreferrer')
+                          }}
+                        >
+                          <Download size={10} />
+                          <span>Download</span>
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </button>
@@ -11508,18 +11520,7 @@ function WatchScreen({
           {renderCommentsSection()}
         </div>
 
-        {isWatchDownloadModalOpen && (
-          <DownloadOptionsModal
-            isOpen={isWatchDownloadModalOpen}
-            onClose={() => setIsWatchDownloadModalOpen(false)}
-            onConfirm={handleConfirmWatchDownload}
-            movie={movie}
-            season={season}
-            episode={episode}
-            currentServer={activeProviderId}
-            currentQuality="1080p"
-          />
-        )}
+
       </section>
     )
   }
@@ -11798,18 +11799,7 @@ function WatchScreen({
         {renderCommentsSection()}
       </div>
 
-      {isWatchDownloadModalOpen && (
-        <DownloadOptionsModal
-          isOpen={isWatchDownloadModalOpen}
-          onClose={() => setIsWatchDownloadModalOpen(false)}
-          onConfirm={handleConfirmWatchDownload}
-          movie={movie}
-          season={season}
-          episode={episode}
-          currentServer={activeProviderId}
-          currentQuality="1080p"
-        />
-      )}
+
     </section>
   )
 }

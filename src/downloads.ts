@@ -430,6 +430,33 @@ export function formatBytes(bytes: number, decimals = 1): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
+export const MOVIE_DOWNLOADER_BASE = 'https://02moviedownloader.site'
+
+/**
+ * Builds direct download URL using 02moviedownloader:
+ * - Movies: https://02moviedownloader.site/api/download/movie/:id
+ * - TV / Episodes: https://02moviedownloader.site/api/download/tv/:id/:season/:episode
+ */
+export function buildMovieDownloaderUrl(
+  id: number | string,
+  options?: {
+    isTv?: boolean
+    season?: number
+    episode?: number
+  },
+): string {
+  const cleanId = String(id).trim().replace(/^(movie|tv)-/, '')
+  const isTv = Boolean(options?.isTv || options?.season !== undefined || options?.episode !== undefined)
+
+  if (isTv) {
+    const s = options?.season ?? 1
+    const ep = options?.episode ?? 1
+    return `${MOVIE_DOWNLOADER_BASE}/api/download/tv/${cleanId}/${s}/${ep}`
+  }
+
+  return `${MOVIE_DOWNLOADER_BASE}/api/download/movie/${cleanId}`
+}
+
 export interface DownloadOptions {
   server?: string
   quality?: string
@@ -695,6 +722,17 @@ export async function exportToDevice(id: string, fallbackFilename?: string): Pro
   const item = items.find((i) => i.id === id)
 
   if (!blob && !item?.directUrl) {
+    if (item?.tmdbId || item?.movieId) {
+      const url = buildMovieDownloaderUrl(item.tmdbId || item.movieId, {
+        isTv: item.mediaType === 'tv' || item.mediaType === 'anime',
+        season: item.season,
+        episode: item.episode,
+      })
+      if (typeof window !== 'undefined') {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+      return true
+    }
     return false
   }
 

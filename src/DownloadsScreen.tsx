@@ -15,7 +15,6 @@ import {
   RefreshCw,
   ShieldCheck,
   WifiOff,
-  Sliders,
   AlertCircle,
 } from 'lucide-react'
 import {
@@ -27,12 +26,11 @@ import {
   exportToDevice,
   formatBytes,
   getTotalStorageUsed,
-  redownloadItem,
+  buildMovieDownloaderUrl,
 } from './downloads'
 import { buildStreamUrl, type StreamProvider, isStreamProvider } from './tmdb'
 import type { Movie } from './omdb'
 import { normalizeMovie } from './omdb'
-import { DownloadOptionsModal } from './DownloadOptionsModal'
 
 interface DownloadsScreenProps {
   onBack?: () => void
@@ -96,18 +94,7 @@ export function DownloadsScreen({
   const [streamEmbedUrl, setStreamEmbedUrl] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<'all' | 'movie' | 'tv' | 'anime'>('all')
-  const [configuredItem, setConfiguredItem] = useState<DownloadItem | null>(null)
   const videoPlayerRef = useRef<HTMLVideoElement | null>(null)
-
-  const handleRedownloadConfirm = async (server: string, quality: string) => {
-    if (!configuredItem) return
-    const target = configuredItem
-    setConfiguredItem(null)
-    if (activePlayItem?.id === target.id) {
-      handleClosePlayer()
-    }
-    await redownloadItem(target, { server, quality })
-  }
 
   useEffect(() => {
     let isMounted = true
@@ -381,12 +368,20 @@ export function DownloadsScreen({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setConfiguredItem(item)
+                        const targetId = item.tmdbId || item.movieId
+                        if (targetId) {
+                          const url = buildMovieDownloaderUrl(targetId, {
+                            isTv: item.mediaType === 'tv' || item.mediaType === 'anime',
+                            season: item.season,
+                            episode: item.episode,
+                          })
+                          window.open(url, '_blank', 'noopener,noreferrer')
+                        }
                       }}
-                      title="Change Server / Quality"
+                      title="Download with 02MovieDownloader"
                     >
-                      <Sliders size={13} />
-                      <span>Server</span>
+                      <Download size={13} />
+                      <span>Download</span>
                     </button>
 
                     <button
@@ -453,11 +448,21 @@ export function DownloadsScreen({
                 <button
                   className="btn-download-action"
                   type="button"
-                  onClick={() => setConfiguredItem(activePlayItem)}
-                  title="Change Server / Quality"
+                  onClick={() => {
+                    const targetId = activePlayItem.tmdbId || activePlayItem.movieId
+                    if (targetId) {
+                      const url = buildMovieDownloaderUrl(targetId, {
+                        isTv: activePlayItem.mediaType === 'tv' || activePlayItem.mediaType === 'anime',
+                        season: activePlayItem.season,
+                        episode: activePlayItem.episode,
+                      })
+                      window.open(url, '_blank', 'noopener,noreferrer')
+                    }
+                  }}
+                  title="Download with 02MovieDownloader"
                 >
-                  <Sliders size={14} />
-                  <span>Change Server</span>
+                  <Download size={14} />
+                  <span>Download</span>
                 </button>
 
                 <button
@@ -499,8 +504,21 @@ export function DownloadsScreen({
                   Video playback ready on {activePlayItem.server?.toUpperCase() || 'default server'}.
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="button" onClick={() => setConfiguredItem(activePlayItem)}>
-                    Change Server
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = activePlayItem.tmdbId || activePlayItem.movieId
+                      if (targetId) {
+                        const url = buildMovieDownloaderUrl(targetId, {
+                          isTv: activePlayItem.mediaType === 'tv' || activePlayItem.mediaType === 'anime',
+                          season: activePlayItem.season,
+                          episode: activePlayItem.episode,
+                        })
+                        window.open(url, '_blank', 'noopener,noreferrer')
+                      }
+                    }}
+                  >
+                    Download
                   </button>
                   <button type="button" className="notice-delete-btn" onClick={() => handleDelete(activePlayItem.id)}>
                     Delete
@@ -536,30 +554,6 @@ export function DownloadsScreen({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Download Options / Change Server Modal */}
-      {configuredItem && (
-        <DownloadOptionsModal
-          isOpen={Boolean(configuredItem)}
-          onClose={() => setConfiguredItem(null)}
-          onConfirm={handleRedownloadConfirm}
-          movie={{
-            title: configuredItem.title,
-            poster: configuredItem.poster,
-            still: configuredItem.still,
-            runtime: configuredItem.runtime,
-            year: configuredItem.year,
-            type: configuredItem.mediaType === 'tv' ? 'series' : 'movie',
-            isAnime: configuredItem.mediaType === 'anime',
-          }}
-          season={configuredItem.season}
-          episode={configuredItem.episode}
-          episodeTitle={configuredItem.episodeTitle}
-          currentServer={configuredItem.server}
-          currentQuality={configuredItem.quality}
-          isRedownload={true}
-        />
       )}
     </section>
   )

@@ -23074,3 +23074,44 @@ body:has(.add-profile-screen),
     gap: 16px;
   }
 }
+/* 02MovieDownloader Episode Actions */
+.episode-download-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  margin-left: auto;
+  margin-right: 6px;
+}
+.episode-download-action-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  transform: scale(1.08);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+.anime-yt-download-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #cccccc;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.anime-yt-download-pill:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.5);
+}

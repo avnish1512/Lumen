@@ -3,6 +3,8 @@ import {
   formatBytes,
   getTotalStorageUsed,
   estimateMediaSize,
+  buildMovieDownloaderUrl,
+  MOVIE_DOWNLOADER_BASE,
 } from './downloads'
 
 describe('downloads engine', () => {
@@ -37,5 +39,20 @@ describe('downloads engine', () => {
     // When an item has isFallback: true, it shouldn't add fake bytes to device storage
     const fakeFallbackBytes = 0
     expect(formatBytes(fakeFallbackBytes)).toBe('0 MB')
+  })
+
+  it('builds 02moviedownloader URL for movies', () => {
+    expect(MOVIE_DOWNLOADER_BASE).toBe('https://02moviedownloader.site')
+    expect(buildMovieDownloaderUrl(846422)).toBe('https://02moviedownloader.site/api/download/movie/846422')
+    expect(buildMovieDownloaderUrl('movie-846422')).toBe('https://02moviedownloader.site/api/download/movie/846422')
+  })
+
+  it('builds 02moviedownloader URL for tv shows and episodes', () => {
+    expect(buildMovieDownloaderUrl(94605, { isTv: true, season: 1, episode: 1 })).toBe(
+      'https://02moviedownloader.site/api/download/tv/94605/1/1',
+    )
+    expect(buildMovieDownloaderUrl('tv-94605', { season: 2, episode: 5 })).toBe(
+      'https://02moviedownloader.site/api/download/tv/94605/2/5',
+    )
   })
 })
