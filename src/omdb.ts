@@ -65,6 +65,7 @@ export type AnimeSeasonInfo = {
 
 export type Movie = {
   id: string
+  imdbId?: string
   tmdbId?: number
   tmdbType?: 'movie' | 'tv'
   streamSeason?: number
@@ -599,6 +600,7 @@ function fallbackMovieFromId(id: string, rank = 1): Movie {
 
   return {
     id,
+    imdbId: id.startsWith("tt") ? id : undefined,
     rank,
     title: fallback.title,
     logoTitle: logoTitle(fallback.title),
@@ -675,6 +677,7 @@ export function movieFromDetail(detail: OmdbDetail, rank = 1): Movie {
 
   return {
     id: detail.imdbID,
+    imdbId: detail.imdbID,
     rank,
     title: safeText(detail.Title, 'Untitled'),
     logoTitle: logoTitle(safeText(detail.Title, 'Untitled')),
@@ -708,6 +711,7 @@ export function movieFromSearch(item: OmdbSearchItem, rank = 1): Movie {
 
   return {
     id: item.imdbID,
+    imdbId: item.imdbID,
     rank,
     title: safeText(item.Title, 'Untitled'),
     logoTitle: logoTitle(safeText(item.Title, 'Untitled')),
