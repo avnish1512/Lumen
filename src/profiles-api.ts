@@ -63,6 +63,7 @@ export {
   deleteRemoteMovieProgress,
   saveRemoteMovieProgress,
   flushOfflineProgressQueue,
+  clearWatchProgressCache,
   type WatchProgressRecord,
   type WatchHistoryItem,
   type WatchHistoryMap,

@@ -4252,15 +4252,18 @@ function App() {
     loadedProfileRef.current = currentUser?.name ?? null
   }, [currentUser])
 
-  // Cross-device "Continue Watching" sync. Keyed by authenticated user account email
-  // so the same person sees the same history across all devices.
+  // Cross-device "Continue Watching" sync. Keyed by authenticated user account email and profile
+  // so each profile sees their own isolated continue watching rail across all devices.
   const userAccountEmail =
     currentUser?.email && currentUser.email.toLowerCase() !== 'guest@apple-tv.com'
       ? currentUser.email.toLowerCase()
       : ''
+  const currentProfileName = currentUser?.name?.trim().toLowerCase() || ''
   const watchHistorySyncKey = userAccountEmail
+    ? (currentProfileName ? `${userAccountEmail}::${currentProfileName}` : userAccountEmail)
+    : ''
 
-  // Pull the remote history when the active account changes and merge
+  // Pull the remote history when the active account or profile changes and merge
   // it into the local cache (authoritative timestamp conflict resolution).
   useEffect(() => {
     if (!userAccountEmail) {
@@ -4268,9 +4271,10 @@ function App() {
     }
     let cancelled = false
     const emailAtFetch = userAccountEmail
+    const profileAtFetch = currentProfileName
     void (async () => {
-      const res = await fetchAccountWatchProgress(userAccountEmail)
-      if (cancelled || !res?.history || userAccountEmail !== emailAtFetch) {
+      const res = await fetchAccountWatchProgress(userAccountEmail, currentProfileName)
+      if (cancelled || !res?.history || userAccountEmail !== emailAtFetch || currentProfileName !== profileAtFetch) {
         return
       }
       setWatchHistory((local) => mergeWatchHistory(local, res.history as WatchHistory, undefined, currentUser))
@@ -4278,7 +4282,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [userAccountEmail, currentUser])
+  }, [userAccountEmail, currentProfileName, currentUser])
 
   // Multi-device synchronization: re-fetch from Supabase when the window/tab
   // becomes visible, window regains focus, or when device reconnects online.
@@ -4288,7 +4292,7 @@ function App() {
     }
     const syncWithServer = () => {
       if (document.visibilityState === 'visible') {
-        void fetchAccountWatchProgress(userAccountEmail).then((res) => {
+        void fetchAccountWatchProgress(userAccountEmail, currentProfileName).then((res) => {
           if (res?.history) {
             setWatchHistory((local) => mergeWatchHistory(local, res.history as WatchHistory, undefined, currentUser))
           }
@@ -4309,7 +4313,7 @@ function App() {
       window.removeEventListener('online', syncWithServer)
       window.clearInterval(interval)
     }
-  }, [userAccountEmail, currentUser])
+  }, [userAccountEmail, currentProfileName, currentUser])
 
   // Debounced push of local history changes back to the server.
   useEffect(() => {
@@ -4317,12 +4321,12 @@ function App() {
       return
     }
     const handle = window.setTimeout(() => {
-      void saveRemoteWatchHistory(userAccountEmail, watchHistory)
+      void saveRemoteWatchHistory(watchHistorySyncKey, watchHistory, currentProfileName)
     }, 1500)
     return () => {
       window.clearTimeout(handle)
     }
-  }, [watchHistory, userAccountEmail])
+  }, [watchHistory, userAccountEmail, watchHistorySyncKey, currentProfileName])
 
   // Record this real device as a signed-in session for the account, so the
   // "Manage Devices" screen reflects actual devices (not sample data). Runs
@@ -4469,6 +4473,33 @@ function App() {
         },
       }
     })
+
+    // Immediately record click-to-watch into Supabase Continue Watching table
+    if (currentUser?.email && currentUser.email.toLowerCase() !== 'guest@apple-tv.com') {
+      const userEmail = currentUser.email.toLowerCase()
+      const profileName = currentUser.name?.trim().toLowerCase() || 'default'
+      const contentId = String(movie.tmdbId ?? movie.id)
+      const season = movie.streamSeason != null ? Number(movie.streamSeason) : null
+      const episode = movie.streamEpisode != null ? Number(movie.streamEpisode) : null
+      const initialProgress = continueProgressFor(movie)
+      const durationSec = movie.durationSeconds ?? 7200
+      const progressSec = movie.progressSeconds ?? Math.round((initialProgress / 100) * durationSec)
+      const record: WatchProgressRecord = {
+        id: `${userEmail}::${profileName}::${contentId}${season != null && episode != null ? `::s${season}e${episode}` : ''}`,
+        user_id: userEmail,
+        profile_name: profileName,
+        content_id: contentId,
+        content_type: movie.tmdbType === 'tv' || movie.type === 'series' ? 'tv' : 'movie',
+        season_number: season,
+        episode_number: episode,
+        progress_seconds: progressSec,
+        duration_seconds: durationSec,
+        updated_at: new Date().toISOString(),
+        completed: Boolean(movie.completed || initialProgress >= 95),
+        movie,
+      }
+      void saveWatchProgressRecord(record, profileName)
+    }
   }, [aniListToken, currentUser])
 
   const updatePlaybackProgress = useCallback(
@@ -4513,12 +4544,14 @@ function App() {
 
       if (currentUser?.email && currentUser.email.toLowerCase() !== 'guest@apple-tv.com') {
         const userEmail = currentUser.email.toLowerCase()
+        const profileName = currentUser.name?.trim().toLowerCase() || 'default'
         const contentId = String(movie.tmdbId ?? movie.id)
         const season = movie.streamSeason != null ? Number(movie.streamSeason) : null
         const episode = movie.streamEpisode != null ? Number(movie.streamEpisode) : null
         const record: WatchProgressRecord = {
-          id: `${userEmail}::${contentId}${season != null && episode != null ? `::s${season}e${episode}` : ''}`,
+          id: `${userEmail}::${profileName}::${contentId}${season != null && episode != null ? `::s${season}e${episode}` : ''}`,
           user_id: userEmail,
+          profile_name: profileName,
           content_id: contentId,
           content_type: movie.tmdbType === 'tv' || movie.type === 'series' ? 'tv' : 'movie',
           season_number: season,
@@ -4529,7 +4562,7 @@ function App() {
           completed: isCompleted,
           movie: updatedMovie,
         }
-        void saveWatchProgressRecord(record)
+        void saveWatchProgressRecord(record, profileName)
       }
     },
     [currentUser],
@@ -6249,6 +6282,7 @@ function App() {
             screenShareError={screenShareError}
             currentUserEmail={currentUser?.email}
             currentUser={currentUser}
+            watchHistory={watchHistory}
             starredServer={starredServer}
             onToggleStarServer={handleToggleStarServer}
             disabledServers={disabledServers}
@@ -9409,6 +9443,7 @@ type WatchScreenProps = {
   onToggleStarServer?: (serverId: string) => void
   disabledServers?: string[]
   onToggleDisableServer?: (serverId: string) => void
+  watchHistory?: WatchHistory
 }
 
 function WatchScreen({
@@ -9441,6 +9476,7 @@ function WatchScreen({
   onToggleStarServer,
   disabledServers,
   onToggleDisableServer,
+  watchHistory,
 }: WatchScreenProps) {
   const isPartyHost = activeParty ? currentUserEmail === activeParty.host_email : false
   const isPartyGuest = activeParty ? currentUserEmail !== activeParty.host_email : false
@@ -10787,6 +10823,7 @@ function WatchScreen({
             const animeEp = movie.animeEpisodes?.[number - 1]
             const tmdbEp = watchTmdbEpisodes.find((item) => item.number === number)
             const isActive = number === episode
+            const isLatest = filteredEpisodeNumbers.length > 1 && number === filteredEpisodeNumbers[filteredEpisodeNumbers.length - 1]
 
             const rawEpTitle = movie.isAnime
               ? (animeEp?.title || '')
@@ -10805,8 +10842,34 @@ function WatchScreen({
                   tmdbEp?.runtime,
                   episodeRuntime(movie, season, number),
                 )
-            const providerName = currentProvider?.name || 'MegaPlay'
+            const providerName = currentProvider?.name || 'Filmu'
             const audioText = movie.isAnime ? 'English Sub' : 'English'
+
+            // Check episode progress for YouTube-style progress bar
+            const epProgressPercent = (() => {
+              if (isActive) {
+                const curPos = (typeof currentTimeRef !== 'undefined' && currentTimeRef?.current > 0)
+                  ? currentTimeRef.current
+                  : (typeof resumeSeconds === 'number' ? resumeSeconds : 0)
+                const totalDur = (typeof durationRef !== 'undefined' && durationRef?.current > 0)
+                  ? durationRef.current
+                  : (movie.durationSeconds || 7200)
+                if (curPos > 0 && totalDur > 0) {
+                  return Math.min(100, Math.round((curPos / totalDur) * 100))
+                }
+              }
+              const history = watchHistory || (typeof readWatchHistory === 'function' ? readWatchHistory(currentUser) : null)
+              if (!history) return 0
+              const entry = Object.values(history).find((e) => {
+                const m = e.movie
+                if (!m) return false
+                const matchesContent = m.id === movie.id || (movie.tmdbId && m.tmdbId === movie.tmdbId)
+                const matchesSeason = (e.seasonNumber ?? m.streamSeason ?? 1) === season
+                const matchesEp = (e.episodeNumber ?? m.streamEpisode) === number
+                return matchesContent && matchesSeason && matchesEp
+              })
+              return entry ? entry.progress : 0
+            })()
 
             return (
               <button
@@ -10836,8 +10899,30 @@ function WatchScreen({
                       <span>EP {number}</span>
                     </div>
                   )}
+
+                  {/* YouTube Top-Left Badge: NOW PLAYING or New */}
+                  {isActive ? (
+                    <span className="anime-yt-thumb-badge is-active">
+                      <span className="anime-yt-badge-play-icon">▶</span>
+                      <span>PLAYING</span>
+                    </span>
+                  ) : isLatest ? (
+                    <span className="anime-yt-thumb-badge is-new">New</span>
+                  ) : null}
+
+                  {/* Duration Badge (Bottom-Right) */}
                   {epDurationStr ? (
                     <span className="anime-yt-thumb-duration">{epDurationStr}</span>
+                  ) : null}
+
+                  {/* YouTube-style Red Watch Progress Bar */}
+                  {epProgressPercent > 0 ? (
+                    <div className="anime-yt-progress-bar">
+                      <div
+                        className="anime-yt-progress-fill"
+                        style={{ width: `${epProgressPercent}%` }}
+                      />
+                    </div>
                   ) : null}
                 </div>
 

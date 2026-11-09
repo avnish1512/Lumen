@@ -15846,76 +15846,82 @@ body:has(.add-profile-screen),
   font-size: 14px;
 }
 
-/* Anime Episode Card — YouTube Sidebar Reference Layout */
+/* Anime Episode Card — YouTube Sidebar Reference Layout (Big Video Poster) */
+.watch-episode-item.anime-yt-ep-card,
 .anime-episode-panel .watch-episode-item.anime-yt-ep-card {
   position: relative !important;
   width: 100% !important;
   min-height: 0 !important;
-  padding: 4px 6px !important;
-  border-radius: 12px;
+  padding: 8px !important;
+  border-radius: 12px !important;
   border: 1px solid transparent !important;
   background: transparent !important;
-  color: #fff;
+  color: #fff !important;
   display: flex !important;
   flex-direction: row !important;
-  align-items: center !important;
+  align-items: flex-start !important;
   flex-shrink: 0 !important;
-  gap: 14px !important;
-  text-align: left;
-  overflow: visible;
-  box-sizing: border-box;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-  cursor: pointer;
+  gap: 12px !important;
+  text-align: left !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  transition: background 0.18s cubic-bezier(0.2, 0, 0, 1), transform 0.18s ease, border-color 0.18s ease !important;
+  cursor: pointer !important;
 }
 
+.watch-episode-item.anime-yt-ep-card:hover,
 .anime-episode-panel .watch-episode-item.anime-yt-ep-card:hover,
 .anime-episode-panel .watch-episode-item.anime-yt-ep-card:focus-visible {
   background: rgba(255, 255, 255, 0.08) !important;
-  transform: translateY(-1px);
+  transform: translateY(-1px) !important;
 }
 
+.watch-episode-item.anime-yt-ep-card.active,
 .anime-episode-panel .watch-episode-item.anime-yt-ep-card.active {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(41, 151, 255, 0.35) !important;
+  background: rgba(255, 255, 255, 0.11) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* Thumbnail container on Left side */
+/* Thumbnail container on Left side - Large YouTube Video Poster */
 .anime-yt-thumb-container {
-  position: relative;
-  width: 136px;
-  min-width: 136px;
-  aspect-ratio: 16 / 9;
-  flex-shrink: 0;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #0d0d11;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative !important;
+  width: 168px !important;
+  min-width: 168px !important;
+  aspect-ratio: 16 / 9 !important;
+  flex-shrink: 0 !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  background: #090d16 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
 @media (min-width: 1400px) {
   .anime-yt-thumb-container {
-    width: 144px;
-    min-width: 144px;
+    width: 184px !important;
+    min-width: 184px !important;
   }
 }
 
 @media (max-width: 600px) {
   .anime-yt-thumb-container {
-    width: 110px;
-    min-width: 110px;
+    width: 136px !important;
+    min-width: 136px !important;
+    border-radius: 8px !important;
   }
 }
 
 .anime-yt-thumb-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform 0.25s ease;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+  transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1) !important;
 }
 
 .anime-yt-ep-card:hover .anime-yt-thumb-img {
-  transform: scale(1.03);
+  transform: scale(1.05) !important;
 }
 
 .anime-yt-thumb-fallback {
@@ -15926,25 +15932,79 @@ body:has(.add-profile-screen),
   justify-content: center;
   background: linear-gradient(135deg, #1e1e24 0%, #0d0d11 100%);
   color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.5px;
 }
 
+/* Badges on Thumbnail */
+.anime-yt-thumb-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 5;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
+.anime-yt-thumb-badge.is-new {
+  background: #ffffff;
+  color: #0f0f0f;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.anime-yt-thumb-badge.is-active {
+  background: #ff0033;
+  color: #ffffff;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  box-shadow: 0 2px 8px rgba(255, 0, 51, 0.6);
+}
+
+.anime-yt-badge-play-icon {
+  font-size: 8px;
+}
+
 .anime-yt-thumb-duration {
   position: absolute;
-  bottom: 5px;
-  right: 5px;
-  z-index: 10;
+  bottom: 6px;
+  right: 6px;
+  z-index: 5;
   background: rgba(0, 0, 0, 0.85);
   color: #ffffff;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 2px 5px;
   border-radius: 4px;
-  line-height: 1;
-  letter-spacing: 0.2px;
+  line-height: 1.2;
+  letter-spacing: 0.3px;
   font-family: Roboto, -apple-system, sans-serif;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* YouTube-style Red Progress Bar */
+.anime-yt-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  z-index: 6;
+  overflow: hidden;
+}
+
+.anime-yt-progress-fill {
+  height: 100%;
+  background: #ff0033;
+  transition: width 0.2s ease;
 }
 
 /* Info container on Right side */
@@ -15954,22 +16014,27 @@ body:has(.add-profile-screen),
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding-top: 1px;
+  padding-top: 2px;
   text-align: left;
 }
 
 .anime-yt-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #f1f1f1;
-  line-height: 1.25;
-  max-height: 2.5em;
+  line-height: 1.35;
+  max-height: 2.7em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-word;
+  transition: color 0.15s ease;
+}
+
+.anime-yt-ep-card:hover .anime-yt-title {
+  color: #ffffff;
 }
 
 .anime-yt-ep-card.active .anime-yt-title {
@@ -15980,11 +16045,11 @@ body:has(.add-profile-screen),
 .anime-yt-channel {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-size: 12px;
   font-weight: 400;
   color: #aaaaaa;
-  margin-top: 2px;
+  margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -15998,18 +16063,18 @@ body:has(.add-profile-screen),
 .anime-yt-meta {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-size: 12px;
   font-weight: 400;
   color: #aaaaaa;
-  margin-top: 1px;
+  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .anime-yt-play-icon {
-  font-size: 11px;
+  font-size: 10px;
   color: #aaaaaa;
 }
 
@@ -16051,7 +16116,6 @@ body:has(.add-profile-screen),
   font-size: 10px;
   color: #3fb950;
 }
-
 /* ==========================================================================
    Watch screen — server cards side by side in a clean 2-column grid on mobile,
    ensuring all servers are neatly visible on screen without horizontal clipping.
@@ -21016,63 +21080,6 @@ body:has(.add-profile-screen),
 
 .inline-sandbox-toggle input:checked+.toggle-track span {
   transform: translateX(16px) !important;
-}
-
-/* Episode Container Cards matching Screenshot */
-.anime-yt-ep-card {
-  position: relative !important;
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 10px !important;
-  background: transparent;
-  border: 1px solid transparent;
-  padding: 4px 6px !important;
-  border-radius: 10px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s ease, border-color 0.15s ease;
-  width: 100% !important;
-  flex-shrink: 0 !important;
-}
-
-.anime-yt-ep-card:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.anime-yt-ep-card.active {
-  background: rgba(30, 41, 59, 0.65) !important;
-  border: 1px solid rgba(59, 130, 246, 0.4) !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
-}
-
-.anime-yt-thumb-container {
-  position: relative !important;
-  width: 136px !important;
-  min-width: 136px !important;
-  aspect-ratio: 16 / 9 !important;
-  border-radius: 8px !important;
-  overflow: hidden;
-  background: #090d16;
-  flex-shrink: 0 !important;
-}
-
-.anime-yt-thumb-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.anime-yt-thumb-duration {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  background: rgba(0, 0, 0, 0.85);
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 4px;
 }
 
 .youtube-related-sidebar {

@@ -82,9 +82,10 @@ export async function saveAccountProfiles(
 // Expected table (run once in the Supabase SQL editor):
 //
 //   create table if not exists account_watch_history (
-//     key              text primary key, -- user_id::content_id(::s#e#)
+//     key              text primary key, -- user_id::profile_name::content_id(::s#e#)
 //     id               text,
 //     user_id          text not null,
+//     profile_name     text not null default 'default',
 //     content_id       text not null,
 //     content_type     text not null default 'movie',
 //     season_number    integer,
@@ -107,6 +108,7 @@ export async function saveAccountProfiles(
 export type WatchProgressRecord = {
   id: string
   user_id: string
+  profile_name?: string
   content_id: string
   content_type: 'movie' | 'tv' | 'episode'
   season_number: number | null
@@ -127,13 +129,16 @@ export function buildWatchRecordKey(
   contentId: string,
   seasonNumber?: number | null,
   episodeNumber?: number | null,
+  profileName?: string | null,
 ): string {
   const normUser = userId.trim().toLowerCase()
   const normContent = contentId.trim()
+  const normProfile = profileName?.trim().toLowerCase() || ''
+  const prefix = normProfile ? `${normUser}::${normProfile}` : normUser
   if (seasonNumber != null && episodeNumber != null) {
-    return `${normUser}::${normContent}::s${seasonNumber}e${episodeNumber}`
+    return `${prefix}::${normContent}::s${seasonNumber}e${episodeNumber}`
   }
-  return `${normUser}::${normContent}`
+  return `${prefix}::${normContent}`
 }
 
 export async function fetchWatchHistory(
@@ -215,10 +220,13 @@ export async function updateMovieProgress(
 export async function fetchUserWatchProgress(
   config: SupabaseConfig,
   userId: string,
+  profileName?: string | null,
 ): Promise<{ records: WatchProgressRecord[]; history: Record<string, unknown> }> {
   const normUser = userId.trim().toLowerCase()
+  const normProfile = profileName?.trim().toLowerCase() || ''
+  const prefix = normProfile ? `${normUser}::${normProfile}` : normUser
   const url = `${config.url}/rest/v1/account_watch_history?key=like.${encodeURIComponent(
-    normUser,
+    prefix,
   )}::*&select=key,data,updated_at`
 
   const response = await fetch(url, { headers: restHeaders(config) })
@@ -310,6 +318,12 @@ export async function fetchUserWatchProgress(
     }
   }
 
+  // If profile-specific query returned nothing, fall back to legacy
+  // email-only records so pre-existing data is not lost after migration.
+  if (normProfile && records.length === 0 && Object.keys(historyMap).length === 0) {
+    return fetchUserWatchProgress(config, userId)
+  }
+
   return { records, history: historyMap }
 }
 
@@ -322,13 +336,16 @@ export async function saveUserWatchRecord(
   config: SupabaseConfig,
   userId: string,
   record: WatchProgressRecord,
+  profileName?: string | null,
 ): Promise<{ ok: boolean; conflictSkipped?: boolean }> {
   const normUser = userId.trim().toLowerCase()
+  const normProfile = (profileName || record.profile_name || '').trim().toLowerCase()
   const key = buildWatchRecordKey(
     normUser,
     record.content_id,
     record.season_number,
     record.episode_number,
+    normProfile || null,
   )
 
   const incomingDate = new Date(record.updated_at || Date.now()).getTime()
@@ -363,6 +380,7 @@ export async function saveUserWatchRecord(
     ...record,
     id: key,
     user_id: normUser,
+    profile_name: normProfile || undefined,
     updated_at: new Date(incomingDate).toISOString(),
   }
 
@@ -397,11 +415,12 @@ export async function batchSaveUserWatchRecords(
   config: SupabaseConfig,
   userId: string,
   records: WatchProgressRecord[],
+  profileName?: string | null,
 ): Promise<{ ok: boolean; savedCount: number }> {
   let savedCount = 0
   for (const record of records) {
     try {
-      const res = await saveUserWatchRecord(config, userId, record)
+      const res = await saveUserWatchRecord(config, userId, record, profileName)
       if (res.ok) savedCount++
     } catch {
       // Continue saving remaining records
@@ -419,8 +438,11 @@ export async function deleteUserWatchRecord(
   userId: string,
   contentId: string,
   extraIds: Array<string | number> = [],
+  profileName?: string | null,
 ): Promise<{ ok: boolean }> {
   const normUser = userId.trim().toLowerCase()
+  const normProfile = profileName?.trim().toLowerCase() || ''
+  const userPrefix = normProfile ? `${normUser}::${normProfile}` : normUser
   if (!normUser || !contentId) return { ok: false }
 
   const idsToDelete = new Set<string>()
@@ -440,7 +462,7 @@ export async function deleteUserWatchRecord(
     if (!id) continue
     try {
       const deleteUrl = `${config.url}/rest/v1/account_watch_history?key=like.${encodeURIComponent(
-        `${normUser}::${id}`,
+        `${userPrefix}::${id}`,
       )}*`
       await fetch(deleteUrl, {
         method: 'DELETE',
@@ -453,7 +475,7 @@ export async function deleteUserWatchRecord(
 
   // 2. Also remove from legacy composite continue_watching dictionary
   try {
-    const compositeKey = `${normUser}::continue_watching`
+    const compositeKey = `${userPrefix}::continue_watching`
     const existing = await fetchWatchHistory(config, compositeKey)
     if (existing) {
       let modified = false

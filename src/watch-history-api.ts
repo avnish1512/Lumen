@@ -7,6 +7,7 @@ import { getSessionToken } from './accounts-api'
 export type WatchProgressRecord = {
   id: string
   user_id: string
+  profile_name?: string
   content_id: string
   content_type: 'movie' | 'tv' | 'episode'
   season_number: number | null
@@ -34,6 +35,12 @@ export type WatchHistoryItem = {
 export type WatchHistoryMap = Record<string, WatchHistoryItem>
 
 const OFFLINE_QUEUE_KEY = 'lumen.watch-progress.offline-queue'
+const progressMemoryCache = new Map<string, { data: { records: WatchProgressRecord[]; history: WatchHistoryMap }; timestamp: number }>()
+const CACHE_TTL_MS = 2500
+
+export function clearWatchProgressCache(): void {
+  progressMemoryCache.clear()
+}
 
 function getAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const token = getSessionToken()
@@ -123,12 +130,30 @@ if (typeof window !== 'undefined') {
  */
 export async function fetchAccountWatchProgress(
   userEmail?: string,
+  profileName?: string,
 ): Promise<{ records: WatchProgressRecord[]; history: WatchHistoryMap } | null> {
   if (userEmail && userEmail.toLowerCase() === 'guest@apple-tv.com') {
     return { records: [], history: {} }
   }
 
-  const queryParam = userEmail ? `?key=${encodeURIComponent(userEmail.toLowerCase())}` : ''
+  const normUser = userEmail ? userEmail.trim().toLowerCase() : ''
+  const normProfile = profileName ? profileName.trim().toLowerCase() : ''
+  const cacheKey = `${normUser}::${normProfile}`
+
+  const cached = progressMemoryCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data
+  }
+
+  let queryParam = ''
+  if (normUser) {
+    const params = new URLSearchParams()
+    params.set('key', normUser)
+    if (normProfile) {
+      params.set('profile', normProfile)
+    }
+    queryParam = `?${params.toString()}`
+  }
 
   try {
     const response = await fetch(`/api/watch-history${queryParam}`, {
@@ -215,7 +240,11 @@ export async function fetchAccountWatchProgress(
       }
     }
 
-    return { records, history: normalizedHistory }
+    const result = { records, history: normalizedHistory }
+    if (normUser) {
+      progressMemoryCache.set(cacheKey, { data: result, timestamp: Date.now() })
+    }
+    return result
   } catch {
     return null
   }
@@ -227,22 +256,36 @@ export async function fetchAccountWatchProgress(
  */
 export async function saveWatchProgressRecord(
   record: WatchProgressRecord,
+  profileName?: string,
 ): Promise<{ ok: boolean; queuedOffline?: boolean }> {
   if (!record.user_id || record.user_id.toLowerCase() === 'guest@apple-tv.com') {
     return { ok: true }
   }
 
+  const effectiveProfile = (profileName || record.profile_name || '').trim().toLowerCase()
+  const recordWithProfile: WatchProgressRecord = {
+    ...record,
+    ...(effectiveProfile ? { profile_name: effectiveProfile } : {}),
+  }
+
+  progressMemoryCache.clear()
+
   // If browser is known to be offline, queue locally right away
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    enqueueOfflineProgress(record)
+    enqueueOfflineProgress(recordWithProfile)
     return { ok: true, queuedOffline: true }
   }
 
   try {
+    const bodyPayload: Record<string, any> = { record: recordWithProfile }
+    if (effectiveProfile) {
+      bodyPayload.profile = effectiveProfile
+    }
+
     const response = await fetch('/api/watch-history', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ record }),
+      body: JSON.stringify(bodyPayload),
     })
 
     if (!response.ok) {
@@ -385,16 +428,23 @@ export async function fetchRemoteWatchHistory(
 export async function saveRemoteWatchHistory(
   key: string,
   history: Record<string, any>,
+  profileName?: string,
 ): Promise<void> {
   const userEmail = (key.includes('::') ? key.split('::')[0] : key).trim().toLowerCase()
   if (!userEmail || userEmail === 'guest@apple-tv.com') {
     return
   }
+  const prof = (profileName || (key.includes('::') ? key.split('::')[1] : '')).trim().toLowerCase()
+  progressMemoryCache.clear()
   try {
+    const payload: Record<string, any> = { key, user_id: userEmail, history }
+    if (prof) {
+      payload.profile = prof
+    }
     await fetch('/api/watch-history', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ key, user_id: userEmail, history }),
+      body: JSON.stringify(payload),
     })
   } catch {
     // best-effort
@@ -405,23 +455,30 @@ export async function deleteRemoteMovieProgress(
   key: string,
   movieId: string,
   extra?: { tmdbId?: number | string; tmdbType?: string },
+  profileName?: string,
 ): Promise<boolean> {
   const userEmail = (key.includes('::') ? key.split('::')[0] : key).trim().toLowerCase()
   if (!userEmail || userEmail === 'guest@apple-tv.com') {
     return true
   }
+  const prof = (profileName || (key.includes('::') ? key.split('::')[1] : '')).trim().toLowerCase()
+  progressMemoryCache.clear()
 
   try {
+    const payload: Record<string, any> = {
+      key,
+      user_id: userEmail,
+      content_id: movieId,
+      movieId,
+      tmdbId: extra?.tmdbId,
+    }
+    if (prof) {
+      payload.profile = prof
+    }
     const response = await fetch('/api/watch-history', {
       method: 'DELETE',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        key,
-        user_id: userEmail,
-        content_id: movieId,
-        movieId,
-        tmdbId: extra?.tmdbId,
-      }),
+      body: JSON.stringify(payload),
     })
     return response.ok
   } catch {

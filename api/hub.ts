@@ -484,12 +484,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
       if (req.method === 'GET') {
         const queryKey = (qv(req.query.key) ?? '').trim()
-        const targetUserId = authenticatedUserId || (queryKey.includes('::') ? queryKey.split('::')[0].toLowerCase() : (queryKey ? queryKey.toLowerCase() : ''))
+        const keyParts = queryKey ? queryKey.split('::') : []
+        const requestedUser = keyParts[0]?.toLowerCase() || (queryKey ? queryKey.toLowerCase() : '')
+        let queryProfile = (qv(req.query.profile) ?? qv(req.query.profile_name) ?? '').trim()
+        if (!queryProfile && keyParts.length > 1 && keyParts[1] !== 'continue_watching') {
+          queryProfile = keyParts[1].trim()
+        }
+        const targetUserId = authenticatedUserId || requestedUser
 
         // Security check: if authenticated as user A, prevent accessing user B's history
-        if (authenticatedUserId && queryKey) {
-          const requestedUser = queryKey.includes('::') ? queryKey.split('::')[0].toLowerCase() : queryKey.toLowerCase()
-          if (requestedUser && requestedUser !== authenticatedUserId) {
+        if (authenticatedUserId && requestedUser) {
+          if (requestedUser !== authenticatedUserId) {
             res.status(403).json({ ok: false, error: 'Forbidden. You cannot access another account\'s watch history.' })
             return
           }
@@ -511,7 +516,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         if (config) {
           try {
             if (targetUserId) {
-              const resData = await fetchUserWatchProgress(config, targetUserId)
+              const resData = await fetchUserWatchProgress(config, targetUserId, queryProfile || null)
               records = resData.records
               history = resData.history
             } else if (queryKey) {
@@ -525,6 +530,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           ok: true,
           configured: Boolean(config),
           userId: targetUserId,
+          profile: queryProfile || null,
           records,
           history,
         })
@@ -532,7 +538,20 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }
 
       // POST / PUT
-      const targetUserId = authenticatedUserId || (body.key ? String(body.key).split('::')[0].toLowerCase() : (body.user_id ? String(body.user_id).toLowerCase() : ''))
+      const keyParts = body.key ? String(body.key).split('::') : []
+      const bodyUser = keyParts[0]?.toLowerCase() || (body.user_id ? String(body.user_id).toLowerCase() : '')
+      const targetUserId = authenticatedUserId || bodyUser
+      let reqProfile = (
+        qv(req.query.profile) ??
+        qv(req.query.profile_name) ??
+        (body.profile ? String(body.profile) : '') ??
+        (body.profile_name ? String(body.profile_name) : '') ??
+        (body.record?.profile_name ? String(body.record.profile_name) : '') ??
+        ''
+      ).trim()
+      if (!reqProfile && keyParts.length > 1 && keyParts[1] !== 'continue_watching') {
+        reqProfile = keyParts[1].trim()
+      }
 
       if (authenticatedUserId && body.key) {
         const requestedUser = String(body.key).split('::')[0].toLowerCase()
@@ -553,7 +572,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const tmdbId = body.tmdb_id || body.tmdbId || qv(req.query.tmdb_id) || qv(req.query.tmdbId)
         if (config && contentId) {
           try {
-            await deleteUserWatchRecord(config, targetUserId, contentId, tmdbId ? [tmdbId] : [])
+            await deleteUserWatchRecord(config, targetUserId, contentId, tmdbId ? [tmdbId] : [], reqProfile || null)
           } catch {}
         }
         res.status(200).json({ ok: true, configured: Boolean(config) })
@@ -564,7 +583,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (Array.isArray(body.records)) {
         if (config) {
           try {
-            await batchSaveUserWatchRecords(config, targetUserId, body.records as WatchProgressRecord[])
+            await batchSaveUserWatchRecords(config, targetUserId, body.records as WatchProgressRecord[], reqProfile || null)
           } catch {}
         }
         res.status(200).json({ ok: true, configured: Boolean(config) })
@@ -575,7 +594,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (body.record && typeof body.record === 'object') {
         if (config) {
           try {
-            await saveUserWatchRecord(config, targetUserId, body.record as WatchProgressRecord)
+            await saveUserWatchRecord(config, targetUserId, body.record as WatchProgressRecord, reqProfile || null)
           } catch {}
         }
         res.status(200).json({ ok: true, configured: Boolean(config) })
@@ -593,8 +612,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const movie = (body.movie && typeof body.movie === 'object' ? body.movie : (body.movieData && typeof body.movieData === 'object' ? body.movieData : {})) as Record<string, unknown>
 
         const rec: WatchProgressRecord = {
-          id: buildWatchRecordKey(targetUserId, contentId, season, episode),
+          id: buildWatchRecordKey(targetUserId, contentId, season, episode, reqProfile || null),
           user_id: targetUserId,
+          profile_name: reqProfile || undefined,
           content_id: contentId,
           content_type: (body.content_type || body.contentType || (movie.tmdbType === 'tv' ? 'tv' : 'movie')) as any,
           season_number: season,
@@ -608,7 +628,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
         if (config) {
           try {
-            await saveUserWatchRecord(config, targetUserId, rec)
+            await saveUserWatchRecord(config, targetUserId, rec, reqProfile || null)
           } catch {}
         }
         res.status(200).json({ ok: true, configured: Boolean(config), record: rec })
@@ -617,7 +637,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
       // 4. Legacy full history map
       if (body.history && typeof body.history === 'object') {
-        const key = String(body.key || `${targetUserId}::continue_watching`).trim()
+        const defaultKey = reqProfile ? `${targetUserId}::${reqProfile}::continue_watching` : `${targetUserId}::continue_watching`
+        const key = String(body.key || defaultKey).trim()
         if (config) {
           try {
             await saveWatchHistory(config, key, body.history as Record<string, unknown>)
