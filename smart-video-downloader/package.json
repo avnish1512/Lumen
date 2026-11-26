@@ -1,0 +1,43 @@
+{
+  "name": "smart-video-downloader",
+  "version": "1.0.0",
+  "description": "Desktop Embed URL Analyzer & Permitted Direct MP4 Downloader built with Electron, React, TypeScript, Tailwind CSS, and SQLite.",
+  "main": "dist-electron/electron/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5179 && npm run build:electron && node scripts/launch-electron.cjs --dev\"",
+    "dev:web": "vite",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "npm run build:renderer && npm run build:electron",
+    "start": "npm run build && node scripts/launch-electron.cjs",
+    "smoke": "npm run build && node scripts/launch-electron.cjs --smoke-test",
+    "package:win": "npm run build && electron-builder --win --x64 --config electron-builder.json",
+    "package:win:dir": "npm run build && electron-builder --win --dir --config electron-builder.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "lucide-react": "^0.469.0",
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@types/node": "^24.9.0",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@types/sql.js": "^1.4.9",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.8.2",
+    "vite": "^6.3.2",
+    "vitest": "^3.1.2",
+    "wait-on": "^8.0.3"
+  }
+}

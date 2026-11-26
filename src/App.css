@@ -23285,3 +23285,16 @@ body:has(.add-profile-screen),
     margin-top: auto;
   }
 }
+
+.ae-controls {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.ae-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}

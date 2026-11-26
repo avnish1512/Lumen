@@ -46,7 +46,7 @@ describe('Admin Server Disabling feature', () => {
     const isAdmin = false
 
     const allMainstream = streamProviderOptions.filter(
-      (p) => !['oceanplay', 'apijav', 'phubplay', 'upload18', 'eporner'].includes(p.id)
+      (p) => !['oceanplay', 'apijav', 'phubplay', 'upload18', 'eporner', 'adultembed'].includes(p.id)
     )
 
     const userVisibleServers = allMainstream.filter(
@@ -64,7 +64,7 @@ describe('Admin Server Disabling feature', () => {
     const isAdmin = true
 
     const allMainstream = streamProviderOptions.filter(
-      (p) => !['oceanplay', 'apijav', 'phubplay', 'upload18', 'eporner'].includes(p.id)
+      (p) => !['oceanplay', 'apijav', 'phubplay', 'upload18', 'eporner', 'adultembed'].includes(p.id)
     )
 
     const adminVisibleServers = allMainstream.filter(

@@ -66,6 +66,7 @@ import {
   SkipForward,
   Shield,
   Sparkles,
+  Flame,
 } from 'lucide-react'
 import {
   fetchMovieCollection,
@@ -183,6 +184,18 @@ import {
   fetchJavCatalog,
   prefetchJavCatalog,
 } from './jav-api'
+import {
+  type AdultEmbedVideo,
+  type AdultEmbedCategoryPill,
+  INITIAL_ADULTEMBED_VIDEOS,
+  DEFAULT_ADULTEMBED_CATEGORIES,
+  getCachedAdultEmbedCatalog,
+  fetchAdultEmbedCatalog,
+  fetchAdultEmbedRelated,
+  fetchAdultEmbedCategories,
+  prefetchAdultEmbedCatalog,
+  adultEmbedToMovie,
+} from './adultembed-api'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -1614,12 +1627,27 @@ export function isPhub1Movie(m?: Movie | null): boolean {
 export function isPhubMovie(m?: Movie | null): boolean {
   if (!m) return false
   if (m.tmdbId) return false
+  if (isAdultEmbedMovie(m)) return false
   return isPhub1Movie(m) || isPhub2Movie(m) || isPhub3Movie(m)
+}
+
+export function isAdultEmbedMovie(m?: Movie | null): boolean {
+  if (!m) return false
+  if (m.tmdbId) return false
+  return Boolean(
+    m.id?.startsWith('ae-') ||
+    m.label === 'AdultEmbed' ||
+    m.type === 'AdultEmbed Video' ||
+    m.hentaiSlug?.startsWith('ae-') ||
+    m.embedUrl?.includes('adultembed.com/player') ||
+    m.embedUrl?.includes('pornalizer.app/player')
+  )
 }
 
 export function isJavMovie(m?: Movie | null): boolean {
   if (!m) return false
   if (m.tmdbId) return false
+  if (isAdultEmbedMovie(m)) return false
   return Boolean(
     m.id?.startsWith('jav-') ||
     m.label === 'JAV' ||
@@ -1634,6 +1662,7 @@ export function isHentaiMovie(m?: Movie | null): boolean {
   return (
     !isPhubMovie(m) &&
     !isJavMovie(m) &&
+    !isAdultEmbedMovie(m) &&
     Boolean(
       m.isHentaiOcean ||
       m.id?.startsWith('hentaiocean-') ||
@@ -1646,7 +1675,7 @@ export function isHentaiMovie(m?: Movie | null): boolean {
 export function isLordAdultMovie(movie?: Movie | null): boolean {
   if (!movie) return false
   if (movie.tmdbId) return false
-  return isJavMovie(movie) || isPhubMovie(movie) || isHentaiMovie(movie)
+  return isJavMovie(movie) || isPhubMovie(movie) || isHentaiMovie(movie) || isAdultEmbedMovie(movie)
 }
 
 export const PORN_API_BASE_URL = 'https://porn-api.com/api/v1/public'
@@ -2138,8 +2167,8 @@ function movieMatches(left: Movie, right: Movie) {
     return false
   }
   if (leftAdult && rightAdult) {
-    const leftSection = isPhub1Movie(left) ? 'phub1' : isPhub2Movie(left) ? 'phub2' : isPhub3Movie(left) ? 'phub3' : isJavMovie(left) ? 'jav' : isHentaiMovie(left) ? 'hentai' : 'other'
-    const rightSection = isPhub1Movie(right) ? 'phub1' : isPhub2Movie(right) ? 'phub2' : isPhub3Movie(right) ? 'phub3' : isJavMovie(right) ? 'jav' : isHentaiMovie(right) ? 'hentai' : 'other'
+    const leftSection = isPhub1Movie(left) ? 'phub1' : isPhub2Movie(left) ? 'phub2' : isPhub3Movie(left) ? 'phub3' : isJavMovie(left) ? 'jav' : isAdultEmbedMovie(left) ? 'adultembed' : isHentaiMovie(left) ? 'hentai' : 'other'
+    const rightSection = isPhub1Movie(right) ? 'phub1' : isPhub2Movie(right) ? 'phub2' : isPhub3Movie(right) ? 'phub3' : isJavMovie(right) ? 'jav' : isAdultEmbedMovie(right) ? 'adultembed' : isHentaiMovie(right) ? 'hentai' : 'other'
     if (leftSection !== rightSection) {
       return false
     }
@@ -3508,6 +3537,30 @@ function App() {
     },
     [watchHistory, currentUser],
   )
+  const continueWatchingAdultEmbed = useMemo(
+    () => {
+      const removed = readRemovedHistory(currentUser)
+      return Object.entries(watchHistory)
+        .filter(
+          ([key, entry]) =>
+            !entry.completed &&
+            entry.progress < 100 &&
+            isAdultEmbedMovie(entry.movie) &&
+            !isMovieRemoved(entry.movie, removed, entry.updatedAt, key),
+        )
+        .sort(([, left], [, right]) => right.updatedAt - left.updatedAt)
+        .slice(0, 12)
+        .map(([_, entry], index) => ({
+          ...entry.movie,
+          rank: index + 1,
+          progress: entry.progress,
+          progressSeconds: entry.progressSeconds,
+          durationSeconds: entry.durationSeconds,
+          completed: entry.completed,
+        }))
+    },
+    [watchHistory, currentUser],
+  )
   const savedLordList = useMemo(
     () =>
       Object.values(savedMovies).filter(
@@ -3547,6 +3600,13 @@ function App() {
     () =>
       Object.values(savedMovies).filter(
         (m) => isJavMovie(m),
+      ),
+    [savedMovies],
+  )
+  const savedAdultEmbedList = useMemo(
+    () =>
+      Object.values(savedMovies).filter(
+        (m) => isAdultEmbedMovie(m),
       ),
     [savedMovies],
   )
@@ -3662,6 +3722,7 @@ function App() {
     phub2: '',
     phub3: '',
     jav: '',
+    adultembed: '',
   })
   const [lordTabPages, setLordTabPages] = useState<Record<LordTab, number>>({
     collection: 1,
@@ -3669,6 +3730,7 @@ function App() {
     phub2: 1,
     phub3: 1,
     jav: 1,
+    adultembed: 1,
   })
 
   const isHentaiSelectedMovie = Boolean(
@@ -4867,7 +4929,9 @@ function App() {
         setDetailBackScreen('lord')
       }
 
-      if (isJavMovie(safeMovie)) {
+      if (isAdultEmbedMovie(safeMovie)) {
+        setActiveLordTab('adultembed')
+      } else if (isJavMovie(safeMovie)) {
         setActiveLordTab('jav')
       } else if (isPhub3Movie(safeMovie)) {
         setActiveLordTab('phub3')
@@ -4922,7 +4986,9 @@ function App() {
       const newDetailBackScreen = isLordAdultMovie(safeMovie) && prevScreen !== 'lord' ? 'lord' : prevScreen
       setDetailBackScreen(newDetailBackScreen)
 
-      if (isJavMovie(safeMovie)) {
+      if (isAdultEmbedMovie(safeMovie)) {
+        setActiveLordTab('adultembed')
+      } else if (isJavMovie(safeMovie)) {
         setActiveLordTab('jav')
       } else if (isPhub3Movie(safeMovie)) {
         setActiveLordTab('phub3')
@@ -5763,15 +5829,17 @@ function App() {
           ? isLordAdultMovie(entry.movie)
           : tab === 'jav'
             ? isJavMovie(entry.movie)
-            : tab === 'phub'
-              ? isPhub1Movie(entry.movie)
-              : tab === 'phub2'
-                ? isPhub2Movie(entry.movie)
-                : tab === 'phub3'
-                  ? isPhub3Movie(entry.movie)
-                  : tab === 'collection'
-                    ? isHentaiMovie(entry.movie)
-                    : isLordAdultMovie(entry.movie)
+            : tab === 'adultembed'
+              ? isAdultEmbedMovie(entry.movie)
+              : tab === 'phub'
+                ? isPhub1Movie(entry.movie)
+                : tab === 'phub2'
+                  ? isPhub2Movie(entry.movie)
+                  : tab === 'phub3'
+                    ? isPhub3Movie(entry.movie)
+                    : tab === 'collection'
+                      ? isHentaiMovie(entry.movie)
+                      : isLordAdultMovie(entry.movie)
 
         if (matchesTab) {
           recordMovieRemoved(entry.movie, currentUser)
@@ -6502,12 +6570,14 @@ function App() {
             continuePhub2Movies={continueWatchingPhub2}
             continuePhub3Movies={continueWatchingPhub3}
             continueJavMovies={continueWatchingJav}
+            continueAdultEmbedMovies={continueWatchingAdultEmbed}
             savedMovies={savedLordList}
             savedPhubMovies={savedPhubList}
             savedPhub1Movies={savedPhub1List}
             savedPhub2Movies={savedPhub2List}
             savedPhub3Movies={savedPhub3List}
             savedJavMovies={savedJavList}
+            savedAdultEmbedMovies={savedAdultEmbedList}
             currentUser={currentUser}
             activeTab={activeLordTab}
             onTabChange={setActiveLordTab}
@@ -9522,17 +9592,19 @@ function WatchScreen({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
+  const isAdultEmbedVideo = isAdultEmbedMovie(movie)
   const isJavVideo = isJavMovie(movie)
   const isPhub3Video = isPhub3Movie(movie)
   const isPhub2Video = isPhub2Movie(movie)
   const isPhub1Video = isPhub1Movie(movie)
   const isPhubVideo = isPhubMovie(movie)
   const isHentai = isHentaiMovie(movie)
-  const isTmdbTitle = !isHentai && !isJavVideo && !isPhubVideo && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
+  const isTmdbTitle = !isHentai && !isJavVideo && !isAdultEmbedVideo && !isPhubVideo && !movie.isAnime && !movie.anilistId && !!movie.tmdbId
   const isAnimeMovie =
     !isTmdbTitle &&
     !isHentai &&
     !isJavVideo &&
+    !isAdultEmbedVideo &&
     !isPhubVideo &&
     Boolean(
       movie.isAnime ||
@@ -9566,17 +9638,19 @@ function WatchScreen({
     ? (starProvider ?? (isAnimeMovie ? enabledAnimeFallback : enabledMainstreamFallback))
     : rawChosenProvider
 
-  const activeProviderId: StreamProvider = isJavVideo
-    ? 'apijav'
-    : isPhub3Video
-      ? 'eporner'
-      : isPhub2Video
-        ? 'upload18'
-        : isPhub1Video
-          ? 'phubplay'
-          : isHentai
-            ? 'oceanplay'
-        : isAnimeMovie
+  const activeProviderId: StreamProvider = isAdultEmbedVideo
+    ? 'adultembed'
+    : isJavVideo
+      ? 'apijav'
+      : isPhub3Video
+        ? 'eporner'
+        : isPhub2Video
+          ? 'upload18'
+          : isPhub1Video
+            ? 'phubplay'
+            : isHentai
+              ? 'oceanplay'
+          : isAnimeMovie
           ? movie.tmdbId
             ? chosenProvider
             : animeProviderIds.includes(chosenProvider)
@@ -9635,7 +9709,7 @@ function WatchScreen({
   }, [currentDownloadKey])
 
   const handleWatchDownload = async () => {
-    if (isPhubVideo || isJavVideo || isHentai) return
+    if (isPhubVideo || isJavVideo || isAdultEmbedVideo || isHentai) return
     setIsWatchDownloading(true)
     try {
       let tmdbId = watchTargetTmdbId || movie.tmdbId
@@ -9690,6 +9764,34 @@ function WatchScreen({
       active = false
     }
   }, [isJavVideo, movie.id, movie.genres])
+
+  const [adultEmbedRelated, setAdultEmbedRelated] = useState<Movie[]>([])
+
+  useEffect(() => {
+    if (!isAdultEmbedVideo) return
+    let active = true
+    async function loadAeRelated() {
+      try {
+        const items = await fetchAdultEmbedRelated(movie.id, 16)
+        if (active && items.length > 0) {
+          setAdultEmbedRelated(items.map(adultEmbedToMovie).filter((m) => m.id !== movie.id))
+        } else if (active) {
+          const fallback = INITIAL_ADULTEMBED_VIDEOS.map(adultEmbedToMovie).filter((m) => m.id !== movie.id)
+          setAdultEmbedRelated(fallback)
+        }
+      } catch {
+        if (active) {
+          setAdultEmbedRelated(
+            INITIAL_ADULTEMBED_VIDEOS.map(adultEmbedToMovie).filter((m) => m.id !== movie.id),
+          )
+        }
+      }
+    }
+    void loadAeRelated()
+    return () => {
+      active = false
+    }
+  }, [isAdultEmbedVideo, movie.id])
 
   const [hentaiRelated, setHentaiRelated] = useState<Movie[]>([])
 
@@ -9835,21 +9937,24 @@ function WatchScreen({
     return () => {
       active = false
     }
-  }, [movie.id, movie.title, movie.genres, movie.cast, movie.anilistId, movie.tmdbId, isJavVideo, isPhubVideo, isPhub2Video, isPhub3Video])
+  }, [movie.id, movie.title, movie.genres, movie.cast, movie.anilistId, movie.tmdbId, isJavVideo, isAdultEmbedVideo, isPhubVideo, isPhub2Video, isPhub3Video])
 
   const relatedList = useMemo(() => {
     const isAdultMovie = (m: Movie) =>
       Boolean(
         isPhubMovie(m) ||
           isJavMovie(m) ||
+          isAdultEmbedMovie(m) ||
           isHentaiMovie(m) ||
           m.isJav ||
           m.isHentaiOcean ||
           m.id.startsWith('jav-') ||
+          m.id.startsWith('ae-') ||
           m.id.startsWith('phub-') ||
           m.id.startsWith('phub2-') ||
           m.id.startsWith('phub3-') ||
           m.label === 'JAV' ||
+          m.label === 'AdultEmbed' ||
           m.label === 'PHub' ||
           m.label === 'PHub 2' ||
           m.label === 'PHub 3' ||
@@ -9993,6 +10098,10 @@ function WatchScreen({
       return javRelated.slice(0, 16)
     }
 
+    if (isAdultEmbedVideo && adultEmbedRelated.length > 0) {
+      return adultEmbedRelated.slice(0, 16)
+    }
+
     const cleanRelated = (relatedMovies || []).filter(
       (m) => m.id !== movie.id && (isHentai ? isHentaiMovie(m) : !isAdultMovie(m)),
     )
@@ -10040,7 +10149,7 @@ function WatchScreen({
     }
 
     return combined.slice(0, 16)
-  }, [liveRelated, isPhub3Video, isPhub2Video, isPhub1Video, phubRelated, isJavVideo, javRelated, isHentai, hentaiRelated, movie.id, movie.title, movie.genres, relatedMovies])
+  }, [liveRelated, isPhub3Video, isPhub2Video, isPhub1Video, phubRelated, isJavVideo, javRelated, isAdultEmbedVideo, adultEmbedRelated, isHentai, hentaiRelated, movie.id, movie.title, movie.genres, relatedMovies])
 
   const [episode, setEpisode] = useState(movie.streamEpisode ?? 1)
   const [season, setSeason] = useState(movie.streamSeason ?? 1)
@@ -10071,9 +10180,9 @@ function WatchScreen({
       streamLanguage: language,
       embedUrl: isPhubVideo
         ? (resolvedPhubEmbed || movie.embedUrl)
-        : (isJavVideo || isHentai ? movie.embedUrl : undefined),
+        : (isJavVideo || isAdultEmbedVideo || isHentai ? movie.embedUrl : undefined),
     }),
-    [movie, activeWatchAnimeSeason?.anilistId, episode, season, language, resolvedPhubEmbed, isPhubVideo, isJavVideo, isHentai],
+    [movie, activeWatchAnimeSeason?.anilistId, episode, season, language, resolvedPhubEmbed, isPhubVideo, isJavVideo, isAdultEmbedVideo, isHentai],
   )
 
   // Playback position resume & sync
@@ -11390,7 +11499,7 @@ function WatchScreen({
             <Metadata movie={movie} />
 
             <div className="watch-actions-row">
-              {!isPhubVideo && !isJavVideo && !isHentai && (
+              {!isPhubVideo && !isJavVideo && !isAdultEmbedVideo && !isHentai && (
                 <button
                   type="button"
                   className="watch-mylist-btn"
@@ -11418,7 +11527,7 @@ function WatchScreen({
                 <span>{isSaved ? 'Saved' : 'My List'}</span>
               </button>
 
-              {!isPhubVideo && !isJavVideo && (
+              {!isPhubVideo && !isJavVideo && !isAdultEmbedVideo && (
                 <button
                   type="button"
                   className={`watch-mylist-btn watch-like-btn${isLiked ? ' is-liked' : ''}`}
@@ -11431,7 +11540,7 @@ function WatchScreen({
                 </button>
               )}
 
-              {!isPhubVideo && !isJavVideo && !isPartyGuest && (
+              {!isPhubVideo && !isJavVideo && !isAdultEmbedVideo && !isPartyGuest && (
                 <button
                   type="button"
                   className={`watch-mylist-btn watch-sandbox-btn${streamSandboxEnabled ? ' is-sandbox-active' : ''}`}
@@ -11449,25 +11558,28 @@ function WatchScreen({
             {!isPartyGuest && (
               <div className="server-selector watch-server-grid" role="radiogroup" aria-label="Streaming server">
                 {(() => {
-                  const filteredOptions = isJavVideo
-                    ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
-                    : isPhub3Video
-                      ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
-                      : isPhub2Video
-                        ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
-                        : isPhub1Video
-                          ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
-                          : isHentai
-                            ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
-                            : streamProviderOptions.filter((provider) => {
-                                if (
-                                  provider.id === 'oceanplay' ||
-                                  provider.id === 'apijav' ||
-                                  provider.id === 'phubplay' ||
-                                  provider.id === 'upload18' ||
-                                  provider.id === 'eporner'
-                                )
-                                  return false
+                  const filteredOptions = isAdultEmbedVideo
+                    ? streamProviderOptions.filter((provider) => provider.id === 'adultembed')
+                    : isJavVideo
+                      ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
+                      : isPhub3Video
+                        ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
+                        : isPhub2Video
+                          ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+                          : isPhub1Video
+                            ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+                            : isHentai
+                              ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                              : streamProviderOptions.filter((provider) => {
+                                  if (
+                                    provider.id === 'oceanplay' ||
+                                    provider.id === 'apijav' ||
+                                    provider.id === 'phubplay' ||
+                                    provider.id === 'upload18' ||
+                                    provider.id === 'eporner' ||
+                                    provider.id === 'adultembed'
+                                  )
+                                    return false
                                 if (!isAdmin && disabledList.includes(provider.id)) {
                                   return false
                                 }
@@ -11591,25 +11703,28 @@ function WatchScreen({
             <div className="anime-server-row">
               <div className="server-selector anime-inline-servers" role="radiogroup" aria-label="Streaming server">
                 {(() => {
-                  const filteredOptions = isJavVideo
-                    ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
-                    : isPhub3Video
-                      ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
-                      : isPhub2Video
-                        ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
-                        : isPhub1Video
-                          ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
-                          : isHentai
-                            ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
-                            : streamProviderOptions.filter((provider) => {
-                                if (
-                                  provider.id === 'oceanplay' ||
-                                  provider.id === 'apijav' ||
-                                  provider.id === 'phubplay' ||
-                                  provider.id === 'upload18' ||
-                                  provider.id === 'eporner'
-                                )
-                                  return false
+                  const filteredOptions = isAdultEmbedVideo
+                    ? streamProviderOptions.filter((provider) => provider.id === 'adultembed')
+                    : isJavVideo
+                      ? streamProviderOptions.filter((provider) => provider.id === 'apijav')
+                      : isPhub3Video
+                        ? streamProviderOptions.filter((provider) => provider.id === 'eporner')
+                        : isPhub2Video
+                          ? streamProviderOptions.filter((provider) => provider.id === 'upload18')
+                          : isPhub1Video
+                            ? streamProviderOptions.filter((provider) => provider.id === 'phubplay')
+                            : isHentai
+                              ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
+                              : streamProviderOptions.filter((provider) => {
+                                  if (
+                                    provider.id === 'oceanplay' ||
+                                    provider.id === 'apijav' ||
+                                    provider.id === 'phubplay' ||
+                                    provider.id === 'upload18' ||
+                                    provider.id === 'eporner' ||
+                                    provider.id === 'adultembed'
+                                  )
+                                    return false
                                 if (!isAdmin && disabledList.includes(provider.id)) {
                                   return false
                                 }
@@ -11724,7 +11839,7 @@ function WatchScreen({
                 </button>
               )}
 
-              {!isPhubVideo && !isJavVideo && !isHentai && (
+              {!isPhubVideo && !isJavVideo && !isAdultEmbedVideo && !isHentai && (
                 <button
                   type="button"
                   className="watch-mylist-btn watch-icon-only-btn"
@@ -11752,7 +11867,7 @@ function WatchScreen({
                 {isSaved ? <Check /> : <Plus />}
               </button>
 
-              {!isPhubVideo && !isJavVideo && (
+              {!isPhubVideo && !isJavVideo && !isAdultEmbedVideo && (
                 <button
                   type="button"
                   className={`watch-mylist-btn watch-like-btn watch-icon-only-btn${isLiked ? ' is-liked' : ''}`}
@@ -11765,7 +11880,7 @@ function WatchScreen({
                 </button>
               )}
 
-              {!isPhubVideo && !isJavVideo && !isPartyGuest && (
+              {!isPhubVideo && !isJavVideo && !isAdultEmbedVideo && !isPartyGuest && (
                 <button
                   type="button"
                   className={`watch-mylist-btn watch-sandbox-btn watch-icon-only-btn${streamSandboxEnabled ? ' is-sandbox-active' : ''}`}
@@ -14777,6 +14892,7 @@ type ContinueWatchingRailProps = MovieRailProps & {
   onMarkWatched?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
   isJavSection?: boolean
+  isAdultEmbedSection?: boolean
   isPhubSection?: boolean
   isPhub1Section?: boolean
   isPhub2Section?: boolean
@@ -14797,6 +14913,7 @@ function ContinueWatchingRail({
   onOpenDetail,
   onRemoveContinue,
   isJavSection = false,
+  isAdultEmbedSection = false,
   isPhubSection = false,
   isPhub1Section = false,
   isPhub2Section = false,
@@ -14813,6 +14930,9 @@ function ContinueWatchingRail({
     if (isJavSection) {
       return movies.filter(isJavMovie)
     }
+    if (isAdultEmbedSection) {
+      return movies.filter(isAdultEmbedMovie)
+    }
     if (isPhub1Section) {
       return movies.filter(isPhub1Movie)
     }
@@ -14826,7 +14946,7 @@ function ContinueWatchingRail({
       return movies.filter(isPhubMovie)
     }
     return movies.filter((m) => !isLordAdultMovie(m))
-  }, [movies, isJavSection, isPhubSection, isPhub1Section, isPhub2Section, isPhub3Section, isLordSection])
+  }, [movies, isJavSection, isAdultEmbedSection, isPhubSection, isPhub1Section, isPhub2Section, isPhub3Section, isLordSection])
 
   useEffect(() => {
     if (!menuState) {
@@ -15019,7 +15139,7 @@ function ContinueWatchingRail({
               <Download />
               <span>Download</span>
             </button>
-            {activeMenuIsTv && !isLordSection && !isJavSection && !isPhubSection && !isPhub1Section && !isPhub2Section && !isPhub3Section && (
+            {activeMenuIsTv && !isLordSection && !isJavSection && !isAdultEmbedSection && !isPhubSection && !isPhub1Section && !isPhub2Section && !isPhub3Section && (
               <button
                 type="button"
                 role="menuitem"
@@ -15029,7 +15149,7 @@ function ContinueWatchingRail({
                 <span>Go to Episode</span>
               </button>
             )}
-            {!isLordSection && !isJavSection && !isPhubSection && !isPhub1Section && !isPhub2Section && !isPhub3Section ? (
+            {!isLordSection && !isJavSection && !isAdultEmbedSection && !isPhubSection && !isPhub1Section && !isPhub2Section && !isPhub3Section ? (
               <button
                 type="button"
                 role="menuitem"
@@ -16553,7 +16673,7 @@ function SetLordPinModal({ currentUser, onClose, onSuccess }: SetLordPinModalPro
   )
 }
 
-export type LordTab = 'collection' | 'phub' | 'phub2' | 'phub3' | 'jav'
+export type LordTab = 'collection' | 'phub' | 'phub2' | 'phub3' | 'jav' | 'adultembed'
 
 type LordScreenProps = {
   movies: Movie[]
@@ -16565,12 +16685,14 @@ type LordScreenProps = {
   continuePhub2Movies?: Movie[]
   continuePhub3Movies?: Movie[]
   continueJavMovies?: Movie[]
+  continueAdultEmbedMovies?: Movie[]
   savedMovies?: Movie[]
   savedPhubMovies?: Movie[]
   savedPhub1Movies?: Movie[]
   savedPhub2Movies?: Movie[]
   savedPhub3Movies?: Movie[]
   savedJavMovies?: Movie[]
+  savedAdultEmbedMovies?: Movie[]
   currentUser?: UserInfo | null
   profiles?: UserProfile[]
   activeTab?: LordTab
@@ -16601,12 +16723,14 @@ function LordScreen({
   continuePhub2Movies = [],
   continuePhub3Movies = [],
   continueJavMovies = [],
+  continueAdultEmbedMovies = [],
   savedMovies = [],
   savedPhubMovies: _savedPhubMovies = [],
   savedPhub1Movies: _savedPhub1Movies = [],
   savedPhub2Movies = [],
   savedPhub3Movies = [],
   savedJavMovies = [],
+  savedAdultEmbedMovies = [],
   currentUser,
   profiles: _profiles = [],
   activeTab: activeTabProp = 'collection',
@@ -16652,6 +16776,7 @@ function LordScreen({
     phub2: '',
     phub3: '',
     jav: '',
+    adultembed: '',
   })
   const tabQueries = tabQueriesProp ?? internalTabQueries
   const setTabQueries = onTabQueriesChange ?? setInternalTabQueries
@@ -16661,6 +16786,7 @@ function LordScreen({
     phub2: 1,
     phub3: 1,
     jav: 1,
+    adultembed: 1,
   })
   const tabPages = tabPagesProp ?? internalTabPages
   const handleTabPageChange = (tab: LordTab, pageNum: number) => {
@@ -16709,9 +16835,17 @@ function LordScreen({
     }
   }, [activeLordTab])
 
-  // Prefetch JAV catalog immediately on LordScreen mount
+  const [visitedAdultEmbed, setVisitedAdultEmbed] = useState(activeLordTab === 'adultembed')
+  useEffect(() => {
+    if (activeLordTab === 'adultembed') {
+      setVisitedAdultEmbed(true)
+    }
+  }, [activeLordTab])
+
+  // Prefetch JAV & AdultEmbed catalogs immediately on LordScreen mount
   useEffect(() => {
     prefetchJavCatalog()
+    prefetchAdultEmbedCatalog()
   }, [])
 
   useEffect(() => {
@@ -16849,6 +16983,16 @@ function LordScreen({
               <Video size={15} />
               <span>JAV</span>
             </button>
+            <button
+              className={`lord-tab-btn ${activeLordTab === 'adultembed' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => setActiveLordTab('adultembed')}
+              onMouseEnter={() => prefetchAdultEmbedCatalog()}
+              onFocus={() => prefetchAdultEmbedCatalog()}
+            >
+              <Flame size={15} />
+              <span>AdultEmbed</span>
+            </button>
           </div>
 
           <button
@@ -16862,7 +17006,9 @@ function LordScreen({
                     ? 'PHub 3'
                     : activeLordTab === 'jav'
                       ? 'JAV'
-                      : 'Hentai'
+                      : activeLordTab === 'adultembed'
+                        ? 'AdultEmbed'
+                        : 'Hentai'
               if (
                 window.confirm(
                   `Permanently delete ${tabName} Continue Watching history? This cannot be recovered.`,
@@ -16876,11 +17022,13 @@ function LordScreen({
             disabled={
               activeLordTab === 'jav'
                 ? continueJavMovies.length === 0
-                : activeLordTab === 'phub2'
-                  ? continuePhub2Movies.length === 0
-                  : activeLordTab === 'phub3'
-                    ? continuePhub3Movies.length === 0
-                    : continueMovies.length === 0
+                : activeLordTab === 'adultembed'
+                  ? continueAdultEmbedMovies.length === 0
+                  : activeLordTab === 'phub2'
+                    ? continuePhub2Movies.length === 0
+                    : activeLordTab === 'phub3'
+                      ? continuePhub3Movies.length === 0
+                      : continueMovies.length === 0
             }
           >
             <Trash2 size={18} />
@@ -16916,7 +17064,9 @@ function LordScreen({
                       ? 'Search PHub 3 (Eporner)…'
                       : activeLordTab === 'jav'
                         ? 'Search JAV codes, titles…'
-                        : 'Titles, genres…'
+                        : activeLordTab === 'adultembed'
+                          ? 'Search AdultEmbed scenes…'
+                          : 'Titles, genres…'
                 }
                 value={currentQuery}
                 onChange={(event) => setQuery(event.target.value)}
@@ -16998,6 +17148,24 @@ function LordScreen({
         )}
       </div>
 
+      {/* Keep AdultEmbed tab alive once visited so tab switching is instant with 0ms delay */}
+      <div style={{ display: activeLordTab === 'adultembed' ? 'block' : 'none' }}>
+        {(visitedAdultEmbed || activeLordTab === 'adultembed') && (
+          <LordAdultEmbedSection
+            searchQuery={tabQueries.adultembed}
+            page={tabPages.adultembed || 1}
+            onPageChange={(p) => handleTabPageChange('adultembed', p)}
+            savedScroll={savedScroll}
+            continueMovies={continueAdultEmbedMovies}
+            savedMovies={savedAdultEmbedMovies}
+            onPlay={onPlay}
+            onMarkWatched={onMarkWatched}
+            onRemoveContinue={onRemoveContinue}
+            onRemoveWatchlist={onRemoveWatchlist}
+          />
+        )}
+      </div>
+
       {activeLordTab === 'phub2' ? (
         <LordPhubSection
           key="phub-2"
@@ -17034,7 +17202,7 @@ function LordScreen({
           onRemoveContinue={onRemoveContinue}
           onRemoveWatchlist={onRemoveWatchlist}
         />
-      ) : loading ? (
+      ) : activeLordTab !== 'collection' ? null : loading ? (
         <div className="lord-empty">
           <LoaderCircle className="spin-icon" />
           <p>Loading collection…</p>
@@ -17156,6 +17324,14 @@ function LordScreen({
           >
             <Video size={16} />
             <span>JAV</span>
+          </button>
+          <button
+            className={`lord-mobile-nav-item${activeLordTab === 'adultembed' ? ' is-active' : ''}`}
+            type="button"
+            onClick={() => setActiveLordTab('adultembed')}
+          >
+            <Flame size={16} />
+            <span>AdultEmbed</span>
           </button>
         </div>
       </div>
@@ -19044,6 +19220,469 @@ function LordJavSection({
           </div>
 
           {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="jav-pagination">
+              <button
+                type="button"
+                className="jav-page-btn"
+                onClick={handlePrevPage}
+                disabled={page <= 1}
+              >
+                <ChevronLeft size={18} />
+                <span>Prev</span>
+              </button>
+
+              <span className="jav-page-info">
+                Page <strong>{page}</strong> of <strong>{totalPages.toLocaleString()}</strong>
+              </span>
+
+              <button
+                type="button"
+                className="jav-page-btn"
+                onClick={handleNextPage}
+                disabled={page >= totalPages}
+              >
+                <span>Next</span>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function LordAdultEmbedSection({
+  searchQuery = '',
+  page: pageProp = 1,
+  onPageChange,
+  savedScroll,
+  continueMovies = [],
+  savedMovies = [],
+  onPlay,
+  onMarkWatched,
+  onRemoveContinue,
+  onRemoveWatchlist,
+}: {
+  searchQuery?: string
+  page?: number
+  onPageChange?: (page: number) => void
+  savedScroll?: number
+  continueMovies?: Movie[]
+  savedMovies?: Movie[]
+  onPlay: (movie: Movie) => void
+  onMarkWatched?: (movie: Movie) => void
+  onRemoveContinue?: (movie: Movie) => void
+  onRemoveWatchlist?: (movie: Movie) => void
+}) {
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [orientation, setOrientation] = useState<'all' | 'straight' | 'gay' | 'trans' | 'bi'>('all')
+  const [contentType, setContentType] = useState<'' | 'scene' | 'amateur'>('')
+  const [sort, setSort] = useState<'popular' | 'newest' | 'trending' | 'longest'>('popular')
+  const [categoryPills, setCategoryPills] = useState<AdultEmbedCategoryPill[]>(DEFAULT_ADULTEMBED_CATEGORIES)
+  const [internalPage, setInternalPage] = useState(pageProp)
+  const page = pageProp ?? internalPage
+  const setPage = (updater: number | ((prev: number) => number)) => {
+    const nextPage = typeof updater === 'function' ? updater(page) : updater
+    setInternalPage(nextPage)
+    onPageChange?.(nextPage)
+  }
+
+  const prevFiltersRef = useRef({ selectedCategory, orientation, contentType, sort, searchQuery })
+  useEffect(() => {
+    const prev = prevFiltersRef.current
+    if (
+      prev.selectedCategory !== selectedCategory ||
+      prev.orientation !== orientation ||
+      prev.contentType !== contentType ||
+      prev.sort !== sort ||
+      prev.searchQuery !== searchQuery
+    ) {
+      prevFiltersRef.current = { selectedCategory, orientation, contentType, sort, searchQuery }
+      setPage(1)
+    }
+  }, [selectedCategory, orientation, contentType, sort, searchQuery])
+
+  useEffect(() => {
+    let active = true
+    void fetchAdultEmbedCategories().then((items) => {
+      if (active && items.length > 0) {
+        setCategoryPills(items)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const initialData = useMemo(
+    () =>
+      getCachedAdultEmbedCatalog({
+        query: searchQuery,
+        categories: selectedCategory,
+        orientation,
+        contentType,
+        sort,
+        page,
+      }),
+    [searchQuery, selectedCategory, orientation, contentType, sort, page],
+  )
+
+  const [videos, setVideos] = useState<AdultEmbedVideo[]>(
+    () => initialData?.results || INITIAL_ADULTEMBED_VIDEOS,
+  )
+  const [loading, setLoading] = useState(!initialData && videos.length === 0)
+  const [error, setError] = useState('')
+  const [totalPages, setTotalPages] = useState(initialData?.pages || 1000)
+  const [totalCount, setTotalCount] = useState(initialData?.total || 256482)
+
+  useEffect(() => {
+    let active = true
+    const cached = getCachedAdultEmbedCatalog({
+      query: searchQuery,
+      categories: selectedCategory,
+      orientation,
+      contentType,
+      sort,
+      page,
+    })
+
+    if (cached && cached.results.length > 0) {
+      setVideos(cached.results)
+      setTotalPages(cached.pages)
+      setTotalCount(cached.total)
+      setLoading(false)
+      setError('')
+    } else if (videos.length === 0) {
+      setLoading(true)
+    }
+
+    const controller = new AbortController()
+    async function loadVideos() {
+      try {
+        const res = await fetchAdultEmbedCatalog({
+          query: searchQuery,
+          categories: selectedCategory,
+          orientation,
+          contentType,
+          sort,
+          page,
+          perPage: 24,
+          signal: controller.signal,
+        })
+        if (active) {
+          setVideos(res.results)
+          setTotalPages(res.pages)
+          setTotalCount(res.total)
+          setError('')
+        }
+      } catch {
+        if (active && videos.length === 0) {
+          setError('Failed to load AdultEmbed catalog. Please try again.')
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void loadVideos()
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [page, selectedCategory, orientation, contentType, sort, searchQuery])
+
+  const rotatedVideos = useMemo(() => {
+    if (searchQuery.trim() || page > 1) return videos
+    return rotateByDailySeed(videos, (getDailySeed() % 11) + 3)
+  }, [videos, searchQuery, page])
+
+  useEffect(() => {
+    if (savedScroll && savedScroll > 0 && !loading && videos.length > 0) {
+      const apply = () => {
+        if (typeof window.scrollTo === 'function') {
+          window.scrollTo({ top: savedScroll, behavior: 'auto' })
+        }
+        const shell = document.querySelector('.app-shell') as HTMLElement
+        if (shell) shell.scrollTop = savedScroll
+      }
+      apply()
+      const t = setTimeout(apply, 60)
+      return () => clearTimeout(t)
+    }
+  }, [savedScroll, loading, videos.length])
+
+  const handlePrevPage = () => {
+    if (page > 1) {
+      setPage((prev) => prev - 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const handleNextPage = () => {
+    if (page < totalPages) {
+      setPage((prev) => prev + 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const heroVideo = rotatedVideos.length > 0 ? rotatedVideos[0] : null
+  const heroMovie = heroVideo ? adultEmbedToMovie(heroVideo) : null
+  const activeCategoryName =
+    categoryPills.find((c) => c.slug === selectedCategory)?.name || 'All'
+
+  return (
+    <div className="jav-container ae-container">
+      {!searchQuery.trim() && heroMovie && (
+        <div className="lord-hero" style={{ marginBottom: 28 }}>
+          <div className="lord-hero-backdrop-wrap">
+            <img
+              className="lord-hero-bg"
+              src={heroMovie.hero || heroMovie.still || heroMovie.poster}
+              alt={heroMovie.title}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement
+                if (heroVideo?.thumbnail && target.src !== heroVideo.thumbnail) {
+                  target.src = heroVideo.thumbnail
+                }
+              }}
+            />
+            <div className="lord-hero-gradient" />
+          </div>
+          <div className="lord-hero-content">
+            <span className="lord-hero-badge">
+              <Flame size={14} /> {heroVideo?.studio?.name || 'AdultEmbed HD'}
+            </span>
+            <h1 className="lord-hero-title">{heroMovie.title}</h1>
+            <p className="lord-hero-meta">
+              {heroMovie.cast.slice(0, 3).join(', ')} · {heroVideo?.duration || 'Full Scene'} ·{' '}
+              {heroVideo?.content_type === 'amateur' ? 'Amateur' : 'Studio Scene'}
+            </p>
+            <p className="lord-hero-synopsis">{heroMovie.synopsis}</p>
+            <div className="lord-hero-actions">
+              <button className="lord-hero-play" type="button" onClick={() => onPlay(heroMovie)}>
+                <Play fill="currentColor" strokeWidth={0} size={20} />
+                <span>Play</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {savedMovies && savedMovies.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <LordRailRow
+            key="ae-my-list"
+            rail={{
+              title: 'My List',
+              items: savedMovies,
+            }}
+            onOpenDetail={onPlay}
+          />
+        </div>
+      )}
+
+      {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
+        <div style={{ marginBottom: 24 }}>
+          <ContinueWatchingRail
+            title="Continue Watching AdultEmbed"
+            movies={continueMovies}
+            onOpenDetail={onPlay}
+            onMarkWatched={onMarkWatched}
+            onRemoveContinue={onRemoveContinue}
+            onRemoveWatchlist={onRemoveWatchlist}
+            isAdultEmbedSection={true}
+          />
+        </div>
+      )}
+
+      <div className="jav-controls ae-controls">
+        <div className="jav-pills" role="tablist" aria-label="AdultEmbed categories">
+          {categoryPills.map((cat) => (
+            <button
+              key={cat.slug || 'all'}
+              type="button"
+              className={`jav-pill${selectedCategory === cat.slug ? ' is-active' : ''}`}
+              onClick={() => setSelectedCategory(cat.slug)}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+
+        <div className="ae-filter-bar">
+          <div className="jav-sort-group" aria-label="Orientation filter">
+            <span className="jav-sort-label">Audience:</span>
+            {(['all', 'straight', 'gay', 'trans', 'bi'] as const).map((ori) => (
+              <button
+                key={ori}
+                type="button"
+                className={`jav-sort-btn${orientation === ori ? ' is-active' : ''}`}
+                onClick={() => setOrientation(ori)}
+              >
+                {ori === 'all' ? 'All' : ori.charAt(0).toUpperCase() + ori.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <div className="jav-sort-group" aria-label="Content type filter">
+            <span className="jav-sort-label">Type:</span>
+            {(
+              [
+                ['', 'All'],
+                ['scene', 'Scenes'],
+                ['amateur', 'Amateur'],
+              ] as const
+            ).map(([val, label]) => (
+              <button
+                key={val || 'all-type'}
+                type="button"
+                className={`jav-sort-btn${contentType === val ? ' is-active' : ''}`}
+                onClick={() => setContentType(val)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="jav-sort-group" aria-label="Sort order">
+            <span className="jav-sort-label">Sort:</span>
+            {(
+              [
+                ['popular', 'Popular'],
+                ['newest', 'Newest'],
+                ['trending', 'Trending'],
+                ['longest', 'Longest'],
+              ] as const
+            ).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                className={`jav-sort-btn${sort === val ? ' is-active' : ''}`}
+                onClick={() => setSort(val)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading && videos.length === 0 ? (
+        <div className="jav-skeleton-grid" aria-label="Loading AdultEmbed catalog">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={`ae-skel-${i}`} className="jav-skeleton-card">
+              <div className="jav-skeleton-thumb" />
+              <div className="jav-skeleton-body">
+                <div className="jav-skeleton-line" style={{ width: '85%' }} />
+                <div className="jav-skeleton-line" style={{ width: '50%' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : error && videos.length === 0 ? (
+        <div className="jav-empty">
+          <AlertCircle size={40} />
+          <p>{error}</p>
+        </div>
+      ) : videos.length === 0 ? (
+        <div className="jav-empty">
+          <Search size={40} />
+          <p>No videos found matching your current filters.</p>
+        </div>
+      ) : (
+        <>
+          <div className="jav-meta-header">
+            <h2 className="lord-rail-title">
+              {searchQuery.trim()
+                ? `Results for "${searchQuery.trim()}"`
+                : activeCategoryName === 'All'
+                  ? 'AdultEmbed Catalog'
+                  : `${activeCategoryName} Videos`}
+              {totalCount > 0 && (
+                <span className="jav-meta-count">({totalCount.toLocaleString()} videos)</span>
+              )}
+            </h2>
+          </div>
+
+          <div className="jav-grid">
+            {rotatedVideos.map((video) => {
+              const movie = adultEmbedToMovie(video)
+              return (
+                <div key={video.id} className="jav-card" onClick={() => onPlay(movie)}>
+                  <div className="jav-thumb-container">
+                    <img
+                      src={video.thumbnail || video.poster || ''}
+                      alt={video.title}
+                      loading="lazy"
+                      onError={(event) => {
+                        const target = event.target as HTMLImageElement
+                        target.onerror = null
+                        if (video.poster && target.src !== video.poster) {
+                          target.src = video.poster
+                        } else {
+                          target.src =
+                            'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
+                        }
+                      }}
+                    />
+                    {video.content_type && (
+                      <span className="jav-code-badge">
+                        {video.content_type === 'amateur' ? 'AMATEUR' : 'SCENE'}
+                      </span>
+                    )}
+                    <span className="jav-hd-badge">HD</span>
+                    {video.duration && (
+                      <span className="jav-duration-badge">{video.duration}</span>
+                    )}
+
+                    <div className="jav-play-overlay">
+                      <button
+                        type="button"
+                        className="jav-play-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onPlay(movie)
+                        }}
+                        title="Play Video"
+                      >
+                        <Play fill="#fff" size={24} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="jav-card-body">
+                    <h3 className="jav-card-title" title={video.title}>
+                      {video.title}
+                    </h3>
+
+                    <div className="jav-card-footer">
+                      {video.studio?.name ? (
+                        <span className="jav-studio">{video.studio.name}</span>
+                      ) : video.performers?.[0]?.name ? (
+                        <span className="jav-studio">{video.performers[0].name}</span>
+                      ) : null}
+                      {video.stats?.views ? (
+                        <span className="jav-views">👁 {video.stats.views.toLocaleString()}</span>
+                      ) : null}
+                    </div>
+
+                    {video.categories && video.categories.length > 0 && (
+                      <div className="jav-tags">
+                        {video.categories.slice(0, 3).map((cat) => (
+                          <span key={cat.slug || cat.name} className="jav-tag">
+                            {cat.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
           {totalPages > 1 && (
             <div className="jav-pagination">
               <button

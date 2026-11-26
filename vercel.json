@@ -57,6 +57,7 @@
     { "source": "/api/phub", "destination": "/api/hub?kind=phub" },
     { "source": "/api/eporner", "destination": "/api/hub?kind=eporner" },
     { "source": "/api/xvid", "destination": "/api/hub?kind=xvid" },
+    { "source": "/api/adultembed", "destination": "/api/hub?kind=adultembed" },
     { "source": "/api/stream-resolver", "destination": "/api/hub?kind=stream-resolver" },
     { "source": "/api/stream-proxy", "destination": "/api/hub?kind=stream-proxy" },
     {

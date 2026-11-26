@@ -38,6 +38,7 @@ export type StreamProvider =
   | 'phubplay'
   | 'upload18'
   | 'eporner'
+  | 'adultembed'
 
 export function isStreamProvider(value: string | null | undefined): value is StreamProvider {
   return (
@@ -68,7 +69,8 @@ export function isStreamProvider(value: string | null | undefined): value is Str
     value === 'apijav' ||
     value === 'phubplay' ||
     value === 'upload18' ||
-    value === 'eporner'
+    value === 'eporner' ||
+    value === 'adultembed'
   )
 }
 
@@ -328,6 +330,12 @@ export const streamProviderOptions: StreamProviderOption[] = [
     name: 'Eporner',
     logo: 'EP',
     description: 'PHub 3 · Eporner Player',
+  },
+  {
+    id: 'adultembed',
+    name: 'AdultEmbed',
+    logo: 'AE',
+    description: 'AdultEmbed · HD Studio & Amateur Player',
   },
 ]
 
@@ -1199,6 +1207,24 @@ export function buildStreamUrl(
     }
     const cleanSlug = movie.hentaiSlug?.replace(/^jav-/, '') || movie.id.replace(/^jav-/, '')
     return `https://server.apijav.com/?mvapm_embed=${cleanSlug}`
+  }
+
+  // 3b. Explicit AdultEmbed videos
+  if (
+    !movie.tmdbId &&
+    (movie.label === 'AdultEmbed' ||
+      movie.type === 'AdultEmbed Video' ||
+      movie.id.startsWith('ae-') ||
+      (movie.hentaiSlug && movie.hentaiSlug.startsWith('ae-')) ||
+      provider === 'adultembed' ||
+      movie.embedUrl?.includes('adultembed.com/player') ||
+      movie.embedUrl?.includes('pornalizer.app/player'))
+  ) {
+    if (movie.embedUrl) {
+      return movie.embedUrl
+    }
+    const cleanSlug = movie.hentaiSlug?.replace(/^ae-/, '') || movie.id.replace(/^ae-/, '')
+    return `https://adultembed.com/player/embed/${cleanSlug}/`
   }
 
   if (

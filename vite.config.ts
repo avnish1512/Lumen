@@ -36,6 +36,10 @@ import {
   superEmbedOptionsFromParams,
 } from './api/_lib/superembed-core'
 import { fetchAnikotoRecent, fetchAnikotoSeries } from './api/_lib/anikoto-core'
+import {
+  proxyAdultEmbedRequest,
+  resolveAdultEmbedApiKey,
+} from './api/_lib/adultembed-core'
 import { fetchDramaRails, fetchKoreanChineseDramas, fetchMatureCollection, searchTmdbTitles } from './api/_lib/tmdb-drama-core'
 import { fetchKinocheckTrailer } from './api/_lib/kinocheck-core'
 import { fetchTmdbSeasonEpisodes, fetchTmdbTvSeasons } from './api/_lib/tmdb-episodes-core'
@@ -2121,6 +2125,38 @@ function epornerDevProxy(): Plugin {
   }
 }
 
+function adultembedDevProxy(apiKey: string): Plugin {
+  return {
+    name: 'adultembed-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/adultembed', async (req: IncomingMessage, res) => {
+        if (req.method && req.method !== 'GET') {
+          sendJson(res, 405, { success: false, error: 'Method not allowed.' })
+          return
+        }
+
+        const requestUrl = new URL(req.url ?? '/', 'http://localhost')
+        try {
+          const originHeader = Array.isArray(req.headers.origin)
+            ? req.headers.origin[0]
+            : req.headers.origin
+          const result = await proxyAdultEmbedRequest({
+            searchParams: requestUrl.searchParams,
+            apiKey,
+            siteUrl: originHeader || undefined,
+            timeoutMs: 4500,
+          })
+          sendJson(res, result.status, result.data)
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Could not reach AdultEmbed API.'
+          sendJson(res, 502, { success: false, error: message })
+        }
+      })
+    },
+  }
+}
+
 function streamResolverDevProxy(): Plugin {
   return {
     name: 'stream-resolver-dev-proxy',
@@ -2222,6 +2258,7 @@ export default defineConfig(({ mode }) => {
       anilistDevProxy(),
       phubDevProxy(env.PHUB_API_KEY),
       epornerDevProxy(),
+      adultembedDevProxy(resolveAdultEmbedApiKey(env)),
       omdbDevProxy(createOmdbApiKeys(env)),
       tmdbDevProxy(createTmdbAuthChain(env)),
       tmdbWatchProvidersDevProxy(

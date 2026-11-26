@@ -776,11 +776,14 @@ export function normalizeMovie(movie: Partial<Movie> | null | undefined): Movie 
   const isExplicitAdult = Boolean(
     movie.id?.startsWith('phub') ||
     movie.id?.startsWith('jav-') ||
+    movie.id?.startsWith('ae-') ||
     movie.id?.startsWith('hentaiocean-') ||
     movie.label === 'PHub' ||
     movie.label === 'PHub 2' ||
     movie.label === 'PHub 3' ||
     movie.label === 'JAV' ||
+    movie.label === 'AdultEmbed' ||
+    movie.type === 'AdultEmbed Video' ||
     movie.isJav ||
     movie.isHentaiOcean ||
     movie.genres?.some((g) => typeof g === 'string' && g.toLowerCase() === 'hentai')
@@ -791,7 +794,9 @@ export function normalizeMovie(movie: Partial<Movie> | null | undefined): Movie 
       movie.embedUrl.includes('upload18.net') ||
       movie.embedUrl.includes('xvidapi') ||
       movie.embedUrl.includes('eporner.com') ||
-      movie.embedUrl.includes('apijav.com')
+      movie.embedUrl.includes('apijav.com') ||
+      movie.embedUrl.includes('adultembed.com/player') ||
+      movie.embedUrl.includes('pornalizer.app/player')
     ))
   )
   let cleanEmbedUrl = movie.embedUrl

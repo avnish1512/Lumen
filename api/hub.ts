@@ -74,6 +74,10 @@ import {
   type ResolveStreamRequest,
 } from './_lib/stream-resolver-core.js'
 import { handleStreamProxyRequest } from './_lib/stream-proxy-core.js'
+import {
+  proxyAdultEmbedRequest,
+  resolveAdultEmbedApiKey,
+} from './_lib/adultembed-core.js'
 
 const inMemoryProfilesMap = new Map<string, StoredProfile[]>()
 let globalLordPin = '1408'
@@ -401,6 +405,37 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(upstreamRes.status).json(data)
     } catch (error) {
       res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'Could not reach Eporner API.' })
+    }
+    return
+  }
+
+  // ---- adultembed (AdultEmbed v1 API proxy for Lord section) ----
+  if (kind === 'adultembed') {
+    const queryParams = new URLSearchParams()
+    for (const [k, v] of Object.entries(req.query)) {
+      if (k === 'kind' || v === undefined) continue
+      const single = Array.isArray(v) ? v[0] : v
+      if (single !== undefined && single !== '') {
+        queryParams.set(k, String(single))
+      }
+    }
+    try {
+      const originHeader = Array.isArray(req.headers?.origin)
+        ? req.headers.origin[0]
+        : req.headers?.origin
+      const result = await proxyAdultEmbedRequest({
+        searchParams: queryParams,
+        apiKey: resolveAdultEmbedApiKey(env),
+        siteUrl: originHeader || undefined,
+        timeoutMs: 4500,
+      })
+      res.setHeader('Cache-Control', result.cacheControl)
+      res.status(result.status).json(result.data)
+    } catch (error) {
+      res.status(502).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Could not reach AdultEmbed API.',
+      })
     }
     return
   }
