@@ -1,10 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   formatBytes,
   getTotalStorageUsed,
   estimateMediaSize,
   buildMovieDownloaderUrl,
   MOVIE_DOWNLOADER_BASE,
+  openInSiteDownload,
+  closeInSiteDownload,
+  subscribeDownloadModal,
 } from './downloads'
 
 describe('downloads engine', () => {
@@ -54,5 +57,30 @@ describe('downloads engine', () => {
     expect(buildMovieDownloaderUrl('tv-94605', { season: 2, episode: 5 })).toBe(
       'https://02moviedownloader.site/api/download/tv/94605/2/5',
     )
+  })
+
+  it('dispatches in-site download modal requests without opening a new tab', () => {
+    const listener = vi.fn()
+    const unsubscribe = subscribeDownloadModal(listener)
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+
+    openInSiteDownload({
+      url: 'https://02moviedownloader.site/api/download/movie/846422',
+      title: 'The Beekeeper',
+      subtitle: 'Movie Download',
+    })
+
+    expect(listener).toHaveBeenCalledWith({
+      url: 'https://02moviedownloader.site/api/download/movie/846422',
+      title: 'The Beekeeper',
+      subtitle: 'Movie Download',
+    })
+    expect(openSpy).not.toHaveBeenCalled()
+
+    closeInSiteDownload()
+    expect(listener).toHaveBeenLastCalledWith(null)
+
+    openSpy.mockRestore()
+    unsubscribe()
   })
 })

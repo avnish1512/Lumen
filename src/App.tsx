@@ -173,7 +173,8 @@ import { WatchRecommenderEntry } from './watch-recommender/WatchRecommender'
 import { SplashScreen } from './SplashScreen'
 import { ErrorBoundary } from './ErrorBoundary'
 import { DownloadsScreen } from './DownloadsScreen'
-import { getAllDownloads, subscribeDownloads, buildMovieDownloaderUrl } from './downloads'
+import { DownloadEmbedModal } from './DownloadEmbedModal'
+import { getAllDownloads, subscribeDownloads, buildMovieDownloaderUrl, openInSiteDownload } from './downloads'
 import { updateSeoTags, createMovieSlug } from './seo'
 import {
   type JavPost,
@@ -6610,6 +6611,8 @@ function App() {
         />
       )}
 
+      <DownloadEmbedModal />
+
       {bffMovie && (
         <div className="bff-overlay" role="dialog" aria-label="Watch together">
           <div className="bff-modal">
@@ -7976,12 +7979,19 @@ function DetailScreen({
         }
       }
       if (tmdbId) {
+        const s = movie.streamSeason || 1
+        const ep = movie.streamEpisode || 1
         const downloadUrl = buildMovieDownloaderUrl(tmdbId, {
           isTv,
-          season: movie.streamSeason || 1,
-          episode: movie.streamEpisode || 1,
+          season: s,
+          episode: ep,
         })
-        window.open(downloadUrl, '_blank', 'noopener,noreferrer')
+        openInSiteDownload({
+          url: downloadUrl,
+          title: movie.title,
+          subtitle: isTv ? `Season ${s} · Episode ${ep}` : 'Movie Download',
+          poster: movie.poster || movie.still,
+        })
         setIsDownloaded(true)
       } else {
         alert('Could not resolve download source for this title.')
@@ -9062,7 +9072,25 @@ function SeasonEpisodeSection({
                         onClick={(e) => {
                           e.stopPropagation()
                           const url = buildMovieDownloaderUrl(targetTmdbId, { isTv: true, season: selectedSeason, episode })
-                          window.open(url, '_blank', 'noopener,noreferrer')
+                          openInSiteDownload({
+                            url,
+                            title: movie.title,
+                            subtitle: `Season ${selectedSeason} · Episode ${episode}`,
+                            poster: cover || movie.poster,
+                          })
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            const url = buildMovieDownloaderUrl(targetTmdbId, { isTv: true, season: selectedSeason, episode })
+                            openInSiteDownload({
+                              url,
+                              title: movie.title,
+                              subtitle: `Season ${selectedSeason} · Episode ${episode}`,
+                              poster: cover || movie.poster,
+                            })
+                          }
                         }}
                       >
                         <Download size={14} />
@@ -9625,7 +9653,12 @@ function WatchScreen({
         const s = movie.streamSeason ?? season ?? 1
         const ep = movie.streamEpisode ?? episode ?? 1
         const downloadUrl = buildMovieDownloaderUrl(tmdbId, { isTv, season: s, episode: ep })
-        window.open(downloadUrl, '_blank', 'noopener,noreferrer')
+        openInSiteDownload({
+          url: downloadUrl,
+          title: movie.title,
+          subtitle: isTv ? `Season ${s} · Episode ${ep}` : 'Movie Download',
+          poster: movie.poster || movie.still,
+        })
         setIsWatchDownloaded(true)
       } else {
         alert('Could not resolve download source for this title.')
@@ -10947,7 +10980,26 @@ function WatchScreen({
                             e.stopPropagation()
                             const s = movie.streamSeason ?? season ?? 1
                             const url = buildMovieDownloaderUrl(watchTargetTmdbId, { isTv: true, season: s, episode: number })
-                            window.open(url, '_blank', 'noopener,noreferrer')
+                            openInSiteDownload({
+                              url,
+                              title: movie.title,
+                              subtitle: `Season ${s} · Episode ${number}`,
+                              poster: thumbUrl || movie.poster,
+                            })
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              const s = movie.streamSeason ?? season ?? 1
+                              const url = buildMovieDownloaderUrl(watchTargetTmdbId, { isTv: true, season: s, episode: number })
+                              openInSiteDownload({
+                                url,
+                                title: movie.title,
+                                subtitle: `Season ${s} · Episode ${number}`,
+                                poster: thumbUrl || movie.poster,
+                              })
+                            }
                           }}
                         >
                           <Download size={10} />

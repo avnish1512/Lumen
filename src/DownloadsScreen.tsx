@@ -27,6 +27,7 @@ import {
   formatBytes,
   getTotalStorageUsed,
   buildMovieDownloaderUrl,
+  openInSiteDownload,
 } from './downloads'
 import { buildStreamUrl, type StreamProvider, isStreamProvider } from './tmdb'
 import type { Movie } from './omdb'
@@ -164,6 +165,26 @@ export function DownloadsScreen({
     } finally {
       setTimeout(() => setIsExporting(null), 1000)
     }
+  }
+
+  const openItemDownload = (item: DownloadItem, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const targetId = item.tmdbId || item.movieId
+    if (!targetId) return
+    const isTv = item.mediaType === 'tv' || item.mediaType === 'anime'
+    const url = buildMovieDownloaderUrl(targetId, {
+      isTv,
+      season: item.season,
+      episode: item.episode,
+    })
+    openInSiteDownload({
+      url,
+      title: item.title,
+      subtitle:
+        item.episodeTitle ||
+        (isTv ? `Season ${item.season ?? 1} · Episode ${item.episode ?? 1}` : 'Movie Download'),
+      poster: item.poster || item.still,
+    })
   }
 
   const completedDownloads = downloads.filter((d) => d.status === 'completed')
@@ -366,19 +387,8 @@ export function DownloadsScreen({
                     <button
                       className="btn-download-action"
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const targetId = item.tmdbId || item.movieId
-                        if (targetId) {
-                          const url = buildMovieDownloaderUrl(targetId, {
-                            isTv: item.mediaType === 'tv' || item.mediaType === 'anime',
-                            season: item.season,
-                            episode: item.episode,
-                          })
-                          window.open(url, '_blank', 'noopener,noreferrer')
-                        }
-                      }}
-                      title="Download with 02MovieDownloader"
+                      onClick={(e) => openItemDownload(item, e)}
+                      title="Download inside Lumen"
                     >
                       <Download size={13} />
                       <span>Download</span>
@@ -448,18 +458,8 @@ export function DownloadsScreen({
                 <button
                   className="btn-download-action"
                   type="button"
-                  onClick={() => {
-                    const targetId = activePlayItem.tmdbId || activePlayItem.movieId
-                    if (targetId) {
-                      const url = buildMovieDownloaderUrl(targetId, {
-                        isTv: activePlayItem.mediaType === 'tv' || activePlayItem.mediaType === 'anime',
-                        season: activePlayItem.season,
-                        episode: activePlayItem.episode,
-                      })
-                      window.open(url, '_blank', 'noopener,noreferrer')
-                    }
-                  }}
-                  title="Download with 02MovieDownloader"
+                  onClick={() => openItemDownload(activePlayItem)}
+                  title="Download inside Lumen"
                 >
                   <Download size={14} />
                   <span>Download</span>
@@ -504,20 +504,7 @@ export function DownloadsScreen({
                   Video playback ready on {activePlayItem.server?.toUpperCase() || 'default server'}.
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const targetId = activePlayItem.tmdbId || activePlayItem.movieId
-                      if (targetId) {
-                        const url = buildMovieDownloaderUrl(targetId, {
-                          isTv: activePlayItem.mediaType === 'tv' || activePlayItem.mediaType === 'anime',
-                          season: activePlayItem.season,
-                          episode: activePlayItem.episode,
-                        })
-                        window.open(url, '_blank', 'noopener,noreferrer')
-                      }
-                    }}
-                  >
+                  <button type="button" onClick={() => openItemDownload(activePlayItem)}>
                     Download
                   </button>
                   <button type="button" className="notice-delete-btn" onClick={() => handleDelete(activePlayItem.id)}>

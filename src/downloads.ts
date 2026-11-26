@@ -92,6 +92,43 @@ function notifyListeners(items: DownloadItem[]) {
   })
 }
 
+export interface InSiteDownloadRequest {
+  url: string
+  title?: string
+  subtitle?: string
+  poster?: string
+}
+
+type DownloadModalListener = (request: InSiteDownloadRequest | null) => void
+const modalListeners = new Set<DownloadModalListener>()
+
+export function subscribeDownloadModal(listener: DownloadModalListener): () => void {
+  modalListeners.add(listener)
+  return () => {
+    modalListeners.delete(listener)
+  }
+}
+
+export function openInSiteDownload(request: InSiteDownloadRequest): void {
+  modalListeners.forEach((listener) => {
+    try {
+      listener(request)
+    } catch {
+      // ignore listener errors
+    }
+  })
+}
+
+export function closeInSiteDownload(): void {
+  modalListeners.forEach((listener) => {
+    try {
+      listener(null)
+    } catch {
+      // ignore listener errors
+    }
+  })
+}
+
 // Active fetch controllers for pausing/cancelling downloads
 const activeControllers = new Map<string, AbortController>()
 
@@ -728,9 +765,12 @@ export async function exportToDevice(id: string, fallbackFilename?: string): Pro
         season: item.season,
         episode: item.episode,
       })
-      if (typeof window !== 'undefined') {
-        window.open(url, '_blank', 'noopener,noreferrer')
-      }
+      openInSiteDownload({
+        url,
+        title: item.title || fallbackFilename,
+        subtitle: item.episodeTitle,
+        poster: item.poster || item.still,
+      })
       return true
     }
     return false
@@ -751,10 +791,18 @@ export async function exportToDevice(id: string, fallbackFilename?: string): Pro
     setTimeout(() => URL.revokeObjectURL(url), 15000)
     return true
   } else if (item?.directUrl) {
+    if (item.directUrl.includes('02moviedownloader.')) {
+      openInSiteDownload({
+        url: item.directUrl,
+        title: item.title || fallbackFilename,
+        subtitle: item.episodeTitle,
+        poster: item.poster || item.still,
+      })
+      return true
+    }
     const a = document.createElement('a')
     a.href = item.directUrl
     a.download = filename
-    a.target = '_blank'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
