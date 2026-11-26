@@ -779,11 +779,13 @@ export function normalizeMovie(movie: Partial<Movie> | null | undefined): Movie 
     movie.id?.startsWith('ae-') ||
     movie.id?.startsWith('hentaiocean-') ||
     movie.label === 'PHub' ||
+    movie.label === 'PHub 1' ||
     movie.label === 'PHub 2' ||
     movie.label === 'PHub 3' ||
     movie.label === 'JAV' ||
     movie.label === 'AdultEmbed' ||
     movie.type === 'AdultEmbed Video' ||
+    movie.type === 'PHub 1 Video' ||
     movie.isJav ||
     movie.isHentaiOcean ||
     movie.genres?.some((g) => typeof g === 'string' && g.toLowerCase() === 'hentai')

@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Ban,
   Bell,
+  Bookmark,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -28,6 +29,7 @@ import {
   Mail,
   Mic,
   MoreHorizontal,
+  MoreVertical,
   Pause,
   Play,
   Plus,
@@ -65,6 +67,7 @@ import {
   SkipBack,
   SkipForward,
   Shield,
+  SlidersHorizontal,
   Sparkles,
   Flame,
 } from 'lucide-react'
@@ -338,11 +341,16 @@ export function sanitizeMovieEmbed(movie: Movie): Movie {
   const isExplicitAdult = Boolean(
     movie.id?.startsWith('phub') ||
     movie.id?.startsWith('jav-') ||
+    movie.id?.startsWith('ae-') ||
     movie.id?.startsWith('hentaiocean-') ||
     movie.label === 'PHub' ||
+    movie.label === 'PHub 1' ||
     movie.label === 'PHub 2' ||
     movie.label === 'PHub 3' ||
     movie.label === 'JAV' ||
+    movie.label === 'AdultEmbed' ||
+    movie.type === 'AdultEmbed Video' ||
+    movie.type === 'PHub 1 Video' ||
     movie.isJav ||
     movie.isHentaiOcean ||
     movie.genres?.some((g) => typeof g === 'string' && g.toLowerCase() === 'hentai')
@@ -353,7 +361,9 @@ export function sanitizeMovieEmbed(movie: Movie): Movie {
     (movie.embedUrl.includes('upload18.net') ||
       movie.embedUrl.includes('xvidapi') ||
       movie.embedUrl.includes('eporner.com') ||
-      movie.embedUrl.includes('apijav.com'))
+      movie.embedUrl.includes('apijav.com') ||
+      movie.embedUrl.includes('adultembed.com/player') ||
+      movie.embedUrl.includes('pornalizer.app/player'))
   ) {
     const { embedUrl, ...rest } = movie
     return rest as Movie
@@ -438,7 +448,7 @@ function saveDisabledServers(servers: string[]) {
     } else {
       window.localStorage.removeItem(adminDisabledServersKey)
     }
-  } catch {}
+  } catch { }
 }
 
 function notifyNativeNavState(canGoBack: boolean, screen: Screen) {
@@ -502,7 +512,7 @@ function saveStarredServerFor(user: UserInfo | null, serverId: string) {
     } else {
       window.localStorage.removeItem(key)
     }
-  } catch {}
+  } catch { }
 }
 
 // Profiles are stored per login account (keyed by email) so each of the
@@ -1611,7 +1621,7 @@ export function isPhub2Movie(m?: Movie | null): boolean {
 export function isPhub1Movie(m?: Movie | null): boolean {
   if (!m) return false
   if (m.tmdbId) return false
-  if (isPhub3Movie(m) || isPhub2Movie(m)) return false
+  if (isAdultEmbedMovie(m) || isPhub3Movie(m) || isPhub2Movie(m)) return false
   return Boolean(
     m.id?.startsWith('phub1-') ||
     m.label === 'PHub 1' ||
@@ -1638,6 +1648,7 @@ export function isAdultEmbedMovie(m?: Movie | null): boolean {
     m.id?.startsWith('ae-') ||
     m.label === 'AdultEmbed' ||
     m.type === 'AdultEmbed Video' ||
+    m.type === 'PHub 1 Video' ||
     m.hentaiSlug?.startsWith('ae-') ||
     m.embedUrl?.includes('adultembed.com/player') ||
     m.embedUrl?.includes('pornalizer.app/player')
@@ -1759,7 +1770,7 @@ export async function fetchPornApi(
       pornApiCache.set(cacheKey, result)
       return result
     }
-  } catch {}
+  } catch { }
 
   return null
 }
@@ -2062,7 +2073,7 @@ export async function fetchEpornerApi(
       epornerApiCache.set(cacheKey, result)
       return result
     }
-  } catch {}
+  } catch { }
 
   return null
 }
@@ -2188,10 +2199,10 @@ function movieMatches(left: Movie, right: Movie) {
 
   return Boolean(
     leftTitle &&
-      rightTitle &&
-      leftTitle === rightTitle &&
-      left.year === right.year &&
-      isTvShow(left) === isTvShow(right),
+    rightTitle &&
+    leftTitle === rightTitle &&
+    left.year === right.year &&
+    isTvShow(left) === isTvShow(right),
   )
 }
 
@@ -2379,9 +2390,9 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
 
   const isJav = Boolean(
     movie.isJav ||
-      movie.id.startsWith('jav-') ||
-      movie.label === 'JAV' ||
-      movie.hentaiSlug?.startsWith('jav-'),
+    movie.id.startsWith('jav-') ||
+    movie.label === 'JAV' ||
+    movie.hentaiSlug?.startsWith('jav-'),
   )
   const isPhub3 = isPhub3Movie(movie)
   const isPhub2 = isPhub2Movie(movie)
@@ -2411,7 +2422,7 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
           .filter((m: Movie) => m.id !== movie.id)
           .sort((a: Movie, b: Movie) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
       }
-    } catch {}
+    } catch { }
     return EPORNER_INITIAL_VIDEOS.map(epornerToMovieHelper)
       .filter((m) => m.id !== movie.id)
       .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
@@ -2439,7 +2450,7 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
             .sort((a: Movie, b: Movie) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
         }
       }
-    } catch {}
+    } catch { }
     return INITIAL_HANIME_VIDEOS.map(hanimeToMovieHelper)
       .filter((m) => m.id !== movie.id)
       .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
@@ -2463,7 +2474,7 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
           .filter((m) => m.id !== movie.id)
           .sort((a, b) => calculatePhubRelevanceScore(b, movie) - calculatePhubRelevanceScore(a, movie))
       }
-    } catch {}
+    } catch { }
   }
 
   // 4. JAV (apiJAV)
@@ -2477,20 +2488,20 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
           .map(javToMovieHelper)
           .filter((m) => m.id !== movie.id)
       }
-    } catch {}
+    } catch { }
   }
 
   // 4b. Hentai (Hentai Ocean)
   const isHentaiTarget = Boolean(
     !isJav &&
-      !isPhub3 &&
-      !isPhub2 &&
-      !isPhub1 &&
-      (isHentaiMovie(movie) ||
-        movie.isHentaiOcean ||
-        movie.id.startsWith('hentaiocean-') ||
-        movie.hentaiSlug?.startsWith('hentaiocean-') ||
-        movie.genres?.some((g) => g.toLowerCase() === 'hentai')),
+    !isPhub3 &&
+    !isPhub2 &&
+    !isPhub1 &&
+    (isHentaiMovie(movie) ||
+      movie.isHentaiOcean ||
+      movie.id.startsWith('hentaiocean-') ||
+      movie.hentaiSlug?.startsWith('hentaiocean-') ||
+      movie.genres?.some((g) => g.toLowerCase() === 'hentai')),
   )
   if (isHentaiTarget) {
     try {
@@ -2563,7 +2574,7 @@ async function fetchRelatedTitlesForMovie(movie: Movie): Promise<Movie[]> {
 
         return combined.slice(0, 16)
       }
-    } catch {}
+    } catch { }
   }
 
   // 5. Anime: fetch exact relations (Sequels, Prequels, Next Seasons, Side Stories) & Recommendations from AniList
@@ -2640,20 +2651,20 @@ function mapAniListToMovieStandalone(anime: any, rank = 1): Movie {
   // wrong (or the show's main) poster.
   const animeEpisodes = Array.isArray(anime.streamingEpisodes)
     ? anime.streamingEpisodes.map((entry: any) => ({
-        title: String(entry?.title ?? '').trim(),
-        thumbnail: String(entry?.thumbnail ?? ''),
-      }))
+      title: String(entry?.title ?? '').trim(),
+      thumbnail: String(entry?.thumbnail ?? ''),
+    }))
     : undefined
 
   const nextEpisode =
     typeof anime.nextAiringEpisode?.episode === 'number'
       ? {
-          number: anime.nextAiringEpisode.episode as number,
-          airingAt:
-            typeof anime.nextAiringEpisode.airingAt === 'number'
-              ? anime.nextAiringEpisode.airingAt
-              : undefined,
-        }
+        number: anime.nextAiringEpisode.episode as number,
+        airingAt:
+          typeof anime.nextAiringEpisode.airingAt === 'number'
+            ? anime.nextAiringEpisode.airingAt
+            : undefined,
+      }
       : undefined
 
   return {
@@ -3129,13 +3140,13 @@ function App() {
       if (adminStar && isStreamProvider(adminStar)) {
         try {
           window.localStorage.setItem(adminStarredServerKey, adminStar)
-        } catch {}
+        } catch { }
         setStarredServer(adminStar)
       }
       if (Array.isArray(adminProfile?.disabledServers)) {
         try {
           window.localStorage.setItem(adminDisabledServersKey, JSON.stringify(adminProfile.disabledServers))
-        } catch {}
+        } catch { }
         setDisabledServers(adminProfile.disabledServers)
       }
     })
@@ -3735,10 +3746,10 @@ function App() {
 
   const isHentaiSelectedMovie = Boolean(
     selectedMovie &&
-      (selectedMovie.isHentaiOcean ||
-        selectedMovie.hentaiSlug ||
-        selectedMovie.id.startsWith('hentaiocean-') ||
-        selectedMovie.genres.some((g) => g.toLowerCase() === 'hentai')),
+    (selectedMovie.isHentaiOcean ||
+      selectedMovie.hentaiSlug ||
+      selectedMovie.id.startsWith('hentaiocean-') ||
+      selectedMovie.genres.some((g) => g.toLowerCase() === 'hentai')),
   )
 
   useEffect(() => {
@@ -3896,7 +3907,7 @@ function App() {
         } else {
           window.sessionStorage.removeItem(activeScreenKey)
         }
-      } catch {}
+      } catch { }
 
       const shouldReplace =
         Boolean(options?.replace) ||
@@ -3973,7 +3984,7 @@ function App() {
     setCurrentUser(user)
     try {
       window.localStorage.setItem(currentUserKey, JSON.stringify(user))
-    } catch {}
+    } catch { }
   }
 
   const openManageProfiles = () => {
@@ -4011,7 +4022,7 @@ function App() {
       setDesignMode('apple')
       try {
         window.localStorage.setItem('omdb.apple-tv-style.designMode', 'apple')
-      } catch {}
+      } catch { }
     }
     setLordBackScreen('home')
     setWatchBackScreen('home')
@@ -4020,7 +4031,7 @@ function App() {
       setSelectedMovie(null)
       try {
         window.sessionStorage.removeItem(selectedMovieKey)
-      } catch {}
+      } catch { }
     }
     setScreen('home')
   }, [designMode, selectedMovie, setScreen])
@@ -4106,7 +4117,7 @@ function App() {
           setAnimeCollection(nextAnimeCollection)
           setTmdbHomeRails(nextTmdbHomeRails)
           setSearchRecommendations(nextRecommendations)
-          
+
           const freshHero = nextMovies[0] ?? null
           setHomeHeroMovie((current) => current ?? freshHero)
           setSelectedMovie((current) => current ?? freshHero)
@@ -4155,7 +4166,7 @@ function App() {
         setAnimeCollection(fallbackAnimeCollection)
         setTmdbHomeRails(nextTmdbHomeRails)
         setSearchRecommendations(fallbackRecommendations)
-        
+
         const freshHero = nextMovies[0] ?? null
         setHomeHeroMovie((current) => current ?? freshHero)
         setSelectedMovie((current) => current ?? freshHero)
@@ -4187,7 +4198,7 @@ function App() {
           error instanceof Error
             ? error.message
             : 'Could not load movies and TV shows.'
-        
+
         if (!initialCache) {
           setHomeError(message)
         }
@@ -4753,13 +4764,13 @@ function App() {
         setSelectedMovie((current) =>
           current?.id === fullMovie.id
             ? {
-                ...fullMovie,
-                anilistId: current.anilistId ?? movie.anilistId ?? fullMovie.anilistId,
-                tmdbId: current.tmdbId ?? movie.tmdbId,
-                tmdbType: current.tmdbType ?? movie.tmdbType,
-                streamSeason: current.streamSeason ?? movie.streamSeason,
-                streamEpisode: current.streamEpisode ?? movie.streamEpisode,
-              }
+              ...fullMovie,
+              anilistId: current.anilistId ?? movie.anilistId ?? fullMovie.anilistId,
+              tmdbId: current.tmdbId ?? movie.tmdbId,
+              tmdbType: current.tmdbType ?? movie.tmdbType,
+              streamSeason: current.streamSeason ?? movie.streamSeason,
+              streamEpisode: current.streamEpisode ?? movie.streamEpisode,
+            }
             : fullMovie,
         )
         upsertMovie(fullMovie)
@@ -4835,13 +4846,13 @@ function App() {
             setSelectedMovie((current) =>
               current?.id === movie.id
                 ? {
-                    ...current,
-                    anilistId: current.anilistId ?? streamMovie.anilistId,
-                    tmdbId: streamMovie.tmdbId,
-                    tmdbType: streamMovie.tmdbType,
-                    streamSeason: current.streamSeason ?? streamMovie.streamSeason,
-                    streamEpisode: current.streamEpisode ?? streamMovie.streamEpisode,
-                  }
+                  ...current,
+                  anilistId: current.anilistId ?? streamMovie.anilistId,
+                  tmdbId: streamMovie.tmdbId,
+                  tmdbType: streamMovie.tmdbType,
+                  streamSeason: current.streamSeason ?? streamMovie.streamSeason,
+                  streamEpisode: current.streamEpisode ?? streamMovie.streamEpisode,
+                }
                 : streamMovie,
             )
           }
@@ -4950,7 +4961,7 @@ function App() {
       try {
         window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(safeMovie))
         window.sessionStorage.setItem(activeScreenKey, 'watch')
-      } catch {}
+      } catch { }
 
       const nextIndex = historyIndexRef.current + 1
       historyIndexRef.current = nextIndex
@@ -5005,7 +5016,7 @@ function App() {
       try {
         window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(safeMovie))
         window.sessionStorage.setItem(activeScreenKey, 'detail')
-      } catch {}
+      } catch { }
 
       const nextIndex = historyIndexRef.current + 1
       historyIndexRef.current = nextIndex
@@ -5068,7 +5079,7 @@ function App() {
           setSelectedMovie(state.movie)
           try {
             window.sessionStorage.setItem(selectedMovieKey, JSON.stringify(state.movie))
-          } catch {}
+          } catch { }
           if (state.screen === 'detail') {
             if (state.detailBackScreen === 'lord' || (state.movie && isLordAdultMovie(state.movie))) {
               setScreenState('lord')
@@ -5101,7 +5112,7 @@ function App() {
           } else {
             window.sessionStorage.removeItem(activeScreenKey)
           }
-        } catch {}
+        } catch { }
 
         notifyNativeNavState(historyIndexRef.current > 0, state.screen)
         const savedScroll = lastScrollPositionsRef.current[state.screen]
@@ -5276,7 +5287,7 @@ function App() {
   // Expose hardware back handler for mobile shells (ExpoWebShell / React Native WebView)
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(window as any).__handleLumenBack = () => {
+    ; (window as any).__handleLumenBack = () => {
       if (screen === 'watch') {
         if (watchBackScreen === 'lord' || (selectedMovie && isLordAdultMovie(selectedMovie))) {
           setScreen('lord', { restoreScroll: true })
@@ -5400,7 +5411,7 @@ function App() {
           document.body.appendChild(procVideo)
         }
         procVideo.srcObject = stream
-        void procVideo.play().catch(() => {})
+        void procVideo.play().catch(() => { })
 
         const procCanvas = document.createElement('canvas')
         procCanvas.width = 640
@@ -5473,7 +5484,7 @@ function App() {
           sharingUser: currentUser?.email,
         })
         bc.close()
-      } catch {}
+      } catch { }
 
       return stream
     } catch (err: unknown) {
@@ -5518,7 +5529,7 @@ function App() {
       const bc = new BroadcastChannel('lumen_watch_party_screenshare')
       bc.postMessage({ type: 'SCREEN_SHARE_STOP', partyId: activeParty?.id })
       bc.close()
-    } catch {}
+    } catch { }
   }
 
   const inviteFriend = async (friendEmail: string) => {
@@ -5671,7 +5682,7 @@ function App() {
         ) {
           peerConnectionRef.current
             .setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: party.signal.sdp }))
-            .catch(() => {})
+            .catch(() => { })
         }
       })
     }
@@ -5702,7 +5713,7 @@ function App() {
           setRemoteScreenSharing(true)
         }
       }
-    } catch {}
+    } catch { }
 
     return () => {
       active = false
@@ -6531,7 +6542,7 @@ function App() {
               setCurrentUser(finalUser)
               try {
                 window.localStorage.setItem(currentUserKey, JSON.stringify(finalUser))
-              } catch {}
+              } catch { }
               const targetScreen =
                 loginBackScreen && loginBackScreen !== 'profiles' && loginBackScreen !== 'login'
                   ? loginBackScreen
@@ -6594,6 +6605,7 @@ function App() {
             onMarkWatched={markWatchedMovie}
             onRemoveContinue={removeContinueMovie}
             onRemoveWatchlist={removeWatchlistMovie}
+            onToggleSave={toggleSaved}
           />
         </ErrorBoundary>
       )}
@@ -6617,30 +6629,30 @@ function App() {
 
       {((designMode === 'netflix' && (screen === 'home' || screen === 'drama' || screen === 'livetv' || screen === 'manga' || screen === 'search' || screen === 'library')) ||
         (designMode === 'apple' && screen !== 'search' && screen !== 'login' && screen !== 'profiles' && screen !== 'lord' && screen !== 'watch')) && (
-        <BottomNav
-          active={activeTab}
-          onHome={() => setScreen('home')}
-          onMovies={() => setScreen('movies')}
-          onTvShows={() => setScreen('tv')}
-          onLibrary={() => setScreen('library')}
-          onDrama={() => setScreen('drama')}
-          onLiveTv={() => setScreen('livetv')}
-          onManga={() => setScreen('manga')}
-          onGoLumen={() => {
-            setScreen('home')
-            if (designMode !== 'apple') {
-              toggleDesignMode()
-            }
-          }}
-          onGoAnime={() => {
-            setScreen('home')
-            if (designMode !== 'netflix') {
-              toggleDesignMode()
-            }
-          }}
-          designMode={designMode}
-        />
-      )}
+          <BottomNav
+            active={activeTab}
+            onHome={() => setScreen('home')}
+            onMovies={() => setScreen('movies')}
+            onTvShows={() => setScreen('tv')}
+            onLibrary={() => setScreen('library')}
+            onDrama={() => setScreen('drama')}
+            onLiveTv={() => setScreen('livetv')}
+            onManga={() => setScreen('manga')}
+            onGoLumen={() => {
+              setScreen('home')
+              if (designMode !== 'apple') {
+                toggleDesignMode()
+              }
+            }}
+            onGoAnime={() => {
+              setScreen('home')
+              if (designMode !== 'netflix') {
+                toggleDesignMode()
+              }
+            }}
+            designMode={designMode}
+          />
+        )}
       {screen !== 'detail' && screen !== 'watch' && screen !== 'login' && screen !== 'profiles' && screen !== 'lord' && (
         <DesktopNav
           active={activeTab}
@@ -7332,8 +7344,8 @@ function HomeScreen({
               style={
                 index === activeHeroIndex
                   ? {
-                      '--timer-duration': `${heroAutoAdvanceMs}ms`,
-                    } as CSSProperties
+                    '--timer-duration': `${heroAutoAdvanceMs}ms`,
+                  } as CSSProperties
                   : undefined
               }
               aria-label={`Show ${movie.title}`}
@@ -7748,8 +7760,8 @@ function BrowseScreen({
                 style={
                   index === activeHeroIndex
                     ? {
-                        '--timer-duration': `${heroAutoAdvanceMs}ms`,
-                      } as CSSProperties
+                      '--timer-duration': `${heroAutoAdvanceMs}ms`,
+                    } as CSSProperties
                     : undefined
                 }
                 aria-label={`Show ${movie.title}`}
@@ -8004,14 +8016,14 @@ function DetailScreen({
 
   const isHentaiMovie = Boolean(
     movie.isHentaiOcean ||
-      movie.hentaiSlug ||
-      movie.id.startsWith('hentaiocean-') ||
-      movie.id.startsWith('phub-') ||
-      movie.id.startsWith('jav-') ||
-      movie.label === 'JAV' ||
-      movie.label === 'PHub' ||
-      movie.isJav ||
-      (movie.genres || []).some((g) => g.toLowerCase() === 'hentai'),
+    movie.hentaiSlug ||
+    movie.id.startsWith('hentaiocean-') ||
+    movie.id.startsWith('phub-') ||
+    movie.id.startsWith('jav-') ||
+    movie.label === 'JAV' ||
+    movie.label === 'PHub' ||
+    movie.isJav ||
+    (movie.genres || []).some((g) => g.toLowerCase() === 'hentai'),
   )
 
   useEffect(() => {
@@ -8110,14 +8122,14 @@ function DetailScreen({
     const isAdultMovie = (m: Movie) =>
       Boolean(
         m.isJav ||
-          m.isHentaiOcean ||
-          m.id.startsWith('jav-') ||
-          m.id.startsWith('phub-') ||
-          m.id.startsWith('phub3-') ||
-          m.label === 'JAV' ||
-          m.label === 'PHub' ||
-          m.label === 'PHub 3' ||
-          m.genres.some((g) => g.toLowerCase() === 'hentai'),
+        m.isHentaiOcean ||
+        m.id.startsWith('jav-') ||
+        m.id.startsWith('phub-') ||
+        m.id.startsWith('phub3-') ||
+        m.label === 'JAV' ||
+        m.label === 'PHub' ||
+        m.label === 'PHub 3' ||
+        m.genres.some((g) => g.toLowerCase() === 'hentai'),
       )
 
     const isTargetAdult = isAdultMovie(movie)
@@ -8345,9 +8357,8 @@ function DetailScreen({
         />
 
         <div
-          className={`detail-copy ${
-            isNetflix ? 'netflix-detail-copy' : 'apple-detail-copy'
-          }`}
+          className={`detail-copy ${isNetflix ? 'netflix-detail-copy' : 'apple-detail-copy'
+            }`}
         >
           <h1 className="sr-only">{movie.title}</h1>
           <pre className="logo-title detail-title" aria-hidden="true">{movie.logoTitle}</pre>
@@ -8374,9 +8385,8 @@ function DetailScreen({
           )}
 
           <p
-            className={`synopsis ${
-              isNetflix ? 'netflix-detail-synopsis' : 'apple-detail-synopsis'
-            }`}
+            className={`synopsis ${isNetflix ? 'netflix-detail-synopsis' : 'apple-detail-synopsis'
+              }`}
           >
             {movie.synopsis}
             {!isNetflix && <span className="more-chip">MORE</span>}
@@ -8397,9 +8407,8 @@ function DetailScreen({
           )}
 
           <div
-            className={`detail-actions ${
-              isNetflix ? 'netflix-detail-actions' : 'apple-detail-actions'
-            }`}
+            className={`detail-actions ${isNetflix ? 'netflix-detail-actions' : 'apple-detail-actions'
+              }`}
           >
             {isNetflix ? (
               <>
@@ -8839,7 +8848,7 @@ function SeasonEpisodeSection({
         if (active && match?.tmdbId) {
           setResolvedTmdbId(match.tmdbId)
         }
-      }).catch(() => {})
+      }).catch(() => { })
       return () => {
         active = false
       }
@@ -8966,16 +8975,16 @@ function SeasonEpisodeSection({
     <section className="detail-section season-section">
       <div className="season-header">
         {seasons.length > 1 && (
-        <SeasonDropdown
-          seasons={seasons.map((s) => s.season)}
-          value={selectedSeason}
-          onChange={(newSeason) => {
-            setSelectedSeason(newSeason)
-            setHighlightedEpisode(null)
-            setFindEpisode('')
-          }}
-          labels={seasonLabels}
-        />
+          <SeasonDropdown
+            seasons={seasons.map((s) => s.season)}
+            value={selectedSeason}
+            onChange={(newSeason) => {
+              setSelectedSeason(newSeason)
+              setHighlightedEpisode(null)
+              setFindEpisode('')
+            }}
+            labels={seasonLabels}
+          />
         )}
 
         <form
@@ -9464,9 +9473,8 @@ function CastCrewRail({
 
   return (
     <section
-      className={`detail-section detail-cast-section${
-        netflix ? ' netflix-actors-section' : ''
-      }`}
+      className={`detail-section detail-cast-section${netflix ? ' netflix-actors-section' : ''
+        }`}
     >
       <DetailSectionHeading title={heading} />
       <div className="detail-cast-row">
@@ -9608,10 +9616,10 @@ function WatchScreen({
     !isPhubVideo &&
     Boolean(
       movie.isAnime ||
-        movie.type === 'Anime' ||
-        movie.anilistId ||
-        movie.genres.includes('Anime') ||
-        (movie.genres.includes('Animation') && !movie.tmdbId),
+      movie.type === 'Anime' ||
+      movie.anilistId ||
+      movie.genres.includes('Anime') ||
+      (movie.genres.includes('Animation') && !movie.tmdbId),
     )
 
   const [activeProviderOverride, setActiveProviderOverride] = useState<StreamProvider | null>(null)
@@ -9650,19 +9658,19 @@ function WatchScreen({
             ? 'phubplay'
             : isHentai
               ? 'oceanplay'
-          : isAnimeMovie
-          ? movie.tmdbId
-            ? chosenProvider
-            : animeProviderIds.includes(chosenProvider)
-              ? chosenProvider
-              : (starProvider && animeProviderIds.includes(starProvider))
-                ? starProvider
-                : enabledAnimeFallback
-          : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'vidrift' || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom' || chosenProvider === 'mgeb' || chosenProvider === 'vidcore' || chosenProvider === 'autoembed' || chosenProvider === 'vsembed' || chosenProvider === 'vidsrcbuzz' || chosenProvider === 'embedwave')
-            ? chosenProvider
-            : (starProvider && !animeProviderIds.includes(starProvider))
-              ? starProvider
-              : enabledMainstreamFallback
+              : isAnimeMovie
+                ? movie.tmdbId
+                  ? chosenProvider
+                  : animeProviderIds.includes(chosenProvider)
+                    ? chosenProvider
+                    : (starProvider && animeProviderIds.includes(starProvider))
+                      ? starProvider
+                      : enabledAnimeFallback
+                : (!animeProviderIds.includes(chosenProvider) || chosenProvider === 'vidrift' || chosenProvider === 'filmu' || chosenProvider === 'nhdapi' || chosenProvider === 'rivestream' || chosenProvider === 'cinesrc' || chosenProvider === 'embedapi' || chosenProvider === 'vidphantom' || chosenProvider === 'mgeb' || chosenProvider === 'vidcore' || chosenProvider === 'autoembed' || chosenProvider === 'vsembed' || chosenProvider === 'vidsrcbuzz' || chosenProvider === 'embedwave')
+                  ? chosenProvider
+                  : (starProvider && !animeProviderIds.includes(starProvider))
+                    ? starProvider
+                    : enabledMainstreamFallback
 
   const handleServerSelect = useCallback(
     (providerId: StreamProvider) => {
@@ -9678,9 +9686,9 @@ function WatchScreen({
   const isSeries = isAnimeMovie || isTvShow(movie) || movie.tmdbType === 'tv'
   const hasEpisodes = Boolean(
     isSeries ||
-      (movie.hentaiEpisodes && movie.hentaiEpisodes.length > 0) ||
-      ((movie as any).episodes && (movie as any).episodes.length > 0) ||
-      isTvShow(movie),
+    (movie.hentaiEpisodes && movie.hentaiEpisodes.length > 0) ||
+    ((movie as any).episodes && (movie as any).episodes.length > 0) ||
+    isTvShow(movie),
   )
 
   const [isWatchDownloaded, setIsWatchDownloaded] = useState(false)
@@ -9757,7 +9765,7 @@ function WatchScreen({
         if (active && catalog?.posts && Array.isArray(catalog.posts)) {
           setJavRelated(catalog.posts.map(javToMovieHelper).filter((m) => m.id !== movie.id))
         }
-      } catch {}
+      } catch { }
     }
     void loadJavRelated()
     return () => {
@@ -9804,7 +9812,7 @@ function WatchScreen({
         if (active && Array.isArray(matureMovies) && matureMovies.length > 0) {
           setHentaiRelated(matureMovies.filter((m) => m.id !== movie.id))
         }
-      } catch {}
+      } catch { }
     }
     void loadHentaiRelated()
     return () => {
@@ -9916,7 +9924,7 @@ function WatchScreen({
             )
           }
         }
-      } catch {}
+      } catch { }
     }
     void loadPhubRelated()
     return () => {
@@ -9943,22 +9951,23 @@ function WatchScreen({
     const isAdultMovie = (m: Movie) =>
       Boolean(
         isPhubMovie(m) ||
-          isJavMovie(m) ||
-          isAdultEmbedMovie(m) ||
-          isHentaiMovie(m) ||
-          m.isJav ||
-          m.isHentaiOcean ||
-          m.id.startsWith('jav-') ||
-          m.id.startsWith('ae-') ||
-          m.id.startsWith('phub-') ||
-          m.id.startsWith('phub2-') ||
-          m.id.startsWith('phub3-') ||
-          m.label === 'JAV' ||
-          m.label === 'AdultEmbed' ||
-          m.label === 'PHub' ||
-          m.label === 'PHub 2' ||
-          m.label === 'PHub 3' ||
-          m.genres.some((g) => g.toLowerCase() === 'hentai'),
+        isJavMovie(m) ||
+        isAdultEmbedMovie(m) ||
+        isHentaiMovie(m) ||
+        m.isJav ||
+        m.isHentaiOcean ||
+        m.id.startsWith('jav-') ||
+        m.id.startsWith('ae-') ||
+        m.id.startsWith('phub-') ||
+        m.id.startsWith('phub2-') ||
+        m.id.startsWith('phub3-') ||
+        m.label === 'JAV' ||
+        m.label === 'PHub 1' ||
+        m.label === 'AdultEmbed' ||
+        m.label === 'PHub' ||
+        m.label === 'PHub 2' ||
+        m.label === 'PHub 3' ||
+        m.genres.some((g) => g.toLowerCase() === 'hentai'),
       )
 
     // 1. Hentai (Hentai Ocean) - Rank strictly based on current playing video (franchise, title words, and genre matching)
@@ -10281,7 +10290,7 @@ function WatchScreen({
           isPlayingRef.current = false
           reportProgress(true, true)
         }
-      } catch {}
+      } catch { }
     }
 
     window.addEventListener('message', handleMessage)
@@ -10384,7 +10393,7 @@ function WatchScreen({
         if (active && match?.tmdbId) {
           setResolvedWatchTmdbId(match.tmdbId)
         }
-      }).catch(() => {})
+      }).catch(() => { })
       return () => {
         active = false
       }
@@ -10457,8 +10466,8 @@ function WatchScreen({
   )
   const canGoNextEpisode = Boolean(
     isSeries &&
-      (episode < episodeNumbers.length ||
-        watchSeasons.some((s) => s.season > season)),
+    (episode < episodeNumbers.length ||
+      watchSeasons.some((s) => s.season > season)),
   )
 
   const handlePrevEpisode = () => {
@@ -10547,12 +10556,12 @@ function WatchScreen({
         if (streamIframeRef.current) {
           if (!document.fullscreenElement) {
             if (streamIframeRef.current.requestFullscreen) {
-              streamIframeRef.current.requestFullscreen().catch(() => {})
+              streamIframeRef.current.requestFullscreen().catch(() => { })
             } else if ((streamIframeRef.current as any).webkitRequestFullscreen) {
               (streamIframeRef.current as any).webkitRequestFullscreen()
             }
           } else if (document.exitFullscreen) {
-            document.exitFullscreen().catch(() => {})
+            document.exitFullscreen().catch(() => { })
           }
         }
       }
@@ -10635,7 +10644,7 @@ function WatchScreen({
   const saveMovieComments = (id: string | number, list: WatchComment[]) => {
     try {
       window.localStorage.setItem(movieCommentsStorageKey(id), JSON.stringify(list))
-    } catch {}
+    } catch { }
   }
 
   const formatCommentTime = (timestamp?: number): string => {
@@ -10971,11 +10980,11 @@ function WatchScreen({
             const epDurationStr = movie.isAnime
               ? getEpisodeDuration(movie, number, (animeEp as any)?.duration)
               : getEpisodeDuration(
-                  movie,
-                  number,
-                  tmdbEp?.runtime,
-                  episodeRuntime(movie, season, number),
-                )
+                movie,
+                number,
+                tmdbEp?.runtime,
+                episodeRuntime(movie, season, number),
+              )
             const providerName = currentProvider?.name || 'Filmu'
             const audioText = movie.isAnime ? 'English Sub' : 'English'
 
@@ -11068,7 +11077,7 @@ function WatchScreen({
                   <div className="anime-yt-channel">
                     <span>{providerName}</span>
                     <svg className="anime-yt-verified-icon" viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                     </svg>
                   </div>
 
@@ -11205,7 +11214,7 @@ function WatchScreen({
                 ref={(node) => {
                   if (node && remoteStream && node.srcObject !== remoteStream) {
                     node.srcObject = remoteStream
-                    node.play().catch(() => {})
+                    node.play().catch(() => { })
                   }
                 }}
                 className="screen-share-video"
@@ -11226,9 +11235,9 @@ function WatchScreen({
                   onClick={() => {
                     setIsBigScreen((prev) => !prev)
                     if (!isBigScreen && remoteViewportRef.current?.requestFullscreen) {
-                      remoteViewportRef.current.requestFullscreen().catch(() => {})
+                      remoteViewportRef.current.requestFullscreen().catch(() => { })
                     } else if (document.fullscreenElement && document.exitFullscreen) {
-                      document.exitFullscreen().catch(() => {})
+                      document.exitFullscreen().catch(() => { })
                     }
                   }}
                   title={isBigScreen ? 'Exit Big Screen Mode' : 'Enter Big Screen Mode'}
@@ -11258,9 +11267,9 @@ function WatchScreen({
                   onClick={() => {
                     setIsBigScreen((prev) => !prev)
                     if (!isBigScreen && remoteViewportRef.current?.requestFullscreen) {
-                      remoteViewportRef.current.requestFullscreen().catch(() => {})
+                      remoteViewportRef.current.requestFullscreen().catch(() => { })
                     } else if (document.fullscreenElement && document.exitFullscreen) {
-                      document.exitFullscreen().catch(() => {})
+                      document.exitFullscreen().catch(() => { })
                     }
                   }}
                   title={isBigScreen ? 'Exit Big Screen Mode' : 'Enter Big Screen Mode'}
@@ -11299,7 +11308,7 @@ function WatchScreen({
               durationRef.current = Math.floor(duration)
             }
           }}
-          onError={() => {}}
+          onError={() => { }}
         />
       ) : streamUrl && !opensExternally ? (
         <iframe
@@ -11319,11 +11328,11 @@ function WatchScreen({
           // sent with no referer for privacy.
           referrerPolicy={
             activeProviderId === 'megabuzz' ||
-            activeProviderId === 'megavid' ||
-            activeProviderId === 'phubplay' ||
-            activeProviderId === 'upload18' ||
-            activeProviderId === 'apijav' ||
-            activeProviderId === 'eporner'
+              activeProviderId === 'megavid' ||
+              activeProviderId === 'phubplay' ||
+              activeProviderId === 'upload18' ||
+              activeProviderId === 'apijav' ||
+              activeProviderId === 'eporner'
               ? 'origin'
               : 'no-referrer'
           }
@@ -11571,15 +11580,15 @@ function WatchScreen({
                             : isHentai
                               ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
                               : streamProviderOptions.filter((provider) => {
-                                  if (
-                                    provider.id === 'oceanplay' ||
-                                    provider.id === 'apijav' ||
-                                    provider.id === 'phubplay' ||
-                                    provider.id === 'upload18' ||
-                                    provider.id === 'eporner' ||
-                                    provider.id === 'adultembed'
-                                  )
-                                    return false
+                                if (
+                                  provider.id === 'oceanplay' ||
+                                  provider.id === 'apijav' ||
+                                  provider.id === 'phubplay' ||
+                                  provider.id === 'upload18' ||
+                                  provider.id === 'eporner' ||
+                                  provider.id === 'adultembed'
+                                )
+                                  return false
                                 if (!isAdmin && disabledList.includes(provider.id)) {
                                   return false
                                 }
@@ -11716,15 +11725,15 @@ function WatchScreen({
                             : isHentai
                               ? streamProviderOptions.filter((provider) => provider.id === 'oceanplay')
                               : streamProviderOptions.filter((provider) => {
-                                  if (
-                                    provider.id === 'oceanplay' ||
-                                    provider.id === 'apijav' ||
-                                    provider.id === 'phubplay' ||
-                                    provider.id === 'upload18' ||
-                                    provider.id === 'eporner' ||
-                                    provider.id === 'adultembed'
-                                  )
-                                    return false
+                                if (
+                                  provider.id === 'oceanplay' ||
+                                  provider.id === 'apijav' ||
+                                  provider.id === 'phubplay' ||
+                                  provider.id === 'upload18' ||
+                                  provider.id === 'eporner' ||
+                                  provider.id === 'adultembed'
+                                )
+                                  return false
                                 if (!isAdmin && disabledList.includes(provider.id)) {
                                   return false
                                 }
@@ -12183,14 +12192,13 @@ function SearchScreen({
               {categoryTiles.map((category, index) => (
                 <button
                   key={category.label}
-                  className={`category-card category-${(index % 12) + 1}${
-                    category.image ? ' has-art' : ''
-                  }`}
+                  className={`category-card category-${(index % 12) + 1}${category.image ? ' has-art' : ''
+                    }`}
                   style={
                     category.image
                       ? ({
-                          '--category-art': `url(${category.image})`,
-                        } as CSSProperties)
+                        '--category-art': `url(${category.image})`,
+                      } as CSSProperties)
                       : undefined
                   }
                   type="button"
@@ -12679,94 +12687,94 @@ function LoginScreen({
             <p className="account-subtitle">{tabMeta.subtitle}</p>
 
             {accountTab === 'overview' && (
-            <>
-            {orderedProfiles.length > 0 && (
-              <div className="account-profiles-card">
-                {orderedProfiles.map((profile) => (
-                  <button
-                    key={profile.name}
-                    type="button"
-                    className="account-profile-tile"
-                    title={`Switch to ${profile.name}`}
-                    onClick={() => (onSelectProfile ? onSelectProfile(profile.name) : onSwitchProfile())}
-                  >
-                    {profile.avatarColor === 'kids' ? (
-                      <div className="profile-avatar avatar-kids account-profile-avatar">
-                        <div className="kids-bg">
-                          <div className="stripe red"></div>
-                          <div className="stripe orange"></div>
-                          <div className="stripe yellow"></div>
-                          <div className="stripe green"></div>
-                          <div className="stripe blue"></div>
-                        </div>
-                        <span className="kids-text">kids</span>
-                      </div>
-                    ) : (
-                      <div
-                        className="profile-avatar account-profile-avatar"
-                        style={{ overflow: 'hidden' }}
+              <>
+                {orderedProfiles.length > 0 && (
+                  <div className="account-profiles-card">
+                    {orderedProfiles.map((profile) => (
+                      <button
+                        key={profile.name}
+                        type="button"
+                        className="account-profile-tile"
+                        title={`Switch to ${profile.name}`}
+                        onClick={() => (onSelectProfile ? onSelectProfile(profile.name) : onSwitchProfile())}
                       >
-                        <img
-                          src={getAvatarSrc(profile.avatarColor)}
-                          alt={profile.name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        />
-                      </div>
-                    )}
-                    <span className="account-profile-name">{profile.name}</span>
+                        {profile.avatarColor === 'kids' ? (
+                          <div className="profile-avatar avatar-kids account-profile-avatar">
+                            <div className="kids-bg">
+                              <div className="stripe red"></div>
+                              <div className="stripe orange"></div>
+                              <div className="stripe yellow"></div>
+                              <div className="stripe green"></div>
+                              <div className="stripe blue"></div>
+                            </div>
+                            <span className="kids-text">kids</span>
+                          </div>
+                        ) : (
+                          <div
+                            className="profile-avatar account-profile-avatar"
+                            style={{ overflow: 'hidden' }}
+                          >
+                            <img
+                              src={getAvatarSrc(profile.avatarColor)}
+                              alt={profile.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            />
+                          </div>
+                        )}
+                        <span className="account-profile-name">{profile.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="account-card">
+                  <span className="account-badge">Member since 2025</span>
+                  <h2 className="account-plan">{planName}</h2>
+                  <p className="account-plan-sub">Next payment: 4 August 2026</p>
+                  <div className="account-plan-email">
+                    <span className="account-email-avatar">
+                      {renderProfileAvatarMini(currentUser, profiles)}
+                    </span>
+                    {currentUser?.email || ''}
+                  </div>
+
+                  <button
+                    className="account-row account-card-row"
+                    type="button"
+                    onClick={onSwitchProfile}
+                  >
+                    <span className="account-row-label">Manage membership</span>
+                    <ChevronRight size={18} />
                   </button>
-                ))}
-              </div>
-            )}
+                </div>
 
-            <div className="account-card">
-              <span className="account-badge">Member since 2025</span>
-              <h2 className="account-plan">{planName}</h2>
-              <p className="account-plan-sub">Next payment: 4 August 2026</p>
-              <div className="account-plan-email">
-                <span className="account-email-avatar">
-                  {renderProfileAvatarMini(currentUser, profiles)}
-                </span>
-                {currentUser?.email || ''}
-              </div>
-
-              <button
-                className="account-row account-card-row"
-                type="button"
-                onClick={onSwitchProfile}
-              >
-                <span className="account-row-label">Manage membership</span>
-                <ChevronRight size={18} />
-              </button>
-            </div>
-
-            <p className="account-links-title">At a glance</p>
-            <div className="account-stats">
-              <div className="account-stat">
-                <span className="account-stat-value">{profiles.length}</span>
-                <span className="account-stat-label">Profiles</span>
-              </div>
-              <div className="account-stat">
-                <span className="account-stat-value">
-                  {membershipPlans.find((plan) => plan.id === currentPlanId)?.quality ?? '4K'}
-                </span>
-                <span className="account-stat-label">Video quality</span>
-              </div>
-              <div className="account-stat">
-                <span className="account-stat-value">
-                  {(membershipPlans.find((plan) => plan.id === currentPlanId)?.screens ?? '4 screens').replace(
-                    ' screens',
-                    '',
-                  ).replace(' screen', '')}
-                </span>
-                <span className="account-stat-label">Max screens</span>
-              </div>
-              <div className="account-stat">
-                <span className="account-stat-value">2025</span>
-                <span className="account-stat-label">Member since</span>
-              </div>
-            </div>
-            </>
+                <p className="account-links-title">At a glance</p>
+                <div className="account-stats">
+                  <div className="account-stat">
+                    <span className="account-stat-value">{profiles.length}</span>
+                    <span className="account-stat-label">Profiles</span>
+                  </div>
+                  <div className="account-stat">
+                    <span className="account-stat-value">
+                      {membershipPlans.find((plan) => plan.id === currentPlanId)?.quality ?? '4K'}
+                    </span>
+                    <span className="account-stat-label">Video quality</span>
+                  </div>
+                  <div className="account-stat">
+                    <span className="account-stat-value">
+                      {(membershipPlans.find((plan) => plan.id === currentPlanId)?.screens ?? '4 screens').replace(
+                        ' screens',
+                        '',
+                      ).replace(' screen', '')}
+                    </span>
+                    <span className="account-stat-label">Max screens</span>
+                  </div>
+                  <div className="account-stat">
+                    <span className="account-stat-value">2025</span>
+                    <span className="account-stat-label">Member since</span>
+                  </div>
+                </div>
+              </>
             )}
 
             {accountTab === 'membership' && (
@@ -13487,23 +13495,23 @@ function LoginScreen({
 
           <form onSubmit={handleFormSubmit} className="login-form">
             <div className="input-group">
-              <input 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                placeholder="Email Address" 
-                disabled={loading} 
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email Address"
+                disabled={loading}
                 required
               />
             </div>
 
             <div className="input-group password-input-group">
-              <input 
-                type={showPassword ? 'text' : 'password'} 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                placeholder="Password" 
-                disabled={loading} 
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                disabled={loading}
                 required
               />
               <button
@@ -13607,13 +13615,13 @@ export function ProfileAvatarMini({
 
   if (avatarColor === 'kids') {
     return (
-      <div 
-        className="profile-avatar avatar-kids mini-avatar" 
-        style={{ 
-          width: '100%', 
-          height: '100%', 
-          borderRadius: '50%', 
-          overflow: 'hidden', 
+      <div
+        className="profile-avatar avatar-kids mini-avatar"
+        style={{
+          width: '100%',
+          height: '100%',
+          borderRadius: '50%',
+          overflow: 'hidden',
           position: 'relative',
           display: 'block'
         }}
@@ -13631,19 +13639,19 @@ export function ProfileAvatarMini({
   }
 
   return (
-    <div 
-      className="profile-avatar mini-avatar" 
-      style={{ 
-        width: '100%', 
-        height: '100%', 
-        borderRadius: '50%', 
+    <div
+      className="profile-avatar mini-avatar"
+      style={{
+        width: '100%',
+        height: '100%',
+        borderRadius: '50%',
         overflow: 'hidden',
         display: 'block'
       }}
     >
-      <img 
-        src={getAvatarSrc(avatarColor)} 
-        alt={currentUser?.name || 'User'} 
+      <img
+        src={getAvatarSrc(avatarColor)}
+        alt={currentUser?.name || 'User'}
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       />
     </div>
@@ -13754,10 +13762,10 @@ function ProfilesScreen({
       return (
         <section className="screen choose-icon-screen">
           <header className="choose-icon-header">
-            <button 
-              className="round-nav" 
-              type="button" 
-              onClick={() => setIsChoosingIcon(false)} 
+            <button
+              className="round-nav"
+              type="button"
+              onClick={() => setIsChoosingIcon(false)}
               title="Back"
             >
               <ChevronLeft />
@@ -13781,9 +13789,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={getAvatarSrc(color)} 
-                      alt={color} 
+                    <img
+                      src={getAvatarSrc(color)}
+                      alt={color}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -13817,9 +13825,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`elite/${filename}`] ?? `/src/assets/elite/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`elite/${filename}`] ?? `/src/assets/elite/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -13855,9 +13863,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`stranger things/${filename}`] ?? `/src/assets/stranger things/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`stranger things/${filename}`] ?? `/src/assets/stranger things/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -13896,9 +13904,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`squide game/${filename}`] ?? `/src/assets/squide game/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`squide game/${filename}`] ?? `/src/assets/squide game/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -13931,9 +13939,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`money heist/${filename}`] ?? `/src/assets/money heist/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`money heist/${filename}`] ?? `/src/assets/money heist/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -13966,9 +13974,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`dark/${filename}`] ?? `/src/assets/dark/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`dark/${filename}`] ?? `/src/assets/dark/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -13983,9 +13991,9 @@ function ProfilesScreen({
     return (
       <section className="screen add-profile-screen edit-profile-screen">
         <header className="add-profile-header">
-          <button 
-            className="header-text-btn" 
-            type="button" 
+          <button
+            className="header-text-btn"
+            type="button"
             onClick={() => {
               setEditingProfile(null)
               setError('')
@@ -13994,9 +14002,9 @@ function ProfilesScreen({
             Cancel
           </button>
           <h1>Edit Profile</h1>
-          <button 
-            className="header-text-btn save-btn" 
-            type="button" 
+          <button
+            className="header-text-btn save-btn"
+            type="button"
             onClick={handleSaveEdit}
             disabled={!editName.trim()}
           >
@@ -14019,16 +14027,16 @@ function ProfilesScreen({
               </div>
             ) : (
               <div className="profile-avatar large-avatar" style={{ overflow: 'hidden' }}>
-                <img 
-                  src={getAvatarSrc(selectedAvatarColor)} 
-                  alt="Selected Avatar" 
+                <img
+                  src={getAvatarSrc(selectedAvatarColor)}
+                  alt="Selected Avatar"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 />
               </div>
             )}
-            <button 
-              className="avatar-edit-pencil-btn" 
-              type="button" 
+            <button
+              className="avatar-edit-pencil-btn"
+              type="button"
               onClick={() => setIsChoosingIcon(true)}
               title="Change Icon"
             >
@@ -14050,7 +14058,7 @@ function ProfilesScreen({
             </div>
 
             <div className="children-toggle-section">
-              <button 
+              <button
                 type="button"
                 className={`ios-toggle-switch ${editIsKids ? 'active' : ''}`}
                 onClick={() => setEditIsKids(!editIsKids)}
@@ -14082,10 +14090,10 @@ function ProfilesScreen({
       return (
         <section className="screen choose-icon-screen">
           <header className="choose-icon-header">
-            <button 
-              className="round-nav" 
-              type="button" 
-              onClick={() => setIsChoosingIcon(false)} 
+            <button
+              className="round-nav"
+              type="button"
+              onClick={() => setIsChoosingIcon(false)}
               title="Back"
             >
               <ChevronLeft />
@@ -14109,9 +14117,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={getAvatarSrc(color)} 
-                      alt={color} 
+                    <img
+                      src={getAvatarSrc(color)}
+                      alt={color}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -14145,9 +14153,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`elite/${filename}`] ?? `/src/assets/elite/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`elite/${filename}`] ?? `/src/assets/elite/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -14183,9 +14191,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`stranger things/${filename}`] ?? `/src/assets/stranger things/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`stranger things/${filename}`] ?? `/src/assets/stranger things/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -14224,9 +14232,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`squide game/${filename}`] ?? `/src/assets/squide game/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`squide game/${filename}`] ?? `/src/assets/squide game/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -14259,9 +14267,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`money heist/${filename}`] ?? `/src/assets/money heist/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`money heist/${filename}`] ?? `/src/assets/money heist/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -14294,9 +14302,9 @@ function ProfilesScreen({
                     }}
                     style={{ overflow: 'hidden' }}
                   >
-                    <img 
-                      src={avatarAssets[`dark/${filename}`] ?? `/src/assets/dark/${filename}`} 
-                      alt={filename} 
+                    <img
+                      src={avatarAssets[`dark/${filename}`] ?? `/src/assets/dark/${filename}`}
+                      alt={filename}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   </button>
@@ -14311,9 +14319,9 @@ function ProfilesScreen({
     return (
       <section className="screen add-profile-screen">
         <header className="add-profile-header">
-          <button 
-            className="header-text-btn" 
-            type="button" 
+          <button
+            className="header-text-btn"
+            type="button"
             onClick={() => {
               setIsAdding(false)
               setNewName('')
@@ -14325,9 +14333,9 @@ function ProfilesScreen({
             Cancel
           </button>
           <h1>Add Profile</h1>
-          <button 
-            className="header-text-btn save-btn" 
-            type="button" 
+          <button
+            className="header-text-btn save-btn"
+            type="button"
             onClick={handleCreate}
             disabled={!newName.trim()}
           >
@@ -14350,16 +14358,16 @@ function ProfilesScreen({
               </div>
             ) : (
               <div className="profile-avatar large-avatar" style={{ overflow: 'hidden' }}>
-                <img 
-                  src={getAvatarSrc(selectedAvatarColor)} 
-                  alt="Selected Avatar" 
+                <img
+                  src={getAvatarSrc(selectedAvatarColor)}
+                  alt="Selected Avatar"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 />
               </div>
             )}
-            <button 
-              className="avatar-edit-pencil-btn" 
-              type="button" 
+            <button
+              className="avatar-edit-pencil-btn"
+              type="button"
               onClick={() => setIsChoosingIcon(true)}
               title="Change Icon"
             >
@@ -14381,7 +14389,7 @@ function ProfilesScreen({
             </div>
 
             <div className="children-toggle-section">
-              <button 
+              <button
                 type="button"
                 className={`ios-toggle-switch ${isKids ? 'active' : ''}`}
                 onClick={() => setIsKids(!isKids)}
@@ -14425,10 +14433,10 @@ function ProfilesScreen({
           <h1 className="profiles-title">{isManaging ? 'Manage Profiles' : "Who's watching?"}</h1>
           <div className="profiles-grid">
             {displayProfiles.map((profile) => (
-              <button 
+              <button
                 key={profile.name}
-                className="profile-item" 
-                type="button" 
+                className="profile-item"
+                type="button"
                 onClick={() => {
                   if (isManaging) {
                     setEditingProfile(profile)
@@ -14453,17 +14461,17 @@ function ProfilesScreen({
                       <span className="kids-text">kids</span>
                     </div>
                   ) : (
-                    <div 
-                      className={`profile-avatar avatar-${profile.avatarColor || 'red'}`} 
+                    <div
+                      className={`profile-avatar avatar-${profile.avatarColor || 'red'}`}
                       style={{ overflow: 'hidden', width: '100%', height: '100%', position: 'relative' }}
                     >
                       <span className="avatar-fallback-initials">{getInitials(profile.name)}</span>
-                      <img 
-                        src={getAvatarSrc(profile.avatarColor)} 
-                        alt={profile.name || 'Profile'} 
+                      <img
+                        src={getAvatarSrc(profile.avatarColor)}
+                        alt={profile.name || 'Profile'}
                         style={{ position: 'relative', zIndex: 2, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                         onError={(e) => {
-                          ;(e.currentTarget as HTMLElement).style.display = 'none'
+                          ; (e.currentTarget as HTMLElement).style.display = 'none'
                         }}
                       />
                     </div>
@@ -16710,10 +16718,11 @@ type LordScreenProps = {
   onMarkWatched?: (movie: Movie) => void
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
+  onToggleSave?: (movie: Movie) => void
 }
 
 // Standalone hero + rails layout for the unlocked "Lord" profile.
-function LordScreen({
+export function LordScreen({
   movies = [],
   rails = [],
   loading = false,
@@ -16748,6 +16757,7 @@ function LordScreen({
   onMarkWatched,
   onRemoveContinue,
   onRemoveWatchlist,
+  onToggleSave,
 }: LordScreenProps) {
   const rotatedMovies = useMemo(() => {
     return rotateByDailySeed(movies || [], 1)
@@ -16856,7 +16866,7 @@ function LordScreen({
         setPhubSeed(remoteSeed)
         try {
           localStorage.setItem('lumen_phub_seed', String(remoteSeed))
-        } catch {}
+        } catch { }
       }
     }
     void syncSeed()
@@ -16885,7 +16895,7 @@ function LordScreen({
       setPhubSeed(finalSeed)
       try {
         localStorage.setItem('lumen_phub_seed', String(finalSeed))
-      } catch {}
+      } catch { }
       setRefreshNotice('PHub hero & home section videos refreshed for all users!')
       setTimeout(() => setRefreshNotice(null), 4000)
     } finally {
@@ -16918,8 +16928,11 @@ function LordScreen({
     onPlay(movie)
   }
 
+  const isYtPhubTab =
+    activeLordTab === 'adultembed' || activeLordTab === 'phub2' || activeLordTab === 'phub3'
+
   return (
-    <section className="screen lord-screen">
+    <section className={`screen lord-screen${isYtPhubTab ? ' is-yt-phub' : ''}`}>
       <header className="lord-topbar">
         <div className="lord-topbar-left">
           <button
@@ -16958,6 +16971,16 @@ function LordScreen({
               <span>Hentai</span>
             </button>
             <button
+              className={`lord-tab-btn ${activeLordTab === 'adultembed' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => setActiveLordTab('adultembed')}
+              onMouseEnter={() => prefetchAdultEmbedCatalog()}
+              onFocus={() => prefetchAdultEmbedCatalog()}
+            >
+              <Flame size={15} />
+              <span>PHub 1</span>
+            </button>
+            <button
               className={`lord-tab-btn ${activeLordTab === 'phub2' ? 'is-active' : ''}`}
               type="button"
               onClick={() => setActiveLordTab('phub2')}
@@ -16983,16 +17006,6 @@ function LordScreen({
               <Video size={15} />
               <span>JAV</span>
             </button>
-            <button
-              className={`lord-tab-btn ${activeLordTab === 'adultembed' ? 'is-active' : ''}`}
-              type="button"
-              onClick={() => setActiveLordTab('adultembed')}
-              onMouseEnter={() => prefetchAdultEmbedCatalog()}
-              onFocus={() => prefetchAdultEmbedCatalog()}
-            >
-              <Flame size={15} />
-              <span>AdultEmbed</span>
-            </button>
           </div>
 
           <button
@@ -17007,7 +17020,7 @@ function LordScreen({
                     : activeLordTab === 'jav'
                       ? 'JAV'
                       : activeLordTab === 'adultembed'
-                        ? 'AdultEmbed'
+                        ? 'PHub 1'
                         : 'Hentai'
               if (
                 window.confirm(
@@ -17065,7 +17078,7 @@ function LordScreen({
                       : activeLordTab === 'jav'
                         ? 'Search JAV codes, titles…'
                         : activeLordTab === 'adultembed'
-                          ? 'Search AdultEmbed scenes…'
+                          ? 'Search PHub 1 videos…'
                           : 'Titles, genres…'
                 }
                 value={currentQuery}
@@ -17104,7 +17117,7 @@ function LordScreen({
                           alt={movie.title || 'Result poster'}
                           loading="lazy"
                           onError={(event) => {
-                            ;(event.target as HTMLImageElement).style.visibility = 'hidden'
+                            ; (event.target as HTMLImageElement).style.visibility = 'hidden'
                           }}
                         />
                         <span className="lord-search-result-text">
@@ -17148,7 +17161,7 @@ function LordScreen({
         )}
       </div>
 
-      {/* Keep AdultEmbed tab alive once visited so tab switching is instant with 0ms delay */}
+      {/* Keep PHub 1 tab alive once visited so tab switching is instant with 0ms delay */}
       <div style={{ display: activeLordTab === 'adultembed' ? 'block' : 'none' }}>
         {(visitedAdultEmbed || activeLordTab === 'adultembed') && (
           <LordAdultEmbedSection
@@ -17162,6 +17175,7 @@ function LordScreen({
             onMarkWatched={onMarkWatched}
             onRemoveContinue={onRemoveContinue}
             onRemoveWatchlist={onRemoveWatchlist}
+            onToggleSave={onToggleSave}
           />
         )}
       </div>
@@ -17183,6 +17197,7 @@ function LordScreen({
           onMarkWatched={onMarkWatched}
           onRemoveContinue={onRemoveContinue}
           onRemoveWatchlist={onRemoveWatchlist}
+          onToggleSave={onToggleSave}
         />
       ) : activeLordTab === 'phub3' ? (
         <LordPhubSection
@@ -17201,6 +17216,7 @@ function LordScreen({
           onMarkWatched={onMarkWatched}
           onRemoveContinue={onRemoveContinue}
           onRemoveWatchlist={onRemoveWatchlist}
+          onToggleSave={onToggleSave}
         />
       ) : activeLordTab !== 'collection' ? null : loading ? (
         <div className="lord-empty">
@@ -17302,6 +17318,14 @@ function LordScreen({
             <span>Hentai</span>
           </button>
           <button
+            className={`lord-mobile-nav-item${activeLordTab === 'adultembed' ? ' is-active' : ''}`}
+            type="button"
+            onClick={() => setActiveLordTab('adultembed')}
+          >
+            <Flame size={16} />
+            <span>PHub 1</span>
+          </button>
+          <button
             className={`lord-mobile-nav-item${activeLordTab === 'phub2' ? ' is-active' : ''}`}
             type="button"
             onClick={() => setActiveLordTab('phub2')}
@@ -17324,14 +17348,6 @@ function LordScreen({
           >
             <Video size={16} />
             <span>JAV</span>
-          </button>
-          <button
-            className={`lord-mobile-nav-item${activeLordTab === 'adultembed' ? ' is-active' : ''}`}
-            type="button"
-            onClick={() => setActiveLordTab('adultembed')}
-          >
-            <Flame size={16} />
-            <span>AdultEmbed</span>
           </button>
         </div>
       </div>
@@ -17385,7 +17401,7 @@ function LordRailRow({
                   alt={movie.title}
                   loading="lazy"
                   onError={(event) => {
-                    ;(event.target as HTMLImageElement).style.visibility = 'hidden'
+                    ; (event.target as HTMLImageElement).style.visibility = 'hidden'
                   }}
                 />
               </span>
@@ -17763,6 +17779,7 @@ const PHUB2_CATEGORIES: { name: string; slug: string }[] = [
 
 const PHUB3_CATEGORIES: { name: string; slug: string }[] = [
   { name: 'All', slug: 'all' },
+  { name: 'Indian', slug: 'indian' },
   { name: 'Teen', slug: 'teen' },
   { name: 'Amateur', slug: 'amateur' },
   { name: 'Anal', slug: 'anal' },
@@ -18123,6 +18140,395 @@ const INITIAL_XVID_VIDEOS: PornApiMovieItem[] = INITIAL_HANIME_VIDEOS.map((norm)
     : undefined,
 }))
 
+interface YtPhubCardItem {
+  key: string
+  movie: Movie
+  title: string
+  thumbnail: string
+  fallbackThumbnail: string
+  duration?: string
+  channelName: string
+  verified?: boolean
+  views?: number
+  metaDetail?: string
+  progress?: number
+}
+
+export function formatYtCompactViews(views?: number): string {
+  if (!views || !Number.isFinite(views) || views <= 0) return ''
+  if (views >= 1_000_000) {
+    return `${(views / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  }
+  if (views >= 1_000) {
+    return views >= 100_000
+      ? `${Math.round(views / 1_000)}K`
+      : `${(views / 1_000).toFixed(1).replace(/\.0$/, '')}K`
+  }
+  return `${Math.round(views)}`
+}
+
+export function formatYtRelativeTime(dateInput?: string): string {
+  if (!dateInput) return ''
+  const parsed = Date.parse(dateInput.includes(' ') && !dateInput.includes('T') ? dateInput.replace(' ', 'T') : dateInput)
+  if (!Number.isFinite(parsed)) return ''
+  const diffSec = Math.max(0, Math.floor((Date.now() - parsed) / 1000))
+  if (diffSec < 3600) return `${Math.max(1, Math.floor(diffSec / 60))}m ago`
+  if (diffSec < 86_400) return `${Math.floor(diffSec / 3600)} hr ago`
+  if (diffSec < 86_400 * 14) return `${Math.floor(diffSec / 86_400)}d ago`
+  if (diffSec < 86_400 * 30) return `${Math.floor(diffSec / (86_400 * 7))}w ago`
+  if (diffSec < 86_400 * 365) return `${Math.floor(diffSec / (86_400 * 30))}mo ago`
+  return `${Math.floor(diffSec / (86_400 * 365))}y ago`
+}
+
+function YtCategoryChipsBar({
+  chips,
+  onSelect,
+  ariaLabel,
+  filterOpen = false,
+  hasActiveSubFilter = false,
+  onToggleFilters,
+  children,
+}: {
+  chips: { id: string; label: string; active: boolean }[]
+  onSelect: (id: string) => void
+  ariaLabel: string
+  filterOpen?: boolean
+  hasActiveSubFilter?: boolean
+  onToggleFilters?: () => void
+  children?: React.ReactNode
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const syncScrollState = useCallback(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 8)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8)
+  }, [])
+
+  useEffect(() => {
+    syncScrollState()
+    const el = scrollerRef.current
+    if (!el) return
+    const onResize = () => syncScrollState()
+    window.addEventListener('resize', onResize)
+    let ro: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(syncScrollState)
+      ro.observe(el)
+    }
+    return () => {
+      window.removeEventListener('resize', onResize)
+      ro?.disconnect()
+    }
+  }, [chips, syncScrollState])
+
+  const scrollChips = (delta: number) => {
+    scrollerRef.current?.scrollBy({ left: delta, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="yt-chips-header">
+      <div className="yt-chips-row">
+        <div className="yt-chips-track">
+          {canScrollLeft && (
+            <div className="yt-chips-arrow-wrap is-left">
+              <button
+                type="button"
+                className="yt-chips-arrow-btn"
+                onClick={() => scrollChips(-260)}
+                aria-label="Scroll categories left"
+              >
+                <ChevronLeft size={18} />
+              </button>
+            </div>
+          )}
+
+          <div
+            ref={scrollerRef}
+            className="yt-chips-scroller"
+            role="tablist"
+            aria-label={ariaLabel}
+            onScroll={syncScrollState}
+          >
+            {chips.map((chip) => (
+              <button
+                key={chip.id || 'all'}
+                type="button"
+                role="tab"
+                aria-selected={chip.active}
+                className={`yt-chip${chip.active ? ' is-active' : ''}`}
+                onClick={() => onSelect(chip.id)}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
+          {canScrollRight && (
+            <div className="yt-chips-arrow-wrap is-right">
+              <button
+                type="button"
+                className="yt-chips-arrow-btn"
+                onClick={() => scrollChips(260)}
+                aria-label="Scroll categories right"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {onToggleFilters && (
+          <button
+            type="button"
+            className={`yt-chip yt-chip-filter-toggle${filterOpen || hasActiveSubFilter ? ' is-active-subtle' : ''}`}
+            onClick={onToggleFilters}
+            aria-expanded={filterOpen}
+            title="Sort & Filters"
+          >
+            <SlidersHorizontal size={14} />
+            <span>Filters</span>
+          </button>
+        )}
+      </div>
+
+      {filterOpen && children && <div className="yt-filter-drawer">{children}</div>}
+    </div>
+  )
+}
+
+function YtPhubVideoGrid({
+  items,
+  savedIds,
+  onPlay,
+  onToggleSave,
+}: {
+  items: YtPhubCardItem[]
+  savedIds?: Set<string>
+  onPlay: (movie: Movie) => void
+  onToggleSave?: (movie: Movie) => void
+}) {
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!openMenuKey) return
+    const handleOutside = () => setOpenMenuKey(null)
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenuKey(null)
+    }
+    window.addEventListener('click', handleOutside)
+    window.addEventListener('keydown', handleKey)
+    return () => {
+      window.removeEventListener('click', handleOutside)
+      window.removeEventListener('keydown', handleKey)
+    }
+  }, [openMenuKey])
+
+  return (
+    <div className="yt-home-grid">
+      {items.map((item) => {
+        const compactViews = formatYtCompactViews(item.views)
+        const isSaved = Boolean(savedIds?.has(item.movie.id))
+        const isMenuOpen = openMenuKey === item.key
+        const initialChar = (item.channelName || 'P').trim().charAt(0).toUpperCase() || 'P'
+
+        return (
+          <article
+            key={item.key}
+            className="yt-home-card"
+            onClick={() => onPlay(item.movie)}
+          >
+            <div className="yt-home-thumb-wrap">
+              <img
+                src={item.thumbnail || item.fallbackThumbnail}
+                referrerPolicy="no-referrer"
+                alt={item.title}
+                loading="lazy"
+                onError={(event) => {
+                  const target = event.target as HTMLImageElement
+                  target.onerror = null
+                  if (item.fallbackThumbnail && target.src !== item.fallbackThumbnail) {
+                    target.src = item.fallbackThumbnail
+                  }
+                }}
+              />
+              {item.duration && <span className="yt-home-duration">{item.duration}</span>}
+              {typeof item.progress === 'number' && item.progress > 0 && (
+                <div className="yt-home-progress-track">
+                  <div
+                    className="yt-home-progress-fill"
+                    style={{ width: `${Math.min(100, Math.max(4, item.progress))}%` }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="yt-home-details">
+              <div className="yt-home-avatar" aria-hidden="true">
+                {item.thumbnail ? (
+                  <img
+                    src={item.thumbnail}
+                    referrerPolicy="no-referrer"
+                    alt=""
+                    loading="lazy"
+                    onError={(event) => {
+                      const target = event.target as HTMLImageElement
+                      target.style.display = 'none'
+                      const fallbackEl = target.nextElementSibling as HTMLElement | null
+                      if (fallbackEl) fallbackEl.style.display = 'flex'
+                    }}
+                  />
+                ) : null}
+                <span
+                  className="yt-home-avatar-fallback"
+                  style={{ display: item.thumbnail ? 'none' : 'flex' }}
+                >
+                  {initialChar}
+                </span>
+              </div>
+
+              <div className="yt-home-meta-col">
+                <h3 className="yt-home-title" title={item.title}>
+                  {item.title}
+                </h3>
+                <div className="yt-home-channel">
+                  <span>{item.channelName}</span>
+                  {item.verified !== false && (
+                    <svg
+                      className="yt-home-verified-icon"
+                      viewBox="0 0 24 24"
+                      width="14"
+                      height="14"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                    </svg>
+                  )}
+                </div>
+                {(compactViews || item.metaDetail) && (
+                  <div className="yt-home-stats">
+                    {compactViews && (
+                      <span className="yt-home-views">
+                        <span className="yt-home-stat-play" aria-hidden="true">▷</span>
+                        {compactViews}
+                      </span>
+                    )}
+                    {item.metaDetail && <span className="yt-home-age">{item.metaDetail}</span>}
+                  </div>
+                )}
+              </div>
+
+              <div className="yt-home-more-wrap">
+                <button
+                  type="button"
+                  className="yt-home-more-btn"
+                  aria-label="Video actions"
+                  aria-expanded={isMenuOpen}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setOpenMenuKey((prev) => (prev === item.key ? null : item.key))
+                  }}
+                >
+                  <MoreVertical size={18} />
+                </button>
+
+                {isMenuOpen && (
+                  <div
+                    className="yt-home-more-menu"
+                    role="menu"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="yt-home-more-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setOpenMenuKey(null)
+                        onPlay(item.movie)
+                      }}
+                    >
+                      <Play size={15} />
+                      <span>Play video</span>
+                    </button>
+                    {onToggleSave && (
+                      <button
+                        type="button"
+                        className="yt-home-more-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setOpenMenuKey(null)
+                          onToggleSave(item.movie)
+                        }}
+                      >
+                        <Bookmark size={15} />
+                        <span>{isSaved ? 'Remove from My List' : 'Save to My List'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function LordPhubHero({
+  movie,
+  badgeIcon,
+  badgeText,
+  metaText,
+  fallbackThumb,
+  onPlay,
+}: {
+  movie: Movie
+  badgeIcon: React.ReactNode
+  badgeText: string
+  metaText: string
+  fallbackThumb?: string
+  onPlay: () => void
+}) {
+  return (
+    <div className="lord-hero" style={{ marginBottom: 28 }}>
+      <div className="lord-hero-backdrop-wrap">
+        <img
+          className="lord-hero-bg"
+          src={movie.hero || movie.still || movie.poster}
+          alt={movie.title}
+          onError={(e) => {
+            const target = e.target as HTMLImageElement
+            const fallback = fallbackThumb || movie.poster
+            if (fallback && target.src !== fallback) {
+              target.src = fallback
+            }
+          }}
+        />
+        <div className="lord-hero-gradient" />
+      </div>
+      <div className="lord-hero-content">
+        <span className="lord-hero-badge">
+          {badgeIcon} {badgeText}
+        </span>
+        <h1 className="lord-hero-title">{movie.title}</h1>
+        <p className="lord-hero-meta">{metaText}</p>
+        <p className="lord-hero-synopsis">{movie.synopsis}</p>
+        <div className="lord-hero-actions">
+          <button className="lord-hero-play" type="button" onClick={onPlay}>
+            <Play fill="currentColor" strokeWidth={0} size={20} />
+            <span>Play</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function LordPhubSection({
   searchQuery = '',
   page: pageProp = 1,
@@ -18137,6 +18543,7 @@ function LordPhubSection({
   onMarkWatched,
   onRemoveContinue,
   onRemoveWatchlist,
+  onToggleSave,
   serverMode = 'pornapi',
 }: {
   searchQuery?: string
@@ -18152,6 +18559,7 @@ function LordPhubSection({
   onMarkWatched?: (movie: Movie) => void
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
+  onToggleSave?: (movie: Movie) => void
   serverMode?: 'pornapi' | 'xvidapi' | 'eporner'
 }) {
   const isXvid = serverMode === 'xvidapi'
@@ -18184,7 +18592,7 @@ function LordPhubSection({
         setLocalPhubSeed(remoteSeed)
         try {
           localStorage.setItem('lumen_phub_seed', String(remoteSeed))
-        } catch {}
+        } catch { }
       }
     }
     void syncSeed()
@@ -18218,6 +18626,7 @@ function LordPhubSection({
           duration: item.length_min || 'HD',
           quality: 'HD',
           views: item.views || 50000,
+          created_at: item.added,
           categories: rawKeywords.slice(0, 3).map((k) => ({ name: k, slug: k.toLowerCase().replace(/\s+/g, '-') })),
           episodes: [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Eporner', embed_url: item.embed || `https://www.eporner.com/embed/${item.id}/` }] }],
         }
@@ -18233,8 +18642,8 @@ function LordPhubSection({
   const [loading, setLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [orderBy, setOrderBy] = useState<'views' | 'date' | 'duration'>('views')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [totalPages, setTotalPages] = useState(1)
-  const [totalVideos, setTotalVideos] = useState(() => getInitialMovies().length)
 
   const prevCategoryRef = useRef(selectedCategory)
   const prevOrderByRef = useRef(orderBy)
@@ -18256,7 +18665,6 @@ function LordPhubSection({
       if (!searchQuery.trim()) {
         const init = getInitialMovies()
         setPornMovies(init)
-        setTotalVideos(init.length)
       }
     }
   }, [serverMode, selectedCategory, orderBy, searchQuery, getInitialMovies])
@@ -18269,7 +18677,7 @@ function LordPhubSection({
       }
       try {
         if (isEporner) {
-          const q = searchQuery.trim() || (selectedCategory === 'All' ? 'all' : selectedCategory)
+          const q = searchQuery.trim() || (selectedCategory === 'All' ? 'indian' : selectedCategory)
           const order = orderBy === 'views' ? 'most-popular' : orderBy === 'date' ? 'latest' : 'top-weekly'
           const data = await fetchEpornerApi({
             query: q,
@@ -18284,9 +18692,6 @@ function LordPhubSection({
             if (data.total_pages) {
               setTotalPages(Math.max(1, Number(data.total_pages) || 1))
             }
-            if (data.total_count) {
-              setTotalVideos(Number(data.total_count) || 0)
-            }
             if (Array.isArray(data.videos) && data.videos.length > 0) {
               const parsed: PornApiMovieItem[] = data.videos.map((item: EpornerVideoItem) => {
                 const thumb = item.default_thumb?.src || item.thumbs?.[0]?.src || ''
@@ -18300,6 +18705,7 @@ function LordPhubSection({
                   duration: item.length_min || 'HD',
                   quality: 'HD',
                   views: item.views || 50000,
+                  created_at: item.added,
                   categories: rawKeywords.slice(0, 3).map((k) => ({ name: k, slug: k.toLowerCase().replace(/\s+/g, '-') })),
                   episodes: [{ name: 'Full', slug: 'full', sources: [{ server_name: 'Eporner', embed_url: item.embed || `https://www.eporner.com/embed/${item.id}/` }] }],
                 }
@@ -18317,7 +18723,6 @@ function LordPhubSection({
             if (active && cached && Array.isArray(cached.list) && cached.list.length > 0) {
               setPornMovies(cached.list)
               setTotalPages(cached.totalPages || 1)
-              setTotalVideos(cached.totalVideos || cached.list.length)
               return
             }
           }
@@ -18338,7 +18743,6 @@ function LordPhubSection({
               const data = await res.json()
               if (active && data) {
                 const totalP = Math.max(1, Number(data.pagecount) || 1)
-                const totalV = Number(data.total) || (Array.isArray(data.list) ? data.list.length : 0)
                 if (Array.isArray(data.list) && data.list.length > 0) {
                   const parsed: PornApiMovieItem[] = data.list.map((item: any, idx: number) => {
                     const norm = normalizeVideoItem(item, idx)
@@ -18351,6 +18755,7 @@ function LordPhubSection({
                       duration: norm.duration,
                       quality: 'HD',
                       views: 50000,
+                      created_at: typeof item?.vod_time === 'string' ? item.vod_time : undefined,
                       categories: [{ name: norm.category, slug: norm.category.toLowerCase().replace(/\s+/g, '-') }],
                       pornstars: norm.actors?.map((a: string) => ({ name: a, slug: a.toLowerCase().replace(/\s+/g, '-') })),
                       episodes: norm.embedUrl
@@ -18358,10 +18763,9 @@ function LordPhubSection({
                         : undefined,
                     }
                   })
-                  xvidApiCache.set(cacheKey, { list: parsed, totalPages: totalP, totalVideos: totalV })
+                  xvidApiCache.set(cacheKey, { list: parsed, totalPages: totalP })
                   setPornMovies(parsed)
                   setTotalPages(totalP)
-                  setTotalVideos(totalV)
                   return
                 }
               }
@@ -18402,9 +18806,6 @@ function LordPhubSection({
           if (payload?.totalPages) {
             setTotalPages(Math.max(1, Number(payload.totalPages) || 1))
           }
-          if (payload?.total) {
-            setTotalVideos(Number(payload.total) || list.length)
-          }
           if (list.length > 0) {
             setPornMovies(list)
           } else if (searchQuery.trim()) {
@@ -18420,7 +18821,6 @@ function LordPhubSection({
                   )),
             )
             setPornMovies(filtered)
-            setTotalVideos(filtered.length)
             setTotalPages(1)
           } else {
             const fallback = getInitialMovies()
@@ -18434,12 +18834,9 @@ function LordPhubSection({
                     (typeof c === 'string' ? c : c?.name)?.toLowerCase().includes(catLower),
                   ),
               )
-              const listToUse = matched.length > 0 ? matched : fallback
-              setPornMovies(listToUse)
-              setTotalVideos(listToUse.length)
+              setPornMovies(matched.length > 0 ? matched : fallback)
             } else {
               setPornMovies(fallback)
-              setTotalVideos(fallback.length)
             }
             setTotalPages(1)
           }
@@ -18457,12 +18854,9 @@ function LordPhubSection({
                   (typeof c === 'string' ? c : c?.name)?.toLowerCase().includes(catLower),
                 ),
             )
-            const listToUse = matched.length > 0 ? matched : fallback
-            setPornMovies(listToUse)
-            setTotalVideos(listToUse.length)
+            setPornMovies(matched.length > 0 ? matched : fallback)
           } else {
             setPornMovies(fallback)
-            setTotalVideos(fallback.length)
           }
           setTotalPages(1)
         }
@@ -18567,10 +18961,52 @@ function LordPhubSection({
     onPlay({ ...movie, embedUrl })
   }
 
+  const sectionLabel = isEporner ? 'PHub 3' : isXvid ? 'PHub 2' : 'PHub 1'
+  const savedIds = useMemo(() => new Set(savedMovies.map((m) => m.id)), [savedMovies])
+  const continueProgressMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const m of continueMovies) {
+      if (m.id && typeof m.progress === 'number' && m.progress > 0) {
+        map.set(m.id, m.progress)
+      }
+    }
+    return map
+  }, [continueMovies])
+
+  const ytCardItems = useMemo<YtPhubCardItem[]>(() => {
+    return displayVideos.map((video, idx) => {
+      const movie = pornApiToMovieHelper(video, undefined, serverMode)
+      const firstCat = cleanHtmlEntities(movie.genres[0] || sectionLabel)
+      const firstStar =
+        Array.isArray(video.pornstars) && video.pornstars.length > 0
+          ? cleanHtmlEntities(
+            typeof video.pornstars[0] === 'string'
+              ? video.pornstars[0]
+              : video.pornstars[0]?.name || '',
+          )
+          : ''
+      const channelName = firstStar || firstCat || sectionLabel
+      const relTime = formatYtRelativeTime(video.created_at)
+      const fallbackTag = channelName !== firstCat ? firstCat : video.quality || 'HD'
+      return {
+        key: `phub-${video.slug || idx}`,
+        movie,
+        title: cleanHtmlEntities(video.title),
+        thumbnail: video.thumbnail_url || video.poster_url || '',
+        fallbackThumbnail:
+          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80',
+        duration: video.duration,
+        channelName,
+        verified: true,
+        views: video.views,
+        metaDetail: relTime || fallbackTag,
+        progress: continueProgressMap.get(movie.id),
+      }
+    })
+  }, [displayVideos, serverMode, sectionLabel, continueProgressMap])
+
   const heroItem = rotatedVideos.length > 0 ? rotatedVideos[0] : null
   const heroMovie = heroItem ? pornApiToMovieHelper(heroItem, undefined, serverMode) : null
-  const totalDisplayCount = totalVideos > 0 ? totalVideos : displayVideos.length
-  const sectionLabel = isEporner ? 'PHub 3' : isXvid ? 'PHub 2' : 'PHub 1'
   const sectionBadge = isEporner
     ? 'PHub 3 · Eporner HD'
     : isXvid
@@ -18578,218 +19014,132 @@ function LordPhubSection({
       : 'PHub 1 · 4K Fast Player'
 
   return (
-    <div className="jav-container">
-      {loading && displayVideos.length === 0 ? (
-        <div className="jav-loading">
-          <LoaderCircle className="spin-icon" size={32} />
-          <p>Loading {sectionLabel} videos...</p>
+    <div className="yt-phub-container">
+      {!isSearching && heroMovie && (
+        <LordPhubHero
+          movie={heroMovie}
+          badgeIcon={<Play size={14} fill="currentColor" />}
+          badgeText={sectionBadge}
+          metaText={`${heroMovie.genres[0] || sectionLabel} · ${heroMovie.runtime || (isXvid ? 'HD Video' : '4K Ultra HD')}`}
+          fallbackThumb={heroMovie.poster}
+          onPlay={() => void handlePlayMovie(heroMovie)}
+        />
+      )}
+
+      {!isSearching && savedMovies && savedMovies.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <LordRailRow
+            key={`${isEporner ? 'phub3' : isXvid ? 'phub2' : 'phub1'}-my-list`}
+            rail={{
+              title: 'My List',
+              items: savedMovies,
+            }}
+            onOpenDetail={(m) => void handlePlayMovie(m)}
+          />
         </div>
-      ) : isSearching && displayVideos.length === 0 ? (
+      )}
+
+      {!isSearching && continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
+        <div style={{ marginBottom: 24 }}>
+          <ContinueWatchingRail
+            title={`Continue Watching ${sectionLabel}`}
+            movies={continueMovies}
+            onOpenDetail={(m) => void handlePlayMovie(m)}
+            onMarkWatched={onMarkWatched}
+            onRemoveContinue={onRemoveContinue}
+            onRemoveWatchlist={onRemoveWatchlist}
+            isPhub1Section={!isEporner && !isXvid}
+            isPhub2Section={isXvid}
+            isPhub3Section={isEporner}
+            isPhubSection={true}
+          />
+        </div>
+      )}
+
+      <YtCategoryChipsBar
+        chips={activeCategories.map((cat) => ({
+          id: cat.name,
+          label: cat.name,
+          active: selectedCategory === cat.name,
+        }))}
+        onSelect={(name) => setSelectedCategory(name)}
+        ariaLabel={`${sectionLabel} categories`}
+        filterOpen={filtersOpen}
+        hasActiveSubFilter={orderBy !== 'views'}
+        onToggleFilters={() => setFiltersOpen((prev) => !prev)}
+      >
+        <div className="yt-filter-group" aria-label="Sort videos">
+          <span className="yt-filter-label">Sort:</span>
+          <button
+            type="button"
+            className={`yt-chip yt-chip-sm${orderBy === 'views' ? ' is-active' : ''}`}
+            onClick={() => setOrderBy('views')}
+          >
+            Popular
+          </button>
+          <button
+            type="button"
+            className={`yt-chip yt-chip-sm${orderBy === 'date' ? ' is-active' : ''}`}
+            onClick={() => setOrderBy('date')}
+          >
+            Latest
+          </button>
+          <button
+            type="button"
+            className={`yt-chip yt-chip-sm${orderBy === 'duration' ? ' is-active' : ''}`}
+            onClick={() => setOrderBy('duration')}
+          >
+            {isXvid ? 'Top Rated' : 'Top 4K'}
+          </button>
+        </div>
+      </YtCategoryChipsBar>
+
+      {loading && ytCardItems.length === 0 ? (
+        <div className="yt-home-skeleton-grid" aria-label={`Loading ${sectionLabel} videos`}>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={`phub-skel-${i}`} className="yt-home-skeleton-card">
+              <div className="yt-home-skeleton-thumb" />
+              <div className="yt-home-skeleton-meta">
+                <div className="yt-home-skeleton-avatar" />
+                <div className="yt-home-skeleton-lines">
+                  <div className="yt-home-skeleton-line" style={{ width: '90%' }} />
+                  <div className="yt-home-skeleton-line" style={{ width: '58%' }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : isSearching && ytCardItems.length === 0 ? (
         <div className="jav-empty">
           <Search size={40} />
           <p>No videos found matching "{searchQuery.trim()}".</p>
         </div>
       ) : (
         <>
+          <YtPhubVideoGrid
+            items={ytCardItems}
+            savedIds={savedIds}
+            onPlay={(m) => void handlePlayMovie(m)}
+            onToggleSave={onToggleSave}
+          />
 
-          {!isSearching && heroMovie && (
-            <div className="lord-hero" style={{ marginBottom: 28 }}>
-              <div className="lord-hero-backdrop-wrap">
-                <img
-                  className="lord-hero-bg"
-                  src={heroMovie.hero || heroMovie.still || heroMovie.poster}
-                  alt={heroMovie.title}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement
-                    if (heroMovie.poster && target.src !== heroMovie.poster) {
-                      target.src = heroMovie.poster
-                    }
-                  }}
-                />
-                <div className="lord-hero-gradient" />
-              </div>
-              <div className="lord-hero-content">
-                <span className="lord-hero-badge">
-                  <Play size={14} fill="currentColor" /> {sectionBadge}
-                </span>
-                <h1 className="lord-hero-title">{heroMovie.title}</h1>
-                <p className="lord-hero-meta">
-                  {heroMovie.genres[0] || sectionLabel} · {heroMovie.runtime || (isXvid ? 'HD Video' : '4K Ultra HD')}
-                </p>
-                <p className="lord-hero-synopsis">{heroMovie.synopsis}</p>
-                <div className="lord-hero-actions">
-                  <button
-                    className="lord-hero-play"
-                    type="button"
-                    onClick={() => void handlePlayMovie(heroMovie)}
-                  >
-                    <Play fill="currentColor" strokeWidth={0} size={20} />
-                    <span>Play</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {savedMovies && savedMovies.length > 0 && (
-            <div style={{ marginBottom: 24 }}>
-              <LordRailRow
-                key={`${isEporner ? 'phub3' : isXvid ? 'phub2' : 'phub1'}-my-list`}
-                rail={{
-                  title: 'My List',
-                  items: savedMovies,
-                }}
-                onOpenDetail={(m) => void handlePlayMovie(m)}
-              />
-            </div>
-          )}
-
-          {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
-            <div style={{ marginBottom: 24 }}>
-              <ContinueWatchingRail
-                title={`Continue Watching ${sectionLabel}`}
-                movies={continueMovies}
-                onOpenDetail={(m) => void handlePlayMovie(m)}
-                onMarkWatched={onMarkWatched}
-                onRemoveContinue={onRemoveContinue}
-                onRemoveWatchlist={onRemoveWatchlist}
-                isPhub1Section={!isEporner && !isXvid}
-                isPhub2Section={isXvid}
-                isPhub3Section={isEporner}
-                isPhubSection={true}
-              />
-            </div>
-          )}
-
-          {/* Category Pills & Controls Bar */}
-          <div className="jav-controls">
-            <div className="jav-pills" role="tablist" aria-label={`${sectionLabel} categories`}>
-              {activeCategories.map((cat) => (
-                <button
-                  key={cat.slug}
-                  type="button"
-                  className={`jav-pill${selectedCategory === cat.name ? ' is-active' : ''}`}
-                  onClick={() => setSelectedCategory(cat.name)}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-
-            <div className="jav-sort-group">
-              <span className="jav-sort-label">Sort:</span>
-              <button
-                type="button"
-                className={`jav-sort-btn${orderBy === 'views' ? ' is-active' : ''}`}
-                onClick={() => setOrderBy('views')}
-              >
-                Popular
-              </button>
-              <button
-                type="button"
-                className={`jav-sort-btn${orderBy === 'date' ? ' is-active' : ''}`}
-                onClick={() => setOrderBy('date')}
-              >
-                Latest
-              </button>
-              <button
-                type="button"
-                className={`jav-sort-btn${orderBy === 'duration' ? ' is-active' : ''}`}
-                onClick={() => setOrderBy('duration')}
-              >
-                {isXvid ? 'Top Rated' : 'Top 4K'}
-              </button>
-            </div>
-          </div>
-
-          <div className="jav-meta-header">
-            <h2 className="lord-rail-title">
-              {isSearching
-                ? `Search Results for "${searchQuery.trim()}"`
-                : selectedCategory === 'All'
-                  ? `All ${sectionLabel} Catalog`
-                  : `${selectedCategory} (${sectionLabel})`}
-              <span className="jav-meta-count">
-                ({totalDisplayCount.toLocaleString()} titles)
-              </span>
-            </h2>
-          </div>
-
-          <div className="jav-grid">
-            {displayVideos.map((video, idx) => {
-              const movie = pornApiToMovieHelper(video, undefined, serverMode)
-              const firstCat = movie.genres[0] || 'PHub'
-              return (
-                <div
-                  key={`phub-${video.slug || idx}`}
-                  className="jav-card"
-                  onClick={() => void handlePlayMovie(movie)}
-                >
-                  <div className="jav-thumb-container">
-                    <img
-                      src={video.thumbnail_url || video.poster_url || ''}
-                      referrerPolicy="no-referrer"
-                      alt={video.title}
-                      loading="lazy"
-                      onError={(event) => {
-                        const target = event.target as HTMLImageElement
-                        target.onerror = null
-                        target.src =
-                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80'
-                      }}
-                    />
-                    <span className="jav-hd-badge">{video.quality || '4K'}</span>
-                    {video.duration && (
-                      <span className="jav-duration-badge">{video.duration}</span>
-                    )}
-                    <div className="jav-play-overlay">
-                      <button
-                        type="button"
-                        className="jav-play-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void handlePlayMovie(movie)
-                        }}
-                        title="Play Video"
-                      >
-                        <Play fill="#fff" size={24} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="jav-card-body">
-                    <h3 className="jav-card-title" title={video.title}>
-                      {cleanHtmlEntities(video.title)}
-                    </h3>
-                    <div className="jav-card-footer">
-                      <span className="jav-studio">{cleanHtmlEntities(firstCat)}</span>
-                      {video.views ? (
-                        <span className="jav-views">👁 {video.views.toLocaleString()}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="jav-pagination">
+            <div className="yt-home-pagination">
               <button
                 type="button"
-                className="jav-page-btn"
+                className="yt-page-btn"
                 onClick={handlePrevPage}
                 disabled={page <= 1}
               >
                 <ChevronLeft size={18} />
                 <span>Prev</span>
               </button>
-              <span className="jav-page-info">
-                Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+              <span className="yt-page-info">
+                Page <strong>{page}</strong> of <strong>{totalPages.toLocaleString()}</strong>
               </span>
               <button
                 type="button"
-                className="jav-page-btn"
+                className="yt-page-btn"
                 onClick={handleNextPage}
                 disabled={page >= totalPages}
               >
@@ -19264,6 +19614,7 @@ function LordAdultEmbedSection({
   onMarkWatched,
   onRemoveContinue,
   onRemoveWatchlist,
+  onToggleSave,
 }: {
   searchQuery?: string
   page?: number
@@ -19275,11 +19626,13 @@ function LordAdultEmbedSection({
   onMarkWatched?: (movie: Movie) => void
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
+  onToggleSave?: (movie: Movie) => void
 }) {
   const [selectedCategory, setSelectedCategory] = useState('')
   const [orientation, setOrientation] = useState<'all' | 'straight' | 'gay' | 'trans' | 'bi'>('all')
   const [contentType, setContentType] = useState<'' | 'scene' | 'amateur'>('')
   const [sort, setSort] = useState<'popular' | 'newest' | 'trending' | 'longest'>('popular')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [categoryPills, setCategoryPills] = useState<AdultEmbedCategoryPill[]>(DEFAULT_ADULTEMBED_CATEGORIES)
   const [internalPage, setInternalPage] = useState(pageProp)
   const page = pageProp ?? internalPage
@@ -19335,7 +19688,6 @@ function LordAdultEmbedSection({
   const [loading, setLoading] = useState(!initialData && videos.length === 0)
   const [error, setError] = useState('')
   const [totalPages, setTotalPages] = useState(initialData?.pages || 1000)
-  const [totalCount, setTotalCount] = useState(initialData?.total || 256482)
 
   useEffect(() => {
     let active = true
@@ -19351,7 +19703,6 @@ function LordAdultEmbedSection({
     if (cached && cached.results.length > 0) {
       setVideos(cached.results)
       setTotalPages(cached.pages)
-      setTotalCount(cached.total)
       setLoading(false)
       setError('')
     } else if (videos.length === 0) {
@@ -19374,12 +19725,11 @@ function LordAdultEmbedSection({
         if (active) {
           setVideos(res.results)
           setTotalPages(res.pages)
-          setTotalCount(res.total)
           setError('')
         }
       } catch {
         if (active && videos.length === 0) {
-          setError('Failed to load AdultEmbed catalog. Please try again.')
+          setError('Failed to load PHub 1 catalog. Please try again.')
         }
       } finally {
         if (active) setLoading(false)
@@ -19427,53 +19777,68 @@ function LordAdultEmbedSection({
     }
   }
 
+  const savedIds = useMemo(() => new Set(savedMovies.map((m) => m.id)), [savedMovies])
+  const continueProgressMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const m of continueMovies) {
+      if (m.id && typeof m.progress === 'number' && m.progress > 0) {
+        map.set(m.id, m.progress)
+      }
+    }
+    return map
+  }, [continueMovies])
+
+  const ytCardItems = useMemo<YtPhubCardItem[]>(() => {
+    return rotatedVideos.map((video) => {
+      const movie = adultEmbedToMovie(video)
+      const nonHentaiCat = video.categories?.find((c) => c.name.toLowerCase() !== 'hentai')?.name || ''
+      const channelName =
+        video.studio?.name ||
+        video.performers?.[0]?.name ||
+        nonHentaiCat ||
+        'PHub 1'
+      const relTime = formatYtRelativeTime(video.published_at)
+      const fallbackTag =
+        (nonHentaiCat && nonHentaiCat !== channelName ? nonHentaiCat : '') ||
+        (video.content_type === 'amateur' ? 'Amateur' : 'HD')
+
+      return {
+        key: `ae-${video.id}`,
+        movie,
+        title: video.title,
+        thumbnail: video.thumbnail || video.poster || '',
+        fallbackThumbnail:
+          'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80',
+        duration: video.duration,
+        channelName,
+        verified: true,
+        views: video.stats?.views,
+        metaDetail: relTime || fallbackTag,
+        progress: continueProgressMap.get(movie.id),
+      }
+    })
+  }, [rotatedVideos, continueProgressMap])
+
   const heroVideo = rotatedVideos.length > 0 ? rotatedVideos[0] : null
   const heroMovie = heroVideo ? adultEmbedToMovie(heroVideo) : null
-  const activeCategoryName =
-    categoryPills.find((c) => c.slug === selectedCategory)?.name || 'All'
 
   return (
-    <div className="jav-container ae-container">
+    <div className="yt-phub-container">
       {!searchQuery.trim() && heroMovie && (
-        <div className="lord-hero" style={{ marginBottom: 28 }}>
-          <div className="lord-hero-backdrop-wrap">
-            <img
-              className="lord-hero-bg"
-              src={heroMovie.hero || heroMovie.still || heroMovie.poster}
-              alt={heroMovie.title}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement
-                if (heroVideo?.thumbnail && target.src !== heroVideo.thumbnail) {
-                  target.src = heroVideo.thumbnail
-                }
-              }}
-            />
-            <div className="lord-hero-gradient" />
-          </div>
-          <div className="lord-hero-content">
-            <span className="lord-hero-badge">
-              <Flame size={14} /> {heroVideo?.studio?.name || 'AdultEmbed HD'}
-            </span>
-            <h1 className="lord-hero-title">{heroMovie.title}</h1>
-            <p className="lord-hero-meta">
-              {heroMovie.cast.slice(0, 3).join(', ')} · {heroVideo?.duration || 'Full Scene'} ·{' '}
-              {heroVideo?.content_type === 'amateur' ? 'Amateur' : 'Studio Scene'}
-            </p>
-            <p className="lord-hero-synopsis">{heroMovie.synopsis}</p>
-            <div className="lord-hero-actions">
-              <button className="lord-hero-play" type="button" onClick={() => onPlay(heroMovie)}>
-                <Play fill="currentColor" strokeWidth={0} size={20} />
-                <span>Play</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <LordPhubHero
+          movie={heroMovie}
+          badgeIcon={<Flame size={14} />}
+          badgeText={heroVideo?.studio?.name || 'PHub 1 HD'}
+          metaText={`${heroMovie.cast.slice(0, 3).join(', ')} · ${heroVideo?.duration || 'Full Scene'} · ${heroVideo?.content_type === 'amateur' ? 'Amateur' : 'Studio Scene'}`}
+          fallbackThumb={heroVideo?.thumbnail}
+          onPlay={() => onPlay(heroMovie)}
+        />
       )}
 
-      {savedMovies && savedMovies.length > 0 && (
+      {!searchQuery.trim() && savedMovies && savedMovies.length > 0 && (
         <div style={{ marginBottom: 24 }}>
           <LordRailRow
-            key="ae-my-list"
+            key="phub1-ae-my-list"
             rail={{
               title: 'My List',
               items: savedMovies,
@@ -19483,10 +19848,10 @@ function LordAdultEmbedSection({
         </div>
       )}
 
-      {continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
+      {!searchQuery.trim() && continueMovies.length > 0 && onMarkWatched && onRemoveContinue && onRemoveWatchlist && (
         <div style={{ marginBottom: 24 }}>
           <ContinueWatchingRail
-            title="Continue Watching AdultEmbed"
+            title="Continue Watching PHub 1"
             movies={continueMovies}
             onOpenDetail={onPlay}
             onMarkWatched={onMarkWatched}
@@ -19497,197 +19862,113 @@ function LordAdultEmbedSection({
         </div>
       )}
 
-      <div className="jav-controls ae-controls">
-        <div className="jav-pills" role="tablist" aria-label="AdultEmbed categories">
-          {categoryPills.map((cat) => (
+      <YtCategoryChipsBar
+        chips={categoryPills.map((cat) => ({
+          id: cat.slug,
+          label: cat.name,
+          active: selectedCategory === cat.slug,
+        }))}
+        onSelect={(slug) => setSelectedCategory(slug)}
+        ariaLabel="PHub 1 categories"
+        filterOpen={filtersOpen}
+        hasActiveSubFilter={orientation !== 'all' || contentType !== '' || sort !== 'popular'}
+        onToggleFilters={() => setFiltersOpen((prev) => !prev)}
+      >
+        <div className="yt-filter-group" aria-label="Audience filter">
+          <span className="yt-filter-label">Audience:</span>
+          {(['all', 'straight', 'gay', 'trans', 'bi'] as const).map((ori) => (
             <button
-              key={cat.slug || 'all'}
+              key={ori}
               type="button"
-              className={`jav-pill${selectedCategory === cat.slug ? ' is-active' : ''}`}
-              onClick={() => setSelectedCategory(cat.slug)}
+              className={`yt-chip yt-chip-sm${orientation === ori ? ' is-active' : ''}`}
+              onClick={() => setOrientation(ori)}
             >
-              {cat.name}
+              {ori === 'all' ? 'All' : ori.charAt(0).toUpperCase() + ori.slice(1)}
             </button>
           ))}
         </div>
 
-        <div className="ae-filter-bar">
-          <div className="jav-sort-group" aria-label="Orientation filter">
-            <span className="jav-sort-label">Audience:</span>
-            {(['all', 'straight', 'gay', 'trans', 'bi'] as const).map((ori) => (
-              <button
-                key={ori}
-                type="button"
-                className={`jav-sort-btn${orientation === ori ? ' is-active' : ''}`}
-                onClick={() => setOrientation(ori)}
-              >
-                {ori === 'all' ? 'All' : ori.charAt(0).toUpperCase() + ori.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          <div className="jav-sort-group" aria-label="Content type filter">
-            <span className="jav-sort-label">Type:</span>
-            {(
-              [
-                ['', 'All'],
-                ['scene', 'Scenes'],
-                ['amateur', 'Amateur'],
-              ] as const
-            ).map(([val, label]) => (
-              <button
-                key={val || 'all-type'}
-                type="button"
-                className={`jav-sort-btn${contentType === val ? ' is-active' : ''}`}
-                onClick={() => setContentType(val)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="jav-sort-group" aria-label="Sort order">
-            <span className="jav-sort-label">Sort:</span>
-            {(
-              [
-                ['popular', 'Popular'],
-                ['newest', 'Newest'],
-                ['trending', 'Trending'],
-                ['longest', 'Longest'],
-              ] as const
-            ).map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                className={`jav-sort-btn${sort === val ? ' is-active' : ''}`}
-                onClick={() => setSort(val)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div className="yt-filter-group" aria-label="Content type filter">
+          <span className="yt-filter-label">Type:</span>
+          {(
+            [
+              ['', 'All'],
+              ['scene', 'Scenes'],
+              ['amateur', 'Amateur'],
+            ] as const
+          ).map(([val, label]) => (
+            <button
+              key={val || 'all-type'}
+              type="button"
+              className={`yt-chip yt-chip-sm${contentType === val ? ' is-active' : ''}`}
+              onClick={() => setContentType(val)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-      </div>
 
-      {loading && videos.length === 0 ? (
-        <div className="jav-skeleton-grid" aria-label="Loading AdultEmbed catalog">
+        <div className="yt-filter-group" aria-label="Sort order">
+          <span className="yt-filter-label">Sort:</span>
+          {(
+            [
+              ['popular', 'Popular'],
+              ['newest', 'Newest'],
+              ['trending', 'Trending'],
+              ['longest', 'Longest'],
+            ] as const
+          ).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              className={`yt-chip yt-chip-sm${sort === val ? ' is-active' : ''}`}
+              onClick={() => setSort(val)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </YtCategoryChipsBar>
+
+      {loading && ytCardItems.length === 0 ? (
+        <div className="yt-home-skeleton-grid" aria-label="Loading PHub 1 catalog">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={`ae-skel-${i}`} className="jav-skeleton-card">
-              <div className="jav-skeleton-thumb" />
-              <div className="jav-skeleton-body">
-                <div className="jav-skeleton-line" style={{ width: '85%' }} />
-                <div className="jav-skeleton-line" style={{ width: '50%' }} />
+            <div key={`ae-skel-${i}`} className="yt-home-skeleton-card">
+              <div className="yt-home-skeleton-thumb" />
+              <div className="yt-home-skeleton-meta">
+                <div className="yt-home-skeleton-avatar" />
+                <div className="yt-home-skeleton-lines">
+                  <div className="yt-home-skeleton-line" style={{ width: '90%' }} />
+                  <div className="yt-home-skeleton-line" style={{ width: '58%' }} />
+                </div>
               </div>
             </div>
           ))}
         </div>
-      ) : error && videos.length === 0 ? (
+      ) : error && ytCardItems.length === 0 ? (
         <div className="jav-empty">
           <AlertCircle size={40} />
           <p>{error}</p>
         </div>
-      ) : videos.length === 0 ? (
+      ) : ytCardItems.length === 0 ? (
         <div className="jav-empty">
           <Search size={40} />
           <p>No videos found matching your current filters.</p>
         </div>
       ) : (
         <>
-          <div className="jav-meta-header">
-            <h2 className="lord-rail-title">
-              {searchQuery.trim()
-                ? `Results for "${searchQuery.trim()}"`
-                : activeCategoryName === 'All'
-                  ? 'AdultEmbed Catalog'
-                  : `${activeCategoryName} Videos`}
-              {totalCount > 0 && (
-                <span className="jav-meta-count">({totalCount.toLocaleString()} videos)</span>
-              )}
-            </h2>
-          </div>
-
-          <div className="jav-grid">
-            {rotatedVideos.map((video) => {
-              const movie = adultEmbedToMovie(video)
-              return (
-                <div key={video.id} className="jav-card" onClick={() => onPlay(movie)}>
-                  <div className="jav-thumb-container">
-                    <img
-                      src={video.thumbnail || video.poster || ''}
-                      alt={video.title}
-                      loading="lazy"
-                      onError={(event) => {
-                        const target = event.target as HTMLImageElement
-                        target.onerror = null
-                        if (video.poster && target.src !== video.poster) {
-                          target.src = video.poster
-                        } else {
-                          target.src =
-                            'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
-                        }
-                      }}
-                    />
-                    {video.content_type && (
-                      <span className="jav-code-badge">
-                        {video.content_type === 'amateur' ? 'AMATEUR' : 'SCENE'}
-                      </span>
-                    )}
-                    <span className="jav-hd-badge">HD</span>
-                    {video.duration && (
-                      <span className="jav-duration-badge">{video.duration}</span>
-                    )}
-
-                    <div className="jav-play-overlay">
-                      <button
-                        type="button"
-                        className="jav-play-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onPlay(movie)
-                        }}
-                        title="Play Video"
-                      >
-                        <Play fill="#fff" size={24} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="jav-card-body">
-                    <h3 className="jav-card-title" title={video.title}>
-                      {video.title}
-                    </h3>
-
-                    <div className="jav-card-footer">
-                      {video.studio?.name ? (
-                        <span className="jav-studio">{video.studio.name}</span>
-                      ) : video.performers?.[0]?.name ? (
-                        <span className="jav-studio">{video.performers[0].name}</span>
-                      ) : null}
-                      {video.stats?.views ? (
-                        <span className="jav-views">👁 {video.stats.views.toLocaleString()}</span>
-                      ) : null}
-                    </div>
-
-                    {video.categories && video.categories.length > 0 && (
-                      <div className="jav-tags">
-                        {video.categories.slice(0, 3).map((cat) => (
-                          <span key={cat.slug || cat.name} className="jav-tag">
-                            {cat.name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <YtPhubVideoGrid
+            items={ytCardItems}
+            savedIds={savedIds}
+            onPlay={onPlay}
+            onToggleSave={onToggleSave}
+          />
 
           {totalPages > 1 && (
-            <div className="jav-pagination">
+            <div className="yt-home-pagination">
               <button
                 type="button"
-                className="jav-page-btn"
+                className="yt-page-btn"
                 onClick={handlePrevPage}
                 disabled={page <= 1}
               >
@@ -19695,13 +19976,13 @@ function LordAdultEmbedSection({
                 <span>Prev</span>
               </button>
 
-              <span className="jav-page-info">
+              <span className="yt-page-info">
                 Page <strong>{page}</strong> of <strong>{totalPages.toLocaleString()}</strong>
               </span>
 
               <button
                 type="button"
-                className="jav-page-btn"
+                className="yt-page-btn"
                 onClick={handleNextPage}
                 disabled={page >= totalPages}
               >

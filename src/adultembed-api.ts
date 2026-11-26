@@ -491,8 +491,8 @@ export function adultEmbedToMovie(video: AdultEmbedVideo): Movie {
   return normalizeMovie({
     id: `ae-${video.id}`,
     title: video.title,
-    label: 'AdultEmbed',
-    type: 'AdultEmbed Video',
+    label: 'PHub 1',
+    type: 'PHub 1 Video',
     genres: genres.length > 0 ? genres : ['Studio'],
     year,
     runtime: video.duration || 'Full Video',
@@ -505,7 +505,7 @@ export function adultEmbedToMovie(video: AdultEmbedVideo): Movie {
       video.description ||
       `${video.title}${video.studio?.name ? ` · Studio: ${video.studio.name}` : ''}`,
     cast: performers.length > 0 ? performers : ['Verified Creator'],
-    director: video.studio?.name || 'AdultEmbed',
+    director: video.studio?.name || 'PHub 1',
     hentaiSlug: `ae-${video.id}`,
     embedUrl,
     isHentaiOcean: false,

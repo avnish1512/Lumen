@@ -5,6 +5,7 @@ import {
   isHentaiMovie,
   isJavMovie,
   isPhubMovie,
+  isPhub1Movie,
 } from './App'
 import {
   adultEmbedToMovie,
@@ -32,14 +33,16 @@ describe('AdultEmbed Lord tab integration', () => {
     const movie = adultEmbedToMovie(sample)
 
     expect(movie.id).toBe(`ae-${sample.id}`)
-    expect(movie.label).toBe('AdultEmbed')
-    expect(movie.type).toBe('AdultEmbed Video')
+    expect(movie.label).toBe('PHub 1')
+    expect(movie.type).toBe('PHub 1 Video')
     expect(movie.tmdbId).toBeUndefined()
     expect(isAdultEmbedMovie(movie)).toBe(true)
     expect(isLordAdultMovie(movie)).toBe(true)
     expect(isJavMovie(movie)).toBe(false)
     expect(isPhubMovie(movie)).toBe(false)
+    expect(isPhub1Movie(movie)).toBe(false)
     expect(isHentaiMovie(movie)).toBe(false)
+    expect(buildStreamUrl(movie, 'adultembed')).toBe(sample.embed?.url)
   })
 
   it('does not misclassify AdultEmbed videos tagged Hentai into HentaiOcean', () => {
@@ -78,7 +81,7 @@ describe('AdultEmbed Lord tab integration', () => {
 
     const aeOption = streamProviderOptions.find((p) => p.id === 'adultembed')
     expect(aeOption).toBeDefined()
-    expect(aeOption?.name).toBe('AdultEmbed')
+    expect(aeOption?.name).toBe('PHub 1')
   })
 
   it('builds valid AdultEmbed v1 proxy URLs and resolves configured API key', () => {

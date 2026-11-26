@@ -333,9 +333,9 @@ export const streamProviderOptions: StreamProviderOption[] = [
   },
   {
     id: 'adultembed',
-    name: 'AdultEmbed',
-    logo: 'AE',
-    description: 'AdultEmbed · HD Studio & Amateur Player',
+    name: 'PHub 1',
+    logo: 'PH1',
+    description: 'PHub 1 · HD Studio & Amateur Player',
   },
 ]
 
@@ -430,10 +430,10 @@ export async function fetchTmdbWatchAvailability(
   movie:
     | string
     | {
-        imdbId?: string
-        mediaType?: TmdbMediaType
-        tmdbId?: number
-      },
+      imdbId?: string
+      mediaType?: TmdbMediaType
+      tmdbId?: number
+    },
   region = defaultWatchRegion,
 ): Promise<TmdbWatchAvailability> {
   const params = new URLSearchParams({ region })
@@ -860,9 +860,9 @@ export function getNhdApiKey(seed?: string | number): string {
 
   const envKeys = envKeysRaw
     ? envKeysRaw
-        .split(',')
-        .map((k: string) => k.trim())
-        .filter(Boolean)
+      .split(',')
+      .map((k: string) => k.trim())
+      .filter(Boolean)
     : []
 
   const pool = envKeys.length > 0 ? envKeys : DEFAULT_NHD_API_KEYS
@@ -1161,7 +1161,27 @@ export function buildStreamUrl(
     return `https://www.eporner.com/embed/${cleanSlug}/`
   }
 
-  // 1b. Explicit PHub 1 videos
+  // 1b. Explicit AdultEmbed / PHub 1 API videos (`ae-*`) must take precedence before legacy `phub1-*`
+  const isAdultEmbedItem =
+    !movie.tmdbId &&
+    (movie.label === 'AdultEmbed' ||
+      movie.type === 'AdultEmbed Video' ||
+      movie.type === 'PHub 1 Video' ||
+      movie.id.startsWith('ae-') ||
+      (movie.hentaiSlug && movie.hentaiSlug.startsWith('ae-')) ||
+      provider === 'adultembed' ||
+      movie.embedUrl?.includes('adultembed.com/player') ||
+      movie.embedUrl?.includes('pornalizer.app/player'))
+
+  if (isAdultEmbedItem) {
+    if (movie.embedUrl) {
+      return movie.embedUrl
+    }
+    const cleanSlug = movie.hentaiSlug?.replace(/^ae-/, '') || movie.id.replace(/^ae-/, '')
+    return `https://adultembed.com/player/embed/${cleanSlug}/`
+  }
+
+  // 1c. Legacy PHub 1 player videos
   if (
     !movie.tmdbId &&
     (movie.label === 'PHub 1' ||
@@ -1207,24 +1227,6 @@ export function buildStreamUrl(
     }
     const cleanSlug = movie.hentaiSlug?.replace(/^jav-/, '') || movie.id.replace(/^jav-/, '')
     return `https://server.apijav.com/?mvapm_embed=${cleanSlug}`
-  }
-
-  // 3b. Explicit AdultEmbed videos
-  if (
-    !movie.tmdbId &&
-    (movie.label === 'AdultEmbed' ||
-      movie.type === 'AdultEmbed Video' ||
-      movie.id.startsWith('ae-') ||
-      (movie.hentaiSlug && movie.hentaiSlug.startsWith('ae-')) ||
-      provider === 'adultembed' ||
-      movie.embedUrl?.includes('adultembed.com/player') ||
-      movie.embedUrl?.includes('pornalizer.app/player'))
-  ) {
-    if (movie.embedUrl) {
-      return movie.embedUrl
-    }
-    const cleanSlug = movie.hentaiSlug?.replace(/^ae-/, '') || movie.id.replace(/^ae-/, '')
-    return `https://adultembed.com/player/embed/${cleanSlug}/`
   }
 
   if (
