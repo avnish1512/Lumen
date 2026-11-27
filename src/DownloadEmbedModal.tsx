@@ -19,15 +19,17 @@ import {
   analyzeSmartEmbedUrl,
   buildSmartDownloadStreamUrl,
   closeInSiteDownload,
+  fetchVidsrcDownloads,
   formatBytes,
   saveSmartMp4ToOfflineLibrary,
   subscribeDownloadModal,
   type InSiteDownloadRequest,
   type SmartAnalysisResult,
   type SmartAppStatus,
+  type VidsrcDownloadResponse,
 } from './downloads'
 
-type DownloadTabMode = '02downloader' | 'smart'
+type DownloadTabMode = 'direct' | '02downloader' | 'smart'
 
 interface SmartHistoryEntry {
   id: string
@@ -128,20 +130,41 @@ export function DownloadEmbedModal() {
     typeof window !== 'undefined' ? readSmartHistory() : [],
   )
 
+  // Direct Links (dl.vidsrc.party) state
+  const [directData, setDirectData] = useState<VidsrcDownloadResponse | null>(null)
+  const [directLoading, setDirectLoading] = useState(false)
+  const [directError, setDirectError] = useState('')
+  const [directFormat, setDirectFormat] = useState<'mp4' | 'mkv'>('mp4')
+  const [directSubLang, setDirectSubLang] = useState('')
+  const [directAudio, setDirectAudio] = useState('')
+  const [seasonData, setSeasonData] = useState<VidsrcDownloadResponse | null>(null)
+  const [seasonLoading, setSeasonLoading] = useState(false)
+
   const analyzeAbortRef = useRef<AbortController | null>(null)
   const downloadAbortRef = useRef<AbortController | null>(null)
+  const directAbortRef = useRef<AbortController | null>(null)
   const autoScannedRequestRef = useRef<InSiteDownloadRequest | null>(null)
 
   useEffect(() => {
     return subscribeDownloadModal((next) => {
       analyzeAbortRef.current?.abort()
       downloadAbortRef.current?.abort()
+      directAbortRef.current?.abort()
       autoScannedRequestRef.current = null
       setRequest(next)
       if (next) {
         const hasIframeUrl = Boolean(next.url && next.url.trim())
+        const hasDirectId = Boolean(next.tmdbId || next.imdbId)
         const nextMode: DownloadTabMode =
-          next.initialMode === 'smart' || !hasIframeUrl ? 'smart' : '02downloader'
+          next.initialMode === 'smart'
+            ? 'smart'
+            : next.initialMode === '02downloader' && hasIframeUrl
+              ? '02downloader'
+              : hasDirectId
+                ? 'direct'
+                : hasIframeUrl
+                  ? '02downloader'
+                  : 'smart'
         setMode(nextMode)
         setIsFrameLoading(hasIframeUrl)
         setReloadNonce((prev) => prev + 1)
@@ -160,6 +183,14 @@ export function DownloadEmbedModal() {
             state: 'pending',
           })),
         )
+        setDirectData(null)
+        setDirectError('')
+        setDirectLoading(false)
+        setDirectFormat('mp4')
+        setDirectSubLang('')
+        setDirectAudio('')
+        setSeasonData(null)
+        setSeasonLoading(false)
       }
     })
   }, [])
@@ -471,9 +502,80 @@ export function DownloadEmbedModal() {
     downloadAbortRef.current?.abort()
   }
 
+  useEffect(() => {
+    const targetId = request?.imdbId || request?.tmdbId
+    if (mode !== 'direct' || !targetId) return
+
+    directAbortRef.current?.abort()
+    const controller = new AbortController()
+    directAbortRef.current = controller
+    setDirectLoading(true)
+    setDirectError('')
+
+    void fetchVidsrcDownloads(
+      {
+        id: targetId,
+        mediaType: request.mediaType || 'movie',
+        season: request.season,
+        episode: request.episode,
+        sub: directSubLang || undefined,
+        audio: directAudio || undefined,
+      },
+      controller.signal,
+    )
+      .then((res) => {
+        if (!controller.signal.aborted) {
+          setDirectData(res)
+        }
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setDirectError(err instanceof Error ? err.message : 'Failed to load direct links.')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDirectLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [mode, request, directSubLang, directAudio])
+
+  const handleLoadWholeSeason = async () => {
+    const targetId = request?.imdbId || request?.tmdbId
+    if (!targetId || request?.season === undefined) return
+    setSeasonLoading(true)
+    try {
+      const res = await fetchVidsrcDownloads({
+        id: targetId,
+        mediaType: request.mediaType || 'tv',
+        season: request.season,
+        sub: directSubLang || undefined,
+        audio: directAudio || undefined,
+      })
+      setSeasonData(res)
+    } catch (err) {
+      setDirectError(err instanceof Error ? err.message : 'Could not load season episodes.')
+    } finally {
+      setSeasonLoading(false)
+    }
+  }
+
+  const appendDirectParams = (rawUrl?: string): string => {
+    if (!rawUrl) return ''
+    try {
+      const parsed = new URL(rawUrl)
+      if (directSubLang) parsed.searchParams.set('sub', directSubLang)
+      if (directAudio) parsed.searchParams.set('audio', directAudio)
+      return parsed.toString()
+    } catch {
+      return rawUrl
+    }
+  }
+
   if (!request) return null
 
   const has02Downloader = Boolean(request.url && request.url.trim())
+  const hasDirectLinks = Boolean(request.tmdbId || request.imdbId)
 
   return (
     <div
@@ -509,6 +611,18 @@ export function DownloadEmbedModal() {
           </div>
 
           <div className="download-embed-mode-tabs" role="tablist" aria-label="Download engine">
+            {hasDirectLinks && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'direct'}
+                className={`download-mode-tab${mode === 'direct' ? ' is-active' : ''}`}
+                onClick={() => setMode('direct')}
+              >
+                <HardDriveDownload size={14} />
+                <span>Direct Links</span>
+              </button>
+            )}
             {has02Downloader && (
               <button
                 type="button"
@@ -560,7 +674,180 @@ export function DownloadEmbedModal() {
           </div>
         </header>
 
-        {mode === '02downloader' && has02Downloader ? (
+        {mode === 'direct' && hasDirectLinks ? (
+          <div className="smart-dl-panel vidsrc-dl-panel">
+            <div className="vidsrc-dl-toolbar">
+              <div className="vidsrc-dl-control-group">
+                <span className="vidsrc-dl-label">Format:</span>
+                {(['mp4', 'mkv'] as const).map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    className={`vidsrc-dl-chip${directFormat === fmt ? ' is-active' : ''}`}
+                    onClick={() => setDirectFormat(fmt)}
+                  >
+                    {fmt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              {request.mediaType === 'anime' && (
+                <div className="vidsrc-dl-control-group">
+                  <span className="vidsrc-dl-label">Audio:</span>
+                  <button
+                    type="button"
+                    className={`vidsrc-dl-chip${directAudio === '' ? ' is-active' : ''}`}
+                    onClick={() => setDirectAudio('')}
+                  >
+                    Default
+                  </button>
+                  <button
+                    type="button"
+                    className={`vidsrc-dl-chip${directAudio === 'dub' ? ' is-active' : ''}`}
+                    onClick={() => setDirectAudio('dub')}
+                  >
+                    English Dub
+                  </button>
+                </div>
+              )}
+
+              {directData?.subtitles && directData.subtitles.length > 0 && (
+                <div className="vidsrc-dl-control-group">
+                  <label htmlFor="vidsrc-sub-select" className="vidsrc-dl-label">
+                    Burn Subtitles:
+                  </label>
+                  <select
+                    id="vidsrc-sub-select"
+                    className="vidsrc-dl-select"
+                    value={directSubLang}
+                    onChange={(e) => setDirectSubLang(e.target.value)}
+                  >
+                    <option value="">None</option>
+                    {directData.subtitles.slice(0, 12).map((sub) => (
+                      <option key={`${sub.lang}-${sub.label}`} value={sub.lang}>
+                        {sub.label || sub.lang.toUpperCase()} ({sub.lang})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(request.mediaType === 'tv' || request.mediaType === 'anime') &&
+                request.season !== undefined && (
+                  <button
+                    type="button"
+                    className="vidsrc-dl-season-btn"
+                    onClick={() => void handleLoadWholeSeason()}
+                    disabled={seasonLoading}
+                  >
+                    {seasonLoading ? 'Loading Season…' : `Load Whole Season ${request.season}`}
+                  </button>
+                )}
+            </div>
+
+            {directLoading ? (
+              <div className="vidsrc-dl-loading" aria-live="polite">
+                <RefreshCw size={24} className="spin" />
+                <span>Fetching qualities & direct MP4/MKV links…</span>
+              </div>
+            ) : directError ? (
+              <div className="smart-dl-alert is-danger" role="alert">
+                <ShieldAlert size={18} />
+                <span>{directError}</span>
+              </div>
+            ) : directData?.downloads && directData.downloads.length > 0 ? (
+              <div className="vidsrc-dl-qualities">
+                {directData.downloads.map((opt) => {
+                  const rawHref = directFormat === 'mkv' ? opt.mkv || opt.mp4 : opt.mp4 || opt.mkv
+                  const href = appendDirectParams(rawHref)
+                  return (
+                    <div key={`${opt.quality}-${directFormat}`} className="vidsrc-dl-quality-card">
+                      <div className="vidsrc-dl-quality-meta">
+                        <span className="vidsrc-dl-quality-badge">{opt.quality}</span>
+                        <span className="vidsrc-dl-quality-size">
+                          {opt.sizeLabel || (opt.size ? formatBytes(opt.size) : directFormat.toUpperCase())}
+                        </span>
+                        {opt.videoCodec && (
+                          <span className="vidsrc-dl-quality-codec">{opt.videoCodec}</span>
+                        )}
+                      </div>
+                      <a
+                        href={href}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="vidsrc-dl-download-link"
+                      >
+                        <Download size={15} />
+                        <span>Download {directFormat.toUpperCase()}</span>
+                      </a>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="smart-dl-alert is-danger">
+                <AlertTriangle size={18} />
+                <span>No direct download qualities returned for this title. Try 02Downloader or Smart Downloader.</span>
+              </div>
+            )}
+
+            {directData?.subtitles && directData.subtitles.length > 0 && (
+              <div className="vidsrc-dl-subs-box">
+                <span className="vidsrc-dl-label">Subtitles ({directData.subtitles.length}):</span>
+                <div className="vidsrc-dl-subs-list">
+                  {directData.subtitles.slice(0, 10).map((sub) => (
+                    <a
+                      key={`sub-${sub.lang}-${sub.label}`}
+                      href={sub.srt || sub.vtt}
+                      download
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="vidsrc-dl-sub-pill"
+                    >
+                      {sub.label || sub.lang.toUpperCase()}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {seasonData?.episodes && seasonData.episodes.length > 0 && (
+              <div className="vidsrc-dl-season-list">
+                <h4>Season {request.season} Episodes ({seasonData.episodes.length})</h4>
+                <div className="vidsrc-dl-season-grid">
+                  {seasonData.episodes.map((ep) => {
+                    const epUrl = appendDirectParams(
+                      directFormat === 'mkv'
+                        ? ep.mkv || ep.downloads?.[0]?.mkv || ep.mp4
+                        : ep.mp4 || ep.downloads?.[0]?.mp4 || ep.mkv,
+                    )
+                    return (
+                      <div key={`ep-${ep.episode}`} className="vidsrc-dl-season-row">
+                        <span>
+                          Ep {ep.episode}
+                          {ep.title ? ` · ${ep.title}` : ''}
+                        </span>
+                        {epUrl && (
+                          <a
+                            href={epUrl}
+                            download
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="vidsrc-dl-ep-link"
+                          >
+                            <Download size={13} />
+                            <span>{directFormat.toUpperCase()}</span>
+                          </a>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : mode === '02downloader' && has02Downloader ? (
           <div className="download-embed-frame-wrap">
             {isFrameLoading && (
               <div className="download-embed-loading" aria-live="polite">

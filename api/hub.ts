@@ -32,6 +32,20 @@ import {
   sanitizeFileName,
 } from './_lib/smart-download-core.js'
 import {
+  extractClientPublicIp,
+  proxyIpApiLookup,
+  resolveIpApiKey,
+} from './_lib/ipapi-core.js'
+import { fetchVidsrcDownloadOptions } from './_lib/vidsrc-dl-core.js'
+import {
+  getUserActiveVpnSession,
+  listOperationalVpnServers,
+  listVpnCountries,
+  markVpnSessionDisconnected,
+  provisionVpnConfiguration,
+  revokeUserVpnDevice,
+} from './_lib/vpn-control-core.js'
+import {
   createTmdbTrailerAuthChain,
   fetchTmdbTrailerYoutubeId,
 } from './_lib/tmdb-trailer-core.js'
@@ -411,6 +425,193 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     } catch (error) {
       res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'Could not reach Eporner API.' })
     }
+    return
+  }
+
+  // ---- vpn (WireGuard VPN control plane: countries, status, connect, disconnect, servers, configuration, revoke) ----
+  if (kind === 'vpn') {
+    const action = (qv(req.query.action) || 'countries').toLowerCase()
+    const ip = getClientIp(req)
+    res.setHeader('Cache-Control', 'no-store')
+
+    if (action === 'countries') {
+      const countries = await listVpnCountries(config, env)
+      res.status(200).json({ ok: true, countries })
+      return
+    }
+
+    const authHeader = Array.isArray(req.headers?.authorization)
+      ? req.headers.authorization[0]
+      : req.headers?.authorization
+    const bearerToken = extractBearerToken(authHeader)
+    const userSession = verifySessionToken(bearerToken, config, env)
+    if (!userSession) {
+      res.status(401).json({ ok: false, error: 'Authentication required for VPN access.' })
+      return
+    }
+
+    if (action === 'servers') {
+      const servers = await listOperationalVpnServers(config, env)
+      res.status(200).json({
+        ok: true,
+        servers: servers.map((s) => ({
+          id: s.id,
+          country_code: s.country_code,
+          name: s.name,
+          region: s.region,
+          status: s.status,
+          active_peers: s.active_peers,
+          max_peers: s.max_peers,
+        })),
+      })
+      return
+    }
+
+    if (action === 'status') {
+      const activeSession = await getUserActiveVpnSession(config, userSession.userId)
+      const clientIp = extractClientPublicIp(req.headers, req.socket?.remoteAddress)
+      const ipCheck = await proxyIpApiLookup({
+        query: clientIp,
+        apiKey: resolveIpApiKey(env),
+      })
+      res.status(200).json({
+        ok: true,
+        session: activeSession,
+        network: ipCheck.status === 200 ? ipCheck.data : null,
+      })
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ ok: false, error: 'Method not allowed.' })
+      return
+    }
+
+    if (!checkRateLimit(`vpn:${userSession.userId}:${ip}`, 20, 60_000)) {
+      res.status(429).json({ ok: false, error: 'Too many VPN control requests. Slow down.' })
+      return
+    }
+
+    const vpnBody = parseBody(req)
+
+    if (action === 'configuration' || action === 'connect') {
+      const countryCode = String(vpnBody.countryCode || vpnBody.country_code || '')
+      const deviceName = typeof vpnBody.deviceName === 'string' ? vpnBody.deviceName : undefined
+      const platformRaw = String(vpnBody.platform || 'windows')
+      const platform =
+        platformRaw === 'macos' ||
+        platformRaw === 'linux' ||
+        platformRaw === 'android' ||
+        platformRaw === 'ios' ||
+        platformRaw === 'web'
+          ? platformRaw
+          : 'windows'
+
+      const provisioned = await provisionVpnConfiguration({
+        config,
+        env,
+        userEmail: userSession.userId,
+        countryCode,
+        deviceName,
+        platform,
+      })
+      if (!provisioned.ok) {
+        res.status(provisioned.status).json({ ok: false, error: provisioned.error })
+        return
+      }
+      res.status(200).json({
+        ok: true,
+        session: provisioned.session,
+        device: provisioned.device,
+        server: provisioned.server
+          ? {
+              id: provisioned.server.id,
+              country_code: provisioned.server.country_code,
+              name: provisioned.server.name,
+              region: provisioned.server.region,
+              public_ip: provisioned.server.public_ip,
+              endpoint_host: provisioned.server.endpoint_host,
+              endpoint_port: provisioned.server.endpoint_port,
+            }
+          : null,
+        wireguardConfig: provisioned.wireguardConfig,
+      })
+      return
+    }
+
+    if (action === 'disconnect') {
+      const sessionId = typeof vpnBody.sessionId === 'string' ? vpnBody.sessionId : undefined
+      const result = await markVpnSessionDisconnected({
+        config,
+        userEmail: userSession.userId,
+        sessionId,
+      })
+      res.status(200).json(result)
+      return
+    }
+
+    if (action === 'revoke') {
+      const deviceId = String(vpnBody.deviceId || '')
+      const result = await revokeUserVpnDevice({
+        config,
+        userEmail: userSession.userId,
+        deviceId,
+      })
+      res.status(result.status).json(result)
+      return
+    }
+
+    res.status(404).json({ ok: false, error: `Unknown VPN action "${action}".` })
+    return
+  }
+
+  // ---- vidsrc-dl (dl.vidsrc.party direct download links & subtitles proxy) ----
+  if (kind === 'vidsrc-dl') {
+    const id = qv(req.query.id)
+    const mediaTypeRaw = qv(req.query.mediaType)
+    const mediaType =
+      mediaTypeRaw === 'tv' || mediaTypeRaw === 'anime' ? mediaTypeRaw : 'movie'
+    const result = await fetchVidsrcDownloadOptions(
+      {
+        id,
+        mediaType,
+        season: qv(req.query.season) || undefined,
+        episode: qv(req.query.episode) || undefined,
+        quality: qv(req.query.quality) || undefined,
+        format: qv(req.query.format) === 'mkv' ? 'mkv' : undefined,
+        sub: qv(req.query.sub) || undefined,
+        lang: qv(req.query.lang) || undefined,
+        audio: qv(req.query.audio) || undefined,
+      },
+      env,
+    )
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    res.status(result.status).json(result.data)
+    return
+  }
+
+  // ---- vpn-check (ipapi.is server-side VPN / IP / ASN intelligence proxy) ----
+  if (kind === 'vpn-check') {
+    const apiKey = resolveIpApiKey(env)
+    const bodyData = req.method === 'POST' ? parseBody(req) : {}
+    const ips = Array.isArray(bodyData.ips)
+      ? bodyData.ips.map((entry: unknown) => String(entry))
+      : undefined
+    const explicitQuery =
+      qv(req.query.q) ||
+      qv(req.query.ip) ||
+      (typeof bodyData.q === 'string' ? bodyData.q : '')
+    const clientIp = !explicitQuery && !ips
+      ? extractClientPublicIp(req.headers, req.socket?.remoteAddress)
+      : undefined
+
+    const result = await proxyIpApiLookup({
+      query: explicitQuery || clientIp,
+      ips,
+      apiKey,
+    })
+    res.setHeader('Cache-Control', 'no-store')
+    res.status(result.status).json(result.data)
     return
   }
 

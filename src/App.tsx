@@ -205,6 +205,14 @@ import {
   prefetchAdultEmbedCatalog,
   adultEmbedToMovie,
 } from './adultembed-api'
+import {
+  readLordProxyEnabled,
+} from './vpn-api'
+import {
+  VpnModal,
+  VpnStatusButton,
+  useLumenVpnState,
+} from './VpnModal'
 import './App.css'
 
 // Eagerly import all avatar images so Vite bundles them for production
@@ -387,9 +395,9 @@ function buildMovieSmartServerCandidates(
 
   const ordered = preferredProviderId
     ? [
-        ...eligible.filter((p) => p.id === preferredProviderId),
-        ...eligible.filter((p) => p.id !== preferredProviderId),
-      ]
+      ...eligible.filter((p) => p.id === preferredProviderId),
+      ...eligible.filter((p) => p.id !== preferredProviderId),
+    ]
     : eligible
 
   const seenUrls = new Set<string>()
@@ -2128,11 +2136,13 @@ export async function fetchEpornerApi(
   }
 
   const qs = query.toString()
-  const candidateUrls = [
-    `/api/eporner?${qs}`,
-    `/api/hub?kind=eporner&${qs}`,
-    `https://www.eporner.com/api/v2/video/search/?${qs}&format=json`,
-  ]
+  const candidateUrls = readLordProxyEnabled()
+    ? [`/api/eporner?${qs}`, `/api/hub?kind=eporner&${qs}`]
+    : [
+      `/api/eporner?${qs}`,
+      `/api/hub?kind=eporner&${qs}`,
+      `https://www.eporner.com/api/v2/video/search/?${qs}&format=json`,
+    ]
 
   try {
     const result = await Promise.any(candidateUrls.map((url) => fetchJsonWithTimeout(url, 1500)))
@@ -3810,6 +3820,8 @@ function App() {
     jav: 1,
     adultembed: 1,
   })
+  const [vpnState, setVpnState] = useLumenVpnState()
+  const [vpnModalOpen, setVpnModalOpen] = useState(false)
 
   const isHentaiSelectedMovie = Boolean(
     selectedMovie &&
@@ -6673,6 +6685,13 @@ function App() {
             onRemoveContinue={removeContinueMovie}
             onRemoveWatchlist={removeWatchlistMovie}
             onToggleSave={toggleSaved}
+            vpnTrigger={
+              <VpnStatusButton
+                state={vpnState.connectionState}
+                countryCode={vpnState.selectedCountry?.code}
+                onClick={() => setVpnModalOpen(true)}
+              />
+            }
           />
         </ErrorBoundary>
       )}
@@ -6761,6 +6780,12 @@ function App() {
       )}
 
       <DownloadEmbedModal />
+      <VpnModal
+        open={vpnModalOpen}
+        onClose={() => setVpnModalOpen(false)}
+        vpnState={vpnState}
+        setVpnState={setVpnState}
+      />
 
       {bffMovie && (
         <div className="bff-overlay" role="dialog" aria-label="Watch together">
@@ -8140,6 +8165,10 @@ function DetailScreen({
           url: downloadUrl,
           embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: s, streamEpisode: ep }, defaultStreamProvider),
           serverUrls,
+          tmdbId,
+          mediaType: movie.isAnime || movie.anilistId ? 'anime' : isTv ? 'tv' : 'movie',
+          season: isTv ? s : undefined,
+          episode: isTv ? ep : undefined,
           title: movie.title,
           subtitle: isTv ? `Season ${s} · Episode ${ep}` : 'Movie Download',
           poster: movie.poster || movie.still,
@@ -9226,6 +9255,10 @@ function SeasonEpisodeSection({
                             url,
                             embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: selectedSeason, streamEpisode: episode }, defaultStreamProvider),
                             serverUrls,
+                            tmdbId: targetTmdbId,
+                            mediaType: movie.isAnime || movie.anilistId ? 'anime' : 'tv',
+                            season: selectedSeason,
+                            episode,
                             title: movie.title,
                             subtitle: `Season ${selectedSeason} · Episode ${episode}`,
                             poster: cover || movie.poster,
@@ -9241,6 +9274,10 @@ function SeasonEpisodeSection({
                               url,
                               embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: selectedSeason, streamEpisode: episode }, defaultStreamProvider),
                               serverUrls,
+                              tmdbId: targetTmdbId,
+                              mediaType: movie.isAnime || movie.anilistId ? 'anime' : 'tv',
+                              season: selectedSeason,
+                              episode,
                               title: movie.title,
                               subtitle: `Season ${selectedSeason} · Episode ${episode}`,
                               poster: cover || movie.poster,
@@ -9816,6 +9853,10 @@ function WatchScreen({
           url: downloadUrl,
           embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: s, streamEpisode: ep }, activeProviderId),
           serverUrls,
+          tmdbId,
+          mediaType: movie.isAnime || movie.anilistId ? 'anime' : isTv ? 'tv' : 'movie',
+          season: isTv ? s : undefined,
+          episode: isTv ? ep : undefined,
           title: movie.title,
           subtitle: isTv ? `Season ${s} · Episode ${ep}` : 'Movie Download',
           poster: movie.poster || movie.still,
@@ -11182,6 +11223,10 @@ function WatchScreen({
                               url,
                               embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: s, streamEpisode: number }, activeProviderId),
                               serverUrls,
+                              tmdbId: watchTargetTmdbId,
+                              mediaType: movie.isAnime || movie.anilistId ? 'anime' : 'tv',
+                              season: s,
+                              episode: number,
                               title: movie.title,
                               subtitle: `Season ${s} · Episode ${number}`,
                               poster: thumbUrl || movie.poster,
@@ -11198,6 +11243,10 @@ function WatchScreen({
                                 url,
                                 embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: s, streamEpisode: number }, activeProviderId),
                                 serverUrls,
+                                tmdbId: watchTargetTmdbId,
+                                mediaType: movie.isAnime || movie.anilistId ? 'anime' : 'tv',
+                                season: s,
+                                episode: number,
                                 title: movie.title,
                                 subtitle: `Season ${s} · Episode ${number}`,
                                 poster: thumbUrl || movie.poster,
@@ -16804,6 +16853,7 @@ type LordScreenProps = {
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
   onToggleSave?: (movie: Movie) => void
+  vpnTrigger?: React.ReactNode
 }
 
 // Standalone hero + rails layout for the unlocked "Lord" profile.
@@ -16843,6 +16893,7 @@ export function LordScreen({
   onRemoveContinue,
   onRemoveWatchlist,
   onToggleSave,
+  vpnTrigger,
 }: LordScreenProps) {
   const rotatedMovies = useMemo(() => {
     return rotateByDailySeed(movies || [], 1)
@@ -17149,6 +17200,7 @@ export function LordScreen({
         </div>
 
         <div className="lord-topbar-right">
+          {vpnTrigger}
           <div className={`lord-search${searchFocused ? ' is-focused' : ''}`}>
             <div className="lord-search-bar">
               <Search size={18} />
@@ -19712,6 +19764,7 @@ function LordAdultEmbedSection({
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
   onToggleSave?: (movie: Movie) => void
+  vpnTrigger?: React.ReactNode
 }) {
   const [selectedCategory, setSelectedCategory] = useState('')
   const [orientation, setOrientation] = useState<'all' | 'straight' | 'gay' | 'trans' | 'bi'>('all')

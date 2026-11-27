@@ -179,6 +179,11 @@ export function DownloadsScreen({
     })
     openInSiteDownload({
       url,
+      tmdbId: item.tmdbId,
+      imdbId: item.imdbId,
+      mediaType: item.mediaType === 'anime' ? 'anime' : isTv ? 'tv' : 'movie',
+      season: item.season,
+      episode: item.episode,
       title: item.title,
       subtitle:
         item.episodeTitle ||

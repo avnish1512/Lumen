@@ -102,10 +102,99 @@ export interface InSiteDownloadRequest {
   url: string
   embedUrl?: string
   serverUrls?: SmartServerCandidate[]
-  initialMode?: '02downloader' | 'smart'
+  tmdbId?: number | string
+  imdbId?: string
+  mediaType?: 'movie' | 'tv' | 'anime'
+  season?: number
+  episode?: number
+  initialMode?: 'direct' | '02downloader' | 'smart'
   title?: string
   subtitle?: string
   poster?: string
+}
+
+export interface VidsrcAudioOption {
+  lang?: string
+  label?: string
+  codecs?: string
+  channels?: number
+}
+
+export interface VidsrcDownloadOption {
+  quality: string
+  width?: number | null
+  height?: number | null
+  videoCodec?: string
+  bitrate?: number
+  size?: number
+  sizeLabel?: string
+  mp4?: string
+  mkv?: string
+}
+
+export interface VidsrcSubtitleOption {
+  label?: string
+  lang: string
+  source?: string
+  srt?: string
+  vtt?: string
+}
+
+export interface VidsrcSeasonEpisode {
+  episode: number
+  title?: string
+  mp4?: string
+  mkv?: string
+  downloads?: VidsrcDownloadOption[]
+}
+
+export interface VidsrcDownloadResponse {
+  media?: {
+    tmdbId?: number
+    imdbId?: string
+    type?: string
+    title?: string
+    year?: string
+    poster?: string
+    backdrop?: string
+  }
+  page?: string
+  filename?: string
+  duration?: number
+  audio?: VidsrcAudioOption[]
+  downloads?: VidsrcDownloadOption[]
+  subtitles?: VidsrcSubtitleOption[]
+  episodes?: VidsrcSeasonEpisode[]
+  expires?: string | null
+  error?: string
+}
+
+export async function fetchVidsrcDownloads(
+  params: {
+    id: string | number
+    mediaType?: 'movie' | 'tv' | 'anime'
+    season?: number
+    episode?: number
+    sub?: string
+    audio?: string
+  },
+  signal?: AbortSignal,
+): Promise<VidsrcDownloadResponse> {
+  const qs = new URLSearchParams({
+    id: String(params.id),
+    mediaType: params.mediaType || 'movie',
+  })
+  if (params.season !== undefined) qs.set('season', String(params.season))
+  if (params.episode !== undefined) qs.set('episode', String(params.episode))
+  if (params.sub) qs.set('sub', params.sub)
+  if (params.audio) qs.set('audio', params.audio)
+
+  const res = await fetch(`/api/vidsrc-dl?${qs.toString()}`, { signal })
+  const data = (await res.json()) as VidsrcDownloadResponse
+  if (!res.ok || data?.error) {
+    throw new Error(data?.error || `Direct download API returned HTTP ${res.status}.`)
+  }
+  return data
 }
 
 export type SmartAppStatus =

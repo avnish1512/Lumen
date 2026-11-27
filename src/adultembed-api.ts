@@ -685,5 +685,5 @@ export async function fetchAdultEmbedCategories(): Promise<AdultEmbedCategoryPil
 
 export function prefetchAdultEmbedCatalog(): void {
   if (typeof window === 'undefined') return
-  void fetchAdultEmbedCatalog({ sort: 'popular', orientation: 'all', page: 1 }).catch(() => {})
+  void fetchAdultEmbedCatalog({ sort: 'popular', orientation: 'all', page: 1 }).catch(() => { })
 }

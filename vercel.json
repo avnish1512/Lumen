@@ -59,6 +59,9 @@
     { "source": "/api/xvid", "destination": "/api/hub?kind=xvid" },
     { "source": "/api/adultembed", "destination": "/api/hub?kind=adultembed" },
     { "source": "/api/smart-download", "destination": "/api/hub?kind=smart-download" },
+    { "source": "/api/vpn-check", "destination": "/api/hub?kind=vpn-check" },
+    { "source": "/api/vpn/:action", "destination": "/api/hub?kind=vpn&action=:action" },
+    { "source": "/api/vidsrc-dl", "destination": "/api/hub?kind=vidsrc-dl" },
     { "source": "/api/stream-resolver", "destination": "/api/hub?kind=stream-resolver" },
     { "source": "/api/stream-proxy", "destination": "/api/hub?kind=stream-proxy" },
     {

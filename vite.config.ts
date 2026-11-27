@@ -45,6 +45,20 @@ import {
   openSmartMp4Stream,
   sanitizeFileName,
 } from './api/_lib/smart-download-core'
+import {
+  extractClientPublicIp,
+  proxyIpApiLookup,
+  resolveIpApiKey,
+} from './api/_lib/ipapi-core'
+import { fetchVidsrcDownloadOptions } from './api/_lib/vidsrc-dl-core'
+import {
+  getUserActiveVpnSession,
+  listOperationalVpnServers,
+  listVpnCountries,
+  markVpnSessionDisconnected,
+  provisionVpnConfiguration,
+  revokeUserVpnDevice,
+} from './api/_lib/vpn-control-core'
 import { fetchDramaRails, fetchKoreanChineseDramas, fetchMatureCollection, searchTmdbTitles } from './api/_lib/tmdb-drama-core'
 import { fetchKinocheckTrailer } from './api/_lib/kinocheck-core'
 import { fetchTmdbSeasonEpisodes, fetchTmdbTvSeasons } from './api/_lib/tmdb-episodes-core'
@@ -2343,6 +2357,212 @@ function smartDownloadDevProxy(): Plugin {
   }
 }
 
+function vpnControlDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'vpn-control-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/vpn/', async (req, res) => {
+        const requestUrl = new URL(req.url || '/', 'http://localhost')
+        const action = requestUrl.pathname.replace(/^\/+/, '').split('/')[0]?.toLowerCase() || 'countries'
+        const config = supabaseConfigFromEnv(env)
+
+        if (action === 'countries') {
+          const countries = await listVpnCountries(config, env)
+          sendJson(res, 200, { ok: true, countries })
+          return
+        }
+
+        const authHeader = Array.isArray(req.headers.authorization)
+          ? req.headers.authorization[0]
+          : req.headers.authorization
+        const userSession = verifySessionToken(extractBearerToken(authHeader), config, env)
+        if (!userSession) {
+          sendJson(res, 401, { ok: false, error: 'Authentication required for VPN access.' })
+          return
+        }
+
+        if (action === 'servers') {
+          const servers = await listOperationalVpnServers(config, env)
+          sendJson(res, 200, {
+            ok: true,
+            servers: servers.map((s) => ({
+              id: s.id,
+              country_code: s.country_code,
+              name: s.name,
+              region: s.region,
+              status: s.status,
+              active_peers: s.active_peers,
+              max_peers: s.max_peers,
+            })),
+          })
+          return
+        }
+
+        if (action === 'status') {
+          const activeSession = await getUserActiveVpnSession(config, userSession.userId)
+          const ipCheck = await proxyIpApiLookup({ apiKey: resolveIpApiKey(env) })
+          sendJson(res, 200, {
+            ok: true,
+            session: activeSession,
+            network: ipCheck.status === 200 ? ipCheck.data : null,
+          })
+          return
+        }
+
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { ok: false, error: 'Method not allowed.' })
+          return
+        }
+
+        let body = ''
+        req.on('data', (c) => {
+          body += c
+        })
+        req.on('end', async () => {
+          let parsed: Record<string, unknown> = {}
+          try {
+            parsed = JSON.parse(body || '{}') as Record<string, unknown>
+          } catch {
+            sendJson(res, 400, { ok: false, error: 'Invalid JSON body.' })
+            return
+          }
+
+          if (action === 'configuration' || action === 'connect') {
+            const provisioned = await provisionVpnConfiguration({
+              config,
+              env,
+              userEmail: userSession.userId,
+              countryCode: String(parsed.countryCode || parsed.country_code || ''),
+              deviceName: typeof parsed.deviceName === 'string' ? parsed.deviceName : undefined,
+            })
+            if (!provisioned.ok) {
+              sendJson(res, provisioned.status, { ok: false, error: provisioned.error })
+              return
+            }
+            sendJson(res, 200, {
+              ok: true,
+              session: provisioned.session,
+              device: provisioned.device,
+              server: provisioned.server
+                ? {
+                    id: provisioned.server.id,
+                    country_code: provisioned.server.country_code,
+                    name: provisioned.server.name,
+                    region: provisioned.server.region,
+                    public_ip: provisioned.server.public_ip,
+                    endpoint_host: provisioned.server.endpoint_host,
+                    endpoint_port: provisioned.server.endpoint_port,
+                  }
+                : null,
+              wireguardConfig: provisioned.wireguardConfig,
+            })
+            return
+          }
+
+          if (action === 'disconnect') {
+            const result = await markVpnSessionDisconnected({
+              config,
+              userEmail: userSession.userId,
+              sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : undefined,
+            })
+            sendJson(res, 200, result)
+            return
+          }
+
+          if (action === 'revoke') {
+            const result = await revokeUserVpnDevice({
+              config,
+              userEmail: userSession.userId,
+              deviceId: String(parsed.deviceId || ''),
+            })
+            sendJson(res, result.status, result)
+            return
+          }
+
+          sendJson(res, 404, { ok: false, error: `Unknown VPN action "${action}".` })
+        })
+      })
+    },
+  }
+}
+
+function vidsrcDlDevProxy(env: Record<string, string | undefined>): Plugin {
+  return {
+    name: 'vidsrc-dl-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/vidsrc-dl', async (req, res) => {
+        const requestUrl = new URL(req.url || '/', 'http://localhost')
+        const mediaTypeRaw = requestUrl.searchParams.get('mediaType')
+        const mediaType =
+          mediaTypeRaw === 'tv' || mediaTypeRaw === 'anime' ? mediaTypeRaw : 'movie'
+        const result = await fetchVidsrcDownloadOptions(
+          {
+            id: requestUrl.searchParams.get('id') || '',
+            mediaType,
+            season: requestUrl.searchParams.get('season') || undefined,
+            episode: requestUrl.searchParams.get('episode') || undefined,
+            quality: requestUrl.searchParams.get('quality') || undefined,
+            format: requestUrl.searchParams.get('format') === 'mkv' ? 'mkv' : undefined,
+            sub: requestUrl.searchParams.get('sub') || undefined,
+            lang: requestUrl.searchParams.get('lang') || undefined,
+            audio: requestUrl.searchParams.get('audio') || undefined,
+          },
+          env,
+        )
+        sendJson(res, result.status, result.data)
+      })
+    },
+  }
+}
+
+function vpnCheckDevProxy(apiKey: string): Plugin {
+  return {
+    name: 'vpn-check-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/vpn-check', async (req, res) => {
+        const requestUrl = new URL(req.url || '/', 'http://localhost')
+        const queryParam =
+          requestUrl.searchParams.get('q') || requestUrl.searchParams.get('ip') || ''
+
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', (chunk) => {
+            body += chunk
+          })
+          req.on('end', async () => {
+            try {
+              const parsed = JSON.parse(body || '{}') as { q?: string; ips?: string[] }
+              const clientIp = !queryParam && !parsed.q && !parsed.ips
+                ? extractClientPublicIp(req.headers, req.socket?.remoteAddress)
+                : undefined
+              const result = await proxyIpApiLookup({
+                query: queryParam || parsed.q || clientIp,
+                ips: Array.isArray(parsed.ips) ? parsed.ips : undefined,
+                apiKey,
+              })
+              sendJson(res, result.status, result.data)
+            } catch (err) {
+              sendJson(res, 502, {
+                error: err instanceof Error ? err.message : 'VPN check proxy failed.',
+              })
+            }
+          })
+          return
+        }
+
+        const clientIp = !queryParam
+          ? extractClientPublicIp(req.headers, req.socket?.remoteAddress)
+          : undefined
+        const result = await proxyIpApiLookup({
+          query: queryParam || clientIp,
+          apiKey,
+        })
+        sendJson(res, result.status, result.data)
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
@@ -2391,6 +2611,9 @@ export default defineConfig(({ mode }) => {
       streamResolverDevProxy(),
       streamProxyDevProxy(),
       smartDownloadDevProxy(),
+      vpnCheckDevProxy(resolveIpApiKey(env)),
+      vidsrcDlDevProxy(env),
+      vpnControlDevProxy(env),
     ],
   }
 })
