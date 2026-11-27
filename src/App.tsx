@@ -3964,6 +3964,8 @@ function App() {
     }
   }, [])
 
+  const lordSessionUnlockedRef = useRef(screen === 'lord')
+
   const setScreen = useCallback(
     (nextScreen: Screen, options?: { replace?: boolean; movie?: Movie | null; restoreScroll?: boolean }) => {
       const savedScroll = lastScrollPositionsRef.current[nextScreen]
@@ -4081,6 +4083,7 @@ function App() {
   }
 
   const unlockLord = () => {
+    lordSessionUnlockedRef.current = true
     setShowLordPin(false)
     setLordBackScreen('home')
     setScreen('lord')
@@ -4097,6 +4100,7 @@ function App() {
   }
 
   const exitLordToHome = useCallback(() => {
+    lordSessionUnlockedRef.current = false
     if (designMode !== 'apple') {
       setDesignMode('apple')
       try {
@@ -4112,10 +4116,11 @@ function App() {
         window.sessionStorage.removeItem(selectedMovieKey)
       } catch { }
     }
-    setScreen('home')
+    setScreen('home', { replace: true })
   }, [designMode, selectedMovie, setScreen])
 
   const signOut = () => {
+    lordSessionUnlockedRef.current = false
     clearSessionToken()
     setCurrentUser(null)
     setWatchHistory({})
@@ -5147,6 +5152,33 @@ function App() {
       const state = event.state as LumenHistoryState | null
 
       if (state) {
+        const targetsLord =
+          state.screen === 'lord' ||
+          state.detailBackScreen === 'lord' ||
+          state.watchBackScreen === 'lord' ||
+          Boolean(state.movie && isLordAdultMovie(state.movie))
+        if (targetsLord && !lordSessionUnlockedRef.current) {
+          const safeState: LumenHistoryState = {
+            screen: 'home',
+            movie: null,
+            detailBackScreen: 'home',
+            watchBackScreen: 'home',
+            lordBackScreen: 'home',
+            loginBackScreen: 'home',
+            historyIndex: 0,
+          }
+          historyIndexRef.current = 0
+          window.history.replaceState(safeState, '', window.location.pathname)
+          setScreenState('home')
+          try {
+            window.sessionStorage.setItem(activeScreenKey, 'home')
+          } catch { }
+          notifyNativeNavState(false, 'home')
+          resetScroll()
+          window.requestAnimationFrame(resetScroll)
+          return
+        }
+
         historyIndexRef.current =
           typeof state.historyIndex === 'number'
             ? state.historyIndex
@@ -5221,6 +5253,24 @@ function App() {
           'downloads',
         ]
         historyIndexRef.current = 0
+        const hashTargetsLord =
+          hash === 'lord' ||
+          ((hash === 'detail' || hash === 'watch') && Boolean(selectedMovie && isLordAdultMovie(selectedMovie)))
+        if (hashTargetsLord && !lordSessionUnlockedRef.current) {
+          window.history.replaceState(
+            { screen: 'home', movie: null, historyIndex: 0 } satisfies LumenHistoryState,
+            '',
+            window.location.pathname,
+          )
+          setScreenState('home')
+          try {
+            window.sessionStorage.setItem(activeScreenKey, 'home')
+          } catch { }
+          notifyNativeNavState(false, 'home')
+          resetScroll()
+          window.requestAnimationFrame(resetScroll)
+          return
+        }
         if (hash && validScreens.includes(hash)) {
           if (hash === 'detail' && selectedMovie) {
             if (isLordAdultMovie(selectedMovie)) {
@@ -5241,8 +5291,13 @@ function App() {
         } else if (screen === 'watch' && selectedMovie) {
           // If popped from watch and state is null (e.g. iframe history pop), restore lord for adult or detail!
           if (watchBackScreen === 'lord' || isLordAdultMovie(selectedMovie)) {
-            setScreen('lord', { restoreScroll: true })
-            notifyNativeNavState(true, 'lord')
+            if (lordSessionUnlockedRef.current) {
+              setScreen('lord', { restoreScroll: true })
+              notifyNativeNavState(true, 'lord')
+            } else {
+              setScreen('home', { replace: true })
+              notifyNativeNavState(false, 'home')
+            }
             return
           } else {
             setScreenState('detail')
