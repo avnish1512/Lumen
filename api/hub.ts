@@ -27,6 +27,11 @@ import {
   extractBearerToken,
 } from './_lib/auth-token.js'
 import {
+  analyzeSmartVideoUrl,
+  openSmartMp4Stream,
+  sanitizeFileName,
+} from './_lib/smart-download-core.js'
+import {
   createTmdbTrailerAuthChain,
   fetchTmdbTrailerYoutubeId,
 } from './_lib/tmdb-trailer-core.js'
@@ -405,6 +410,73 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       res.status(upstreamRes.status).json(data)
     } catch (error) {
       res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'Could not reach Eporner API.' })
+    }
+    return
+  }
+
+  // ---- smart-download (Embed URL analyzer & verified MP4 downloader) ----
+  if (kind === 'smart-download') {
+    const action = qv(req.query.action) || 'analyze'
+    const targetUrl = qv(req.query.url)
+
+    if (action === 'download') {
+      if (!targetUrl) {
+        res.status(400).json({ ok: false, error: 'Missing url parameter.' })
+        return
+      }
+      try {
+        const fileName = sanitizeFileName(qv(req.query.filename) || 'video')
+        const stream = await openSmartMp4Stream(targetUrl)
+        if (!stream.ok || !stream.response?.body) {
+          res.status(stream.status).json({ ok: false, error: stream.error || 'Download rejected.' })
+          return
+        }
+        res.setHeader('Content-Type', stream.contentType || 'video/mp4')
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+        res.setHeader('Cache-Control', 'no-store')
+        if (stream.contentLength) {
+          res.setHeader('Content-Length', stream.contentLength)
+        }
+        res.status(200)
+        const reader = stream.response.body.getReader()
+        req.on('close', () => {
+          void reader.cancel().catch(() => {})
+        })
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value) res.write(Buffer.from(value))
+        }
+        res.end()
+      } catch (error) {
+        if (!res.headersSent) {
+          res.status(502).json({
+            ok: false,
+            error: error instanceof Error ? error.message : 'Smart MP4 download failed.',
+          })
+        } else {
+          res.end()
+        }
+      }
+      return
+    }
+
+    // Default: action === 'analyze'
+    const bodyData = req.method === 'POST' ? parseBody(req) : {}
+    const urlToAnalyze = targetUrl || String(bodyData.url ?? '').trim()
+    if (!urlToAnalyze) {
+      res.status(400).json({ ok: false, error: 'Please provide an embed URL to analyze.' })
+      return
+    }
+    try {
+      const result = await analyzeSmartVideoUrl(urlToAnalyze)
+      res.setHeader('Cache-Control', 'no-store')
+      res.status(200).json({ ok: true, result })
+    } catch (error) {
+      res.status(502).json({
+        ok: false,
+        error: error instanceof Error ? error.message : 'URL analysis failed.',
+      })
     }
     return
   }

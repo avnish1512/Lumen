@@ -92,11 +92,148 @@ function notifyListeners(items: DownloadItem[]) {
   })
 }
 
+export interface SmartServerCandidate {
+  id: string
+  name: string
+  url: string
+}
+
 export interface InSiteDownloadRequest {
   url: string
+  embedUrl?: string
+  serverUrls?: SmartServerCandidate[]
+  initialMode?: '02downloader' | 'smart'
   title?: string
   subtitle?: string
   poster?: string
+}
+
+export type SmartAppStatus =
+  | 'Idle'
+  | 'Analyzing URL'
+  | 'Direct MP4 found'
+  | 'Streaming-only source'
+  | 'Protected or restricted source'
+  | 'Unsupported URL'
+  | 'Ready to download'
+  | 'Downloading'
+  | 'Completed'
+  | 'Failed'
+
+export type SmartDeliveryFormat =
+  | 'Direct MP4'
+  | 'HLS'
+  | 'DASH'
+  | 'Other supported format'
+  | 'Unknown'
+
+export interface SmartCandidateSource {
+  url: string
+  format: SmartDeliveryFormat
+  sourceKind:
+    | 'direct-endpoint'
+    | 'video-tag'
+    | 'source-tag'
+    | 'meta-tag'
+    | 'download-link'
+    | 'json-ld'
+  contentType?: string
+  contentLength?: number
+  verifiedMp4: boolean
+  permitted: boolean
+  reason?: string
+}
+
+export interface SmartAnalysisResult {
+  id: string
+  inputUrl: string
+  finalUrl: string
+  host: string
+  status: SmartAppStatus
+  deliveryFormat: SmartDeliveryFormat
+  title: string
+  httpStatus?: number
+  contentType?: string
+  contentLength?: number
+  downloadable: boolean
+  permittedSourceUrl?: string
+  suggestedFileName: string
+  explanation: string
+  alternativeSuggestion?: string
+  error?: string
+  signals: {
+    hasDrmSignals: boolean
+    hasAntiBotOrChallenge: boolean
+    hasAuthGate: boolean
+    hasHlsManifest: boolean
+    hasDashManifest: boolean
+    explicitDownloadLinkFound: boolean
+  }
+  candidates: SmartCandidateSource[]
+  analyzedAt: string
+}
+
+export async function analyzeSmartEmbedUrl(
+  url: string,
+  signal?: AbortSignal,
+): Promise<SmartAnalysisResult> {
+  const response = await fetch('/api/smart-download?action=analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+    signal,
+  })
+  const data = (await response.json()) as {
+    ok?: boolean
+    result?: SmartAnalysisResult
+    error?: string
+  }
+  if (!response.ok || !data?.result) {
+    throw new Error(data?.error || `Analysis failed with HTTP ${response.status}.`)
+  }
+  return data.result
+}
+
+export function buildSmartDownloadStreamUrl(sourceUrl: string, fileName?: string): string {
+  const params = new URLSearchParams({
+    action: 'download',
+    url: sourceUrl,
+  })
+  if (fileName) params.set('filename', fileName)
+  return `/api/smart-download?${params.toString()}`
+}
+
+export async function saveSmartMp4ToOfflineLibrary(params: {
+  title: string
+  subtitle?: string
+  poster?: string
+  sourceUrl: string
+  blob: Blob
+}): Promise<DownloadItem> {
+  const id = `smart-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const item: DownloadItem = {
+    id,
+    movieId: id,
+    title: params.title || 'Downloaded Video',
+    episodeTitle: params.subtitle,
+    poster: params.poster,
+    still: params.poster,
+    quality: 'MP4',
+    server: 'Smart Downloader',
+    isFallback: false,
+    totalBytes: params.blob.size,
+    downloadedBytes: params.blob.size,
+    progress: 100,
+    status: 'completed',
+    createdAt: Date.now(),
+    completedAt: Date.now(),
+    mediaType: 'movie',
+    mimeType: params.blob.type || 'video/mp4',
+    directUrl: params.sourceUrl,
+  }
+  await saveDownloadBlob(id, params.blob)
+  await saveDownloadMetadata(item)
+  return item
 }
 
 type DownloadModalListener = (request: InSiteDownloadRequest | null) => void

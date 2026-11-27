@@ -40,6 +40,11 @@ import {
   proxyAdultEmbedRequest,
   resolveAdultEmbedApiKey,
 } from './api/_lib/adultembed-core'
+import {
+  analyzeSmartVideoUrl,
+  openSmartMp4Stream,
+  sanitizeFileName,
+} from './api/_lib/smart-download-core'
 import { fetchDramaRails, fetchKoreanChineseDramas, fetchMatureCollection, searchTmdbTitles } from './api/_lib/tmdb-drama-core'
 import { fetchKinocheckTrailer } from './api/_lib/kinocheck-core'
 import { fetchTmdbSeasonEpisodes, fetchTmdbTvSeasons } from './api/_lib/tmdb-episodes-core'
@@ -2249,6 +2254,95 @@ function anilistDevProxy(): Plugin {
   }
 }
 
+function smartDownloadDevProxy(): Plugin {
+  return {
+    name: 'smart-download-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/smart-download', async (req, res) => {
+        const requestUrl = new URL(req.url || '/', 'http://localhost')
+        const action = requestUrl.searchParams.get('action') || 'analyze'
+        const targetUrl = requestUrl.searchParams.get('url') || ''
+
+        if (action === 'download') {
+          if (!targetUrl) {
+            sendJson(res, 400, { ok: false, error: 'Missing url parameter.' })
+            return
+          }
+          try {
+            const fileName = sanitizeFileName(requestUrl.searchParams.get('filename') || 'video')
+            const stream = await openSmartMp4Stream(targetUrl)
+            if (!stream.ok || !stream.response?.body) {
+              sendJson(res, stream.status, { ok: false, error: stream.error || 'Download rejected.' })
+              return
+            }
+            res.statusCode = 200
+            res.setHeader('Content-Type', stream.contentType || 'video/mp4')
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+            res.setHeader('Cache-Control', 'no-store')
+            if (stream.contentLength) {
+              res.setHeader('Content-Length', stream.contentLength)
+            }
+            const reader = stream.response.body.getReader()
+            req.on('close', () => {
+              void reader.cancel().catch(() => {})
+            })
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              if (value) res.write(Buffer.from(value))
+            }
+            res.end()
+          } catch (error) {
+            if (!res.headersSent) {
+              sendJson(res, 502, {
+                ok: false,
+                error: error instanceof Error ? error.message : 'Smart MP4 download failed.',
+              })
+            } else {
+              res.end()
+            }
+          }
+          return
+        }
+
+        const handleAnalyze = async (rawUrl: string) => {
+          if (!rawUrl) {
+            sendJson(res, 400, { ok: false, error: 'Please provide an embed URL to analyze.' })
+            return
+          }
+          try {
+            const result = await analyzeSmartVideoUrl(rawUrl)
+            sendJson(res, 200, { ok: true, result })
+          } catch (error) {
+            sendJson(res, 502, {
+              ok: false,
+              error: error instanceof Error ? error.message : 'URL analysis failed.',
+            })
+          }
+        }
+
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', (chunk) => {
+            body += chunk
+          })
+          req.on('end', () => {
+            try {
+              const parsed = JSON.parse(body || '{}') as { url?: string }
+              void handleAnalyze(targetUrl || String(parsed.url || '').trim())
+            } catch {
+              void handleAnalyze(targetUrl)
+            }
+          })
+          return
+        }
+
+        await handleAnalyze(targetUrl)
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
@@ -2296,6 +2390,7 @@ export default defineConfig(({ mode }) => {
       ),
       streamResolverDevProxy(),
       streamProxyDevProxy(),
+      smartDownloadDevProxy(),
     ],
   }
 })

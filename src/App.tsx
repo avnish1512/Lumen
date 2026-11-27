@@ -178,7 +178,13 @@ import { SplashScreen } from './SplashScreen'
 import { ErrorBoundary } from './ErrorBoundary'
 import { DownloadsScreen } from './DownloadsScreen'
 import { DownloadEmbedModal } from './DownloadEmbedModal'
-import { getAllDownloads, subscribeDownloads, buildMovieDownloaderUrl, openInSiteDownload } from './downloads'
+import {
+  getAllDownloads,
+  subscribeDownloads,
+  buildMovieDownloaderUrl,
+  openInSiteDownload,
+  type SmartServerCandidate,
+} from './downloads'
 import { updateSeoTags, createMovieSlug } from './seo'
 import {
   type JavPost,
@@ -336,6 +342,67 @@ const currentUserKey = 'omdb.apple-tv-style.current-user'
 const profilesListKey = 'omdb.apple-tv-style.profiles-list'
 const activeScreenKey = 'omdb.apple-tv-style.active-screen'
 const selectedMovieKey = 'omdb.apple-tv-style.selected-movie'
+
+const ADULT_ONLY_PROVIDER_IDS = new Set([
+  'oceanplay',
+  'apijav',
+  'phubplay',
+  'upload18',
+  'eporner',
+  'adultembed',
+])
+
+const ANIME_ONLY_PROVIDER_IDS = new Set([
+  'filmu',
+  'nhdapi',
+  'yenime',
+  'clickhost',
+  'megaplay',
+  'megabuzz',
+  'megavid',
+])
+
+function buildMovieSmartServerCandidates(
+  movie: Movie,
+  season?: number,
+  episode?: number,
+  preferredProviderId?: StreamProvider,
+): SmartServerCandidate[] {
+  const disabled = new Set(readDisabledServers())
+  const isAnimeMovie = Boolean(movie.isAnime || movie.anilistId)
+  const targetMovie: Movie =
+    season !== undefined || episode !== undefined
+      ? { ...movie, streamSeason: season, streamEpisode: episode }
+      : movie
+
+  const eligible = streamProviderOptions.filter((provider) => {
+    if (ADULT_ONLY_PROVIDER_IDS.has(provider.id)) return false
+    if (disabled.has(provider.id)) return false
+    const isAnimeProv = ANIME_ONLY_PROVIDER_IDS.has(provider.id)
+    if (isAnimeMovie) {
+      return movie.tmdbId ? true : isAnimeProv
+    }
+    return !isAnimeProv || provider.id === 'filmu' || provider.id === 'nhdapi'
+  })
+
+  const ordered = preferredProviderId
+    ? [
+        ...eligible.filter((p) => p.id === preferredProviderId),
+        ...eligible.filter((p) => p.id !== preferredProviderId),
+      ]
+    : eligible
+
+  const seenUrls = new Set<string>()
+  const results: SmartServerCandidate[] = []
+  for (const provider of ordered) {
+    const built = buildStreamUrl(targetMovie, provider.id)
+    if (!built || (!built.startsWith('http://') && !built.startsWith('https://'))) continue
+    if (seenUrls.has(built)) continue
+    seenUrls.add(built)
+    results.push({ id: provider.id, name: provider.name, url: built })
+  }
+  return results
+}
 
 export function sanitizeMovieEmbed(movie: Movie): Movie {
   const isExplicitAdult = Boolean(
@@ -8068,8 +8135,11 @@ function DetailScreen({
           season: s,
           episode: ep,
         })
+        const serverUrls = buildMovieSmartServerCandidates(movie, s, ep, defaultStreamProvider)
         openInSiteDownload({
           url: downloadUrl,
+          embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: s, streamEpisode: ep }, defaultStreamProvider),
+          serverUrls,
           title: movie.title,
           subtitle: isTv ? `Season ${s} · Episode ${ep}` : 'Movie Download',
           poster: movie.poster || movie.still,
@@ -9151,8 +9221,11 @@ function SeasonEpisodeSection({
                         onClick={(e) => {
                           e.stopPropagation()
                           const url = buildMovieDownloaderUrl(targetTmdbId, { isTv: true, season: selectedSeason, episode })
+                          const serverUrls = buildMovieSmartServerCandidates(movie, selectedSeason, episode, defaultStreamProvider)
                           openInSiteDownload({
                             url,
+                            embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: selectedSeason, streamEpisode: episode }, defaultStreamProvider),
+                            serverUrls,
                             title: movie.title,
                             subtitle: `Season ${selectedSeason} · Episode ${episode}`,
                             poster: cover || movie.poster,
@@ -9163,8 +9236,11 @@ function SeasonEpisodeSection({
                             e.preventDefault()
                             e.stopPropagation()
                             const url = buildMovieDownloaderUrl(targetTmdbId, { isTv: true, season: selectedSeason, episode })
+                            const serverUrls = buildMovieSmartServerCandidates(movie, selectedSeason, episode, defaultStreamProvider)
                             openInSiteDownload({
                               url,
+                              embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: selectedSeason, streamEpisode: episode }, defaultStreamProvider),
+                              serverUrls,
                               title: movie.title,
                               subtitle: `Season ${selectedSeason} · Episode ${episode}`,
                               poster: cover || movie.poster,
@@ -9735,8 +9811,11 @@ function WatchScreen({
         const s = movie.streamSeason ?? season ?? 1
         const ep = movie.streamEpisode ?? episode ?? 1
         const downloadUrl = buildMovieDownloaderUrl(tmdbId, { isTv, season: s, episode: ep })
+        const serverUrls = buildMovieSmartServerCandidates(movie, s, ep, activeProviderId)
         openInSiteDownload({
           url: downloadUrl,
+          embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: s, streamEpisode: ep }, activeProviderId),
+          serverUrls,
           title: movie.title,
           subtitle: isTv ? `Season ${s} · Episode ${ep}` : 'Movie Download',
           poster: movie.poster || movie.still,
@@ -11098,8 +11177,11 @@ function WatchScreen({
                             e.stopPropagation()
                             const s = movie.streamSeason ?? season ?? 1
                             const url = buildMovieDownloaderUrl(watchTargetTmdbId, { isTv: true, season: s, episode: number })
+                            const serverUrls = buildMovieSmartServerCandidates(movie, s, number, activeProviderId)
                             openInSiteDownload({
                               url,
+                              embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: s, streamEpisode: number }, activeProviderId),
+                              serverUrls,
                               title: movie.title,
                               subtitle: `Season ${s} · Episode ${number}`,
                               poster: thumbUrl || movie.poster,
@@ -11111,8 +11193,11 @@ function WatchScreen({
                               e.stopPropagation()
                               const s = movie.streamSeason ?? season ?? 1
                               const url = buildMovieDownloaderUrl(watchTargetTmdbId, { isTv: true, season: s, episode: number })
+                              const serverUrls = buildMovieSmartServerCandidates(movie, s, number, activeProviderId)
                               openInSiteDownload({
                                 url,
+                                embedUrl: serverUrls[0]?.url || buildStreamUrl({ ...movie, streamSeason: s, streamEpisode: number }, activeProviderId),
+                                serverUrls,
                                 title: movie.title,
                                 subtitle: `Season ${s} · Episode ${number}`,
                                 poster: thumbUrl || movie.poster,

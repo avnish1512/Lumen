@@ -216,12 +216,30 @@ export function DownloadsScreen({
           </div>
         </div>
 
-        {completedDownloads.length > 0 && (
-          <div className="downloads-storage-pill">
-            <HardDrive size={15} />
-            <span>{storageUsed} on device</span>
-          </div>
-        )}
+        <div className="downloads-header-actions">
+          <button
+            type="button"
+            className="downloads-smart-btn"
+            onClick={() =>
+              openInSiteDownload({
+                url: '',
+                initialMode: 'smart',
+                title: 'Smart Video Downloader',
+                subtitle: 'Embed URL Analyzer & Verified MP4 Downloader',
+              })
+            }
+          >
+            <Sparkles size={16} />
+            <span>Smart Downloader</span>
+          </button>
+
+          {completedDownloads.length > 0 && (
+            <div className="downloads-storage-pill">
+              <HardDrive size={15} />
+              <span>{storageUsed} on device</span>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Storage & Filter Bar */}
