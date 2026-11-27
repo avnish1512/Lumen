@@ -11022,9 +11022,42 @@ function WatchScreen({
   const renderSimilarsOrMoreVideos = () => {
     if (relatedList.length === 0) return null
 
-    if (isPhubVideo) {
-      // Exactly 3 columns and 3 rows = 9 videos
+    if (isPhubVideo || isAdultEmbedVideo) {
+      // Same 3-column YouTube-style rows & cards as PHub 1 / PHub 2 home sections
       const moreVideos = relatedList.slice(0, 9)
+      const moreYtItems: YtPhubCardItem[] = moreVideos.map((m, idx) => {
+        const channelName = cleanHtmlEntities(
+          m.genres?.[0] || m.label || (isAdultEmbedVideo ? 'PHub 1' : 'PHub'),
+        )
+        const duration =
+          m.runtime && m.runtime !== '4K' && m.runtime !== 'HD' ? m.runtime : undefined
+        const qualityTag = m.logoTitle || m.awards || 'HD'
+        const rawViews = String(m.boxOffice || '').trim().toUpperCase()
+        let parsedViews: number | undefined
+        if (rawViews) {
+          const num = parseFloat(rawViews.replace(/,/g, ''))
+          if (Number.isFinite(num) && num > 0) {
+            if (rawViews.endsWith('B')) parsedViews = Math.round(num * 1_000_000_000)
+            else if (rawViews.endsWith('M')) parsedViews = Math.round(num * 1_000_000)
+            else if (rawViews.endsWith('K')) parsedViews = Math.round(num * 1_000)
+            else parsedViews = Math.round(num)
+          }
+        }
+        return {
+          key: `phub-more-${m.id || idx}`,
+          movie: m,
+          title: cleanHtmlEntities(m.title),
+          thumbnail: m.poster || m.hero || m.still || '',
+          fallbackThumbnail:
+            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80',
+          duration,
+          channelName,
+          verified: true,
+          views: parsedViews,
+          metaDetail: qualityTag,
+        }
+      })
+
       return (
         <section className="watch-phub-more-section" aria-label="More Videos">
           <div className="watch-phub-more-header">
@@ -11033,66 +11066,10 @@ function WatchScreen({
               <span className="watch-phub-more-count">({moreVideos.length})</span>
             </h2>
           </div>
-          <div className="watch-phub-grid">
-            {moreVideos.map((m, idx) => {
-              const thumb = m.poster || m.hero || m.still || ''
-              const quality = m.logoTitle || m.awards || '4K'
-              const duration = m.runtime && m.runtime !== '4K' && m.runtime !== 'HD' ? m.runtime : null
-              const studio = m.genres?.[0] || m.label || 'PHub'
-              return (
-                <div
-                  key={`phub-more-${m.id || idx}`}
-                  className="jav-card"
-                  onClick={() => onSelectMovie?.(m)}
-                >
-                  <div className="jav-thumb-container">
-                    <img
-                      src={thumb}
-                      referrerPolicy="no-referrer"
-                      alt={m.title}
-                      loading="lazy"
-                      onError={(event) => {
-                        const target = event.target as HTMLImageElement
-                        target.onerror = null
-                        target.src =
-                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80'
-                      }}
-                    />
-                    <span className="jav-hd-badge">{quality}</span>
-                    {duration && (
-                      <span className="jav-duration-badge">{duration}</span>
-                    )}
-                    <div className="jav-play-overlay">
-                      <button
-                        type="button"
-                        className="jav-play-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onSelectMovie?.(m)
-                        }}
-                        title="Play Video"
-                      >
-                        <Play fill="#fff" size={24} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="jav-card-body">
-                    <h3 className="jav-card-title" title={m.title}>
-                      {cleanHtmlEntities(m.title)}
-                    </h3>
-                    <div className="jav-card-footer">
-                      <span className="jav-studio">{cleanHtmlEntities(studio)}</span>
-                      {m.boxOffice ? (
-                        <span className="jav-views">👁 {m.boxOffice}</span>
-                      ) : m.rating ? (
-                        <span className="jav-views">{m.rating}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <YtPhubVideoGrid
+            items={moreYtItems}
+            onPlay={(m) => onSelectMovie?.(m)}
+          />
         </section>
       )
     }
@@ -14158,6 +14135,41 @@ function ProfilesScreen({
                     type="button"
                     className="choose-avatar-btn"
                     onClick={() => {
+                      setSelectedAvatarColor(`money/${filename}`)
+                      setIsChoosingIcon(false)
+                    }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <img
+                      src={avatarAssets[`money heist/${filename}`] ?? `/src/assets/money heist/${filename}`}
+                      alt={filename}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="choose-icon-section">
+              <h2>Dark</h2>
+              <div className="choose-icon-row">
+                {[
+                  'image.png',
+                  'image copy.png',
+                  'image copy 2.png',
+                  'image copy 3.png',
+                  'image copy 4.png',
+                  'image copy 5.png',
+                  'image copy 6.png',
+                  'image copy 7.png',
+                  'image copy 8.png',
+                  'image copy 9.png'
+                ].map((filename) => (
+                  <button
+                    key={filename}
+                    type="button"
+                    className="choose-avatar-btn"
+                    onClick={() => {
                       setSelectedAvatarColor(`dark/${filename}`)
                       setIsChoosingIcon(false)
                     }}
@@ -17120,7 +17132,10 @@ export function LordScreen({
   }
 
   const isYtPhubTab =
-    activeLordTab === 'adultembed' || activeLordTab === 'phub2' || activeLordTab === 'phub3'
+    activeLordTab === 'adultembed' ||
+    activeLordTab === 'phub2' ||
+    activeLordTab === 'phub3' ||
+    activeLordTab === 'jav'
 
   return (
     <section className={`screen lord-screen${isYtPhubTab ? ' is-yt-phub' : ''}`}>
@@ -19412,6 +19427,7 @@ function LordJavSection({
   onMarkWatched,
   onRemoveContinue,
   onRemoveWatchlist,
+  onToggleSave,
 }: {
   searchQuery?: string
   page?: number
@@ -19423,9 +19439,11 @@ function LordJavSection({
   onMarkWatched?: (movie: Movie) => void
   onRemoveContinue?: (movie: Movie) => void
   onRemoveWatchlist?: (movie: Movie) => void
+  onToggleSave?: (movie: Movie) => void
 }) {
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [orderBy, setOrderBy] = useState<'date' | 'views' | 'title'>('views')
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [internalPage, setInternalPage] = useState(pageProp)
   const page = pageProp ?? internalPage
   const setPage = (updater: number | ((prev: number) => number)) => {
@@ -19465,7 +19483,6 @@ function LordJavSection({
   const [loading, setLoading] = useState(!initialData && posts.length === 0)
   const [error, setError] = useState('')
   const [totalPages, setTotalPages] = useState(initialData?.totalPages || 500)
-  const [totalPosts, setTotalPosts] = useState(initialData?.totalPosts || 12000)
 
   useEffect(() => {
     let active = true
@@ -19479,7 +19496,6 @@ function LordJavSection({
     if (cached && cached.posts.length > 0) {
       setPosts(cached.posts)
       setTotalPages(cached.totalPages)
-      setTotalPosts(cached.totalPosts)
       setLoading(false)
       setError('')
     } else if (posts.length === 0) {
@@ -19497,7 +19513,6 @@ function LordJavSection({
         if (active && result && Array.isArray(result.posts) && result.posts.length > 0) {
           setPosts(result.posts)
           setTotalPages(result.totalPages)
-          setTotalPosts(result.totalPosts)
           setError('')
         }
       } catch {
@@ -19558,8 +19573,45 @@ function LordJavSection({
   const heroPost = rotatedPosts.length > 0 ? rotatedPosts[0] : null
   const heroMovie = heroPost ? javToMovieHelper(heroPost) : null
 
+  const savedIds = useMemo(
+    () => new Set((savedMovies || []).map((m) => m.id)),
+    [savedMovies],
+  )
+
+  const continueProgressMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const m of continueMovies || []) {
+      if (m.id && typeof m.progress === 'number' && m.progress > 0) {
+        map.set(m.id, m.progress)
+      }
+    }
+    return map
+  }, [continueMovies])
+
+  const ytCardItems = useMemo<YtPhubCardItem[]>(() => {
+    return rotatedPosts.map((post) => {
+      const movie = javToMovieHelper(post)
+      const channelName = cleanHtmlEntities(post.studio || post.categories?.[0] || 'JAV')
+      const metaTag = post.code || post.categories?.[0] || (post.is_hd ? 'HD' : 'JAV')
+      return {
+        key: `jav-${post.id}`,
+        movie,
+        title: cleanHtmlEntities(post.title),
+        thumbnail: post.thumbnail,
+        fallbackThumbnail:
+          'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80',
+        duration: post.duration && post.duration !== '00:00:00' ? post.duration : undefined,
+        channelName,
+        verified: true,
+        views: post.views > 0 ? post.views : undefined,
+        metaDetail: metaTag,
+        progress: continueProgressMap.get(movie.id),
+      }
+    })
+  }, [rotatedPosts, continueProgressMap])
+
   return (
-    <div className="jav-container">
+    <div className="yt-phub-container">
       {!searchQuery.trim() && heroMovie && (
         <div className="lord-hero" style={{ marginBottom: 28 }}>
           <div className="lord-hero-backdrop-wrap">
@@ -19621,152 +19673,83 @@ function LordJavSection({
           />
         </div>
       )}
-      {/* Category Pills & Order Controls */}
-      <div className="jav-controls">
-        <div className="jav-pills" role="tablist" aria-label="JAV categories">
-          {JAV_CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              className={`jav-pill${selectedCategory === cat ? ' is-active' : ''}`}
-              onClick={() => setSelectedCategory(cat)}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        <div className="jav-sort-group">
-          <span className="jav-sort-label">Sort:</span>
+      <YtCategoryChipsBar
+        chips={JAV_CATEGORIES.map((cat) => ({
+          id: cat,
+          label: cat,
+          active: selectedCategory === cat,
+        }))}
+        onSelect={(name) => setSelectedCategory(name)}
+        ariaLabel="JAV categories"
+        filterOpen={filtersOpen}
+        hasActiveSubFilter={orderBy !== 'views'}
+        onToggleFilters={() => setFiltersOpen((prev) => !prev)}
+      >
+        <div className="yt-filter-group" aria-label="Sort JAV videos">
+          <span className="yt-filter-label">Sort:</span>
           <button
             type="button"
-            className={`jav-sort-btn${orderBy === 'views' ? ' is-active' : ''}`}
+            className={`yt-chip yt-chip-sm${orderBy === 'views' ? ' is-active' : ''}`}
             onClick={() => setOrderBy('views')}
           >
             Popular
           </button>
           <button
             type="button"
-            className={`jav-sort-btn${orderBy === 'date' ? ' is-active' : ''}`}
+            className={`yt-chip yt-chip-sm${orderBy === 'date' ? ' is-active' : ''}`}
             onClick={() => setOrderBy('date')}
           >
             Latest
           </button>
           <button
             type="button"
-            className={`jav-sort-btn${orderBy === 'title' ? ' is-active' : ''}`}
+            className={`yt-chip yt-chip-sm${orderBy === 'title' ? ' is-active' : ''}`}
             onClick={() => setOrderBy('title')}
           >
             Title
           </button>
         </div>
-      </div>
+      </YtCategoryChipsBar>
 
-      {/* Main Content Area */}
-      {loading && posts.length === 0 ? (
-        <div className="jav-skeleton-grid" aria-label="Loading JAV catalog">
+      {loading && ytCardItems.length === 0 ? (
+        <div className="yt-home-skeleton-grid" aria-label="Loading JAV catalog">
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={`jav-skel-${i}`} className="jav-skeleton-card">
-              <div className="jav-skeleton-thumb" />
-              <div className="jav-skeleton-body">
-                <div className="jav-skeleton-line" style={{ width: '85%' }} />
-                <div className="jav-skeleton-line" style={{ width: '50%' }} />
+            <div key={`jav-skel-${i}`} className="yt-home-skeleton-card">
+              <div className="yt-home-skeleton-thumb" />
+              <div className="yt-home-skeleton-meta">
+                <div className="yt-home-skeleton-avatar" />
+                <div className="yt-home-skeleton-lines">
+                  <div className="yt-home-skeleton-line" style={{ width: '85%' }} />
+                  <div className="yt-home-skeleton-line" style={{ width: '50%' }} />
+                </div>
               </div>
             </div>
           ))}
         </div>
-      ) : error && posts.length === 0 ? (
+      ) : error && ytCardItems.length === 0 ? (
         <div className="jav-empty">
           <AlertCircle size={40} />
           <p>{error}</p>
         </div>
-      ) : posts.length === 0 ? (
+      ) : ytCardItems.length === 0 ? (
         <div className="jav-empty">
           <Search size={40} />
           <p>No JAV videos found matching your criteria.</p>
         </div>
       ) : (
         <>
-          <div className="jav-meta-header">
-            <h2 className="lord-rail-title">
-              {searchQuery.trim()
-                ? `Results for "${searchQuery.trim()}"`
-                : selectedCategory === 'All'
-                  ? 'All JAV Catalog'
-                  : `${selectedCategory} JAV`}
-              {totalPosts > 0 && <span className="jav-meta-count">({totalPosts.toLocaleString()} titles)</span>}
-            </h2>
-          </div>
+          <YtPhubVideoGrid
+            items={ytCardItems}
+            savedIds={savedIds}
+            onPlay={onPlay}
+            onToggleSave={onToggleSave}
+          />
 
-          <div className="jav-grid">
-            {rotatedPosts.map((post) => {
-              const movie = javToMovieHelper(post)
-              return (
-                <div key={post.id} className="jav-card" onClick={() => onPlay(movie)}>
-                  <div className="jav-thumb-container">
-                    <img
-                      src={post.thumbnail}
-                      alt={post.title}
-                      loading="lazy"
-                      onError={(event) => {
-                        const target = event.target as HTMLImageElement
-                        target.onerror = null
-                        target.src =
-                          'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&q=80'
-                      }}
-                    />
-                    {post.code && <span className="jav-code-badge">{post.code}</span>}
-                    {post.is_hd && <span className="jav-hd-badge">HD</span>}
-                    {post.duration && post.duration !== '00:00:00' && (
-                      <span className="jav-duration-badge">{post.duration}</span>
-                    )}
-
-                    <div className="jav-play-overlay">
-                      <button
-                        type="button"
-                        className="jav-play-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onPlay(movie)
-                        }}
-                        title="Play Video"
-                      >
-                        <Play fill="#fff" size={24} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="jav-card-body">
-                    <h3 className="jav-card-title" title={post.title}>
-                      {cleanHtmlEntities(post.title)}
-                    </h3>
-
-                    <div className="jav-card-footer">
-                      {post.studio && <span className="jav-studio">{cleanHtmlEntities(post.studio)}</span>}
-                      {post.views > 0 && <span className="jav-views">👁 {post.views.toLocaleString()}</span>}
-                    </div>
-
-                    {post.categories && post.categories.length > 0 && (
-                      <div className="jav-tags">
-                        {post.categories.slice(0, 3).map((cat) => (
-                          <span key={cat} className="jav-tag">
-                            {cat}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="jav-pagination">
+            <div className="yt-home-pagination">
               <button
                 type="button"
-                className="jav-page-btn"
+                className="yt-page-btn"
                 onClick={handlePrevPage}
                 disabled={page <= 1}
               >
@@ -19774,13 +19757,13 @@ function LordJavSection({
                 <span>Prev</span>
               </button>
 
-              <span className="jav-page-info">
+              <span className="yt-page-info">
                 Page <strong>{page}</strong> of <strong>{totalPages.toLocaleString()}</strong>
               </span>
 
               <button
                 type="button"
-                className="jav-page-btn"
+                className="yt-page-btn"
                 onClick={handleNextPage}
                 disabled={page >= totalPages}
               >
